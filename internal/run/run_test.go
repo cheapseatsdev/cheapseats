@@ -257,3 +257,46 @@ func TestFailedAnswersGetOneMoreTry(t *testing.T) {
 		t.Fatalf("status %s after one failed answer (failed=%v), want done", got.Status, failed.Load())
 	}
 }
+
+// A failed write of the run's own records stops the run as failed, saying why, instead of being
+// dropped while the run carries on and ends "done" or "partial".
+func TestStorageFailureFailsTheRun(t *testing.T) {
+	e, set, _ := setup(t, 0)
+	e.Cfg.Answerers = e.Cfg.Answerers[:1]
+	ctx := context.Background()
+	r, err := e.Create(ctx, set, "manual")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.DB.Exec(`CREATE TRIGGER no_grades BEFORE UPDATE OF grade ON results WHEN NEW.grade IS NOT NULL BEGIN SELECT RAISE(ABORT, 'disk full'); END`); err != nil {
+		t.Fatal(err)
+	}
+	e.Execute(ctx, r.ID)
+	got, _ := e.Get(ctx, r.ID)
+	if got.Status != "failed" || got.Error == nil || !strings.Contains(*got.Error, "storage") || !strings.Contains(*got.Error, "disk full") {
+		t.Fatalf("status %s, error %v", got.Status, got.Error)
+	}
+}
+
+// A stored grade that doesn't decode is an error, not an answer that drops out of the rates.
+func TestCorruptStoredJSONIsAnError(t *testing.T) {
+	e, set, _ := setup(t, 0)
+	e.Cfg.Answerers = e.Cfg.Answerers[:1]
+	ctx := context.Background()
+	r, _ := e.Create(ctx, set, "manual")
+	if err := e.Execute(ctx, r.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.Results(ctx, r.ID); err != nil {
+		t.Fatalf("clean results: %v", err)
+	}
+	// Unknown fields from a newer version are fine.
+	e.DB.Exec(`UPDATE results SET grade = json_set(grade, '$.added_later', 1) WHERE run_id = ?`, r.ID)
+	if _, err := e.Results(ctx, r.ID); err != nil {
+		t.Fatalf("unknown fields: %v", err)
+	}
+	e.DB.Exec(`UPDATE results SET grade = '{"verdict": ' WHERE id = (SELECT MIN(id) FROM results WHERE run_id = ?)`, r.ID)
+	if _, err := e.Results(ctx, r.ID); err == nil || !strings.Contains(err.Error(), "grade") {
+		t.Fatalf("want a decoding error, got %v", err)
+	}
+}

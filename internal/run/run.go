@@ -264,9 +264,13 @@ func (e *Engine) execute(ctx context.Context, id string) error {
 	if !r.Snapshot.Current(e.Cfg) {
 		return fmt.Errorf("run used older answer or grading prompts; start a new run")
 	}
-	e.DB.ExecContext(ctx, `UPDATE runs SET status='running', started_at=COALESCE(started_at, ?), error=NULL, finished_at=NULL WHERE id=?`, store.Now(), id)
+	if _, err := e.DB.ExecContext(ctx, `UPDATE runs SET status='running', started_at=COALESCE(started_at, ?), error=NULL, finished_at=NULL WHERE id=?`, store.Now(), id); err != nil {
+		return stored(err)
+	}
 	// A result left 'running' by a crash is just pending again.
-	e.DB.ExecContext(ctx, `UPDATE results SET status='pending' WHERE run_id=? AND status IN ('running','skipped','error')`, id)
+	if _, err := e.DB.ExecContext(ctx, `UPDATE results SET status='pending' WHERE run_id=? AND status IN ('running','skipped','error')`, id); err != nil {
+		return stored(err)
+	}
 
 	answerers := map[string]config.Answerer{}
 	for _, a := range r.Snapshot.Answerers {
@@ -311,7 +315,8 @@ func (e *Engine) execute(ctx context.Context, id string) error {
 					cfg.Brand = r.Snapshot.Brand
 					cfg.Grader.Model = r.Snapshot.Grader
 					callErr := e.one(stopCtx, &cfg, r.Snapshot.Set, answerers[j.answerer], j.id, j.prompt, j.track)
-					if errors.Is(callErr, errBudget) {
+					var storage *StorageError
+					if errors.Is(callErr, errBudget) || errors.As(callErr, &storage) {
 						stopOnce.Do(func() { stopReason = callErr; stop() })
 					}
 				}
@@ -350,9 +355,14 @@ func (e *Engine) execute(ctx context.Context, id string) error {
 
 	// Anything not reached is skipped, so the page says why and Retry picks it up.
 	bg := context.Background()
-	e.DB.ExecContext(bg, `UPDATE results SET status='skipped' WHERE run_id=? AND status IN ('pending','running')`, id)
+	if _, err := e.DB.ExecContext(bg, `UPDATE results SET status='skipped' WHERE run_id=? AND status IN ('pending','running')`, id); err != nil && stopReason == nil {
+		stopReason = stored(err)
+	}
+	// If this count fails the run can't say it's done, so it's failed instead.
 	var unfinished int
-	e.DB.QueryRow(`SELECT COUNT(*) FROM results WHERE run_id=? AND (status!='done' OR grade IS NULL)`, id).Scan(&unfinished)
+	if err := e.DB.QueryRow(`SELECT COUNT(*) FROM results WHERE run_id=? AND (status!='done' OR grade IS NULL)`, id).Scan(&unfinished); err != nil && stopReason == nil {
+		stopReason = stored(err)
+	}
 	status, msg := "done", ""
 	if unfinished > 0 {
 		status = "partial"
@@ -381,7 +391,10 @@ func (e *Engine) execute(ctx context.Context, id string) error {
 		}
 		for rows.Next() {
 			var m string
-			rows.Scan(&m)
+			if err := rows.Scan(&m); err != nil {
+				rows.Close()
+				return stored(err)
+			}
 			models = append(models, m)
 		}
 		rows.Close()
@@ -389,7 +402,9 @@ func (e *Engine) execute(ctx context.Context, id string) error {
 			Design string
 			Models []string
 		}{r.Design, models})
-		e.DB.Exec(`UPDATE runs SET profile=? WHERE id=?`, profile, id)
+		if _, err := e.DB.Exec(`UPDATE runs SET profile=? WHERE id=?`, profile, id); err != nil {
+			return stored(err)
+		}
 		if e.OnFinished != nil && ctx.Err() == nil {
 			e.OnFinished(ctx, id)
 		}
@@ -397,15 +412,36 @@ func (e *Engine) execute(ctx context.Context, id string) error {
 	return err
 }
 
+// StorageError is a failed read or write of the run's own records, as opposed to a provider
+// failing to answer or grade. It stops the run: carrying on could lose a paid answer, or mark
+// the run done when it isn't.
+type StorageError struct{ Err error }
+
+func (e *StorageError) Error() string { return "storage: " + e.Err.Error() }
+func (e *StorageError) Unwrap() error { return e.Err }
+
+// stored wraps a storage failure, or passes nil through.
+func stored(err error) error {
+	if err == nil {
+		return nil
+	}
+	return &StorageError{err}
+}
+
 func (e *Engine) one(ctx context.Context, cfg *config.Config, set sets.Set, a config.Answerer, rid int64, prompt string, track answer.Track) error {
 	bg := context.Background()
 	if m := config.Missing(a.Provider); m != "" {
-		e.DB.Exec(`UPDATE results SET status='skipped',error=? WHERE id=?`, m, rid)
-		return nil
+		_, err := e.DB.Exec(`UPDATE results SET status='skipped',error=? WHERE id=?`, m, rid)
+		return stored(err)
 	}
-	e.DB.Exec(`UPDATE results SET status='running',started_at=COALESCE(started_at,?),finished_at=NULL,error=NULL WHERE id=?`, store.Now(), rid)
+	if _, err := e.DB.Exec(`UPDATE results SET status='running',started_at=COALESCE(started_at,?),finished_at=NULL,error=NULL WHERE id=?`, store.Now(), rid); err != nil {
+		return stored(err)
+	}
+	// An answer saved but not yet graded is reused, so a failed read must not look like "none".
 	var saved sql.NullString
-	e.DB.QueryRow(`SELECT answer FROM results WHERE id=?`, rid).Scan(&saved)
+	if err := e.DB.QueryRow(`SELECT answer FROM results WHERE id=?`, rid).Scan(&saved); err != nil {
+		return stored(err)
+	}
 	var ans answer.Answer
 	reuse := saved.Valid && json.Unmarshal([]byte(saved.String), &ans) == nil && ans.Text != "" && (track != answer.Search || ans.Searched())
 	if !reuse {
@@ -417,7 +453,9 @@ func (e *Engine) one(ctx context.Context, cfg *config.Config, set sets.Set, a co
 		}
 		js, _ := json.Marshal(ans)
 		if err != nil {
-			e.DB.ExecContext(bg, `UPDATE results SET status='error',error=?,answer=NULL,answer_cost_usd=answer_cost_usd+?,finished_at=? WHERE id=?`, err.Error(), cost, store.Now(), rid)
+			if _, werr := e.DB.ExecContext(bg, `UPDATE results SET status='error',error=?,answer=NULL,answer_cost_usd=answer_cost_usd+?,finished_at=? WHERE id=?`, err.Error(), cost, store.Now(), rid); werr != nil {
+				return stored(werr)
+			}
 			return err
 		}
 		model := a.Model
@@ -425,17 +463,19 @@ func (e *Engine) one(ctx context.Context, cfg *config.Config, set sets.Set, a co
 			model = ans.Model
 		}
 		if _, err = e.DB.ExecContext(bg, `UPDATE results SET answer=?,model=?,answer_cost_usd=answer_cost_usd+? WHERE id=?`, string(js), model, cost, rid); err != nil {
-			return err
+			return stored(err)
 		}
 	}
 	g, cost, err := grade.Answer(ctx, cfg, set, prompt, ans.Text)
 	if err != nil {
-		e.DB.ExecContext(bg, `UPDATE results SET status='error',error=?,grade_cost_usd=grade_cost_usd+?,finished_at=? WHERE id=?`, "grading: "+err.Error(), cost, store.Now(), rid)
+		if _, werr := e.DB.ExecContext(bg, `UPDATE results SET status='error',error=?,grade_cost_usd=grade_cost_usd+?,finished_at=? WHERE id=?`, "grading: "+err.Error(), cost, store.Now(), rid); werr != nil {
+			return stored(werr)
+		}
 		return err
 	}
 	js, _ := json.Marshal(g)
 	_, err = e.DB.ExecContext(bg, `UPDATE results SET status='done',error=NULL,grade=?,verdict=?,top_pick=?,grade_cost_usd=grade_cost_usd+?,finished_at=? WHERE id=?`, string(js), string(g.Verdict), g.IsTopPick(cfg.Brand.Name), cost, store.Now(), rid)
-	return err
+	return stored(err)
 }
 
 // NewSnapshot freezes a run's design with the answerers this environment can call, so a
@@ -548,13 +588,19 @@ func (e *Engine) Results(ctx context.Context, id string) ([]Result, error) {
 			return nil, err
 		}
 		r.Track = answer.Track(t)
+		// Unknown fields are fine (newer versions add them); JSON that doesn't decode is an error,
+		// not an answer that quietly disappears from the rates.
 		if ans.Valid {
 			r.Answer = &answer.Answer{}
-			json.Unmarshal([]byte(ans.String), r.Answer)
+			if err := json.Unmarshal([]byte(ans.String), r.Answer); err != nil {
+				return nil, stored(fmt.Errorf("result %d: answer: %w", r.ID, err))
+			}
 		}
 		if g.Valid {
 			r.Grade = &grade.Grade{}
-			json.Unmarshal([]byte(g.String), r.Grade)
+			if err := json.Unmarshal([]byte(g.String), r.Grade); err != nil {
+				return nil, stored(fmt.Errorf("result %d: grade: %w", r.ID, err))
+			}
 		}
 		out = append(out, r)
 	}
