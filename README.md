@@ -3,6 +3,11 @@
 Ask AI assistants the questions your buyers ask, and see whether they recommend you. A small,
 self-hosted take on [Gauge](https://withgauge.com). Docs: [popcorn.zone/docs](https://popcorn.zone/docs/).
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/dashboard-dark.webp">
+  <img alt="The dashboard: each prompt set with its named, recommended and rank, and the fixes to make first" src="docs/images/dashboard-light.webp">
+</picture>
+
 - Asks each buyer question of each assistant (Claude, ChatGPT) on two tracks:
   - **search**: it must search the web first, so you see what the web says today
   - **recall**: no tools, so you see what the model already believes
@@ -18,6 +23,23 @@ self-hosted take on [Gauge](https://withgauge.com). Docs: [popcorn.zone/docs](ht
 - **Quick wins** ranks fixes across all sets by prompts flipped per day of work.
 - **Rankings** trend each set week to week, through prompt and model changes.
 - Self-hosted, MIT licensed. Your prompts live in a git repo you own.
+
+
+## What a run gives you
+
+A run's scores per track, and every prompt against every assistant:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/run-dark.webp">
+  <img alt="A run page: search and recall scores, per-answerer rates, and a prompt-by-answerer grid of verdicts" src="docs/images/run-light.webp">
+</picture>
+
+Quick wins: every fix across your sets, filterable by site, gap and set:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/quickwins-dark.webp">
+  <img alt="Quick wins: ranked fixes with priority, gap, effort and the site each belongs on" src="docs/images/quickwins-light.webp">
+</picture>
 
 ## Quick start
 
