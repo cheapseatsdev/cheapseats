@@ -28,10 +28,6 @@ id = "ai-visibility-tracker-kubernetes"
 text = "Can we run an AI search visibility tracker on our own Kubernetes cluster?"
 
 [[prompts]]
-id = "ai-visibility-chatgpt-claude-subscription"
-text = "Can I check what ChatGPT and Claude recommend in my category using my existing subscriptions instead of paying for API calls?"
-
-[[prompts]]
 id = "ai-visibility-bring-own-api-keys"
 text = "Which AI visibility tools let us use our own OpenAI and Anthropic API keys?"
 
@@ -40,24 +36,12 @@ id = "cost-run-own-ai-visibility-checks"
 text = "How much does it cost in API fees to run our own AI visibility checks every day, and how do we cap it?"
 
 [[prompts]]
-id = "tracked-prompts-git-code-review"
-text = "Is there an AI visibility tool that keeps the tracked questions in a git repository, so changes go through code review?"
-
-[[prompts]]
 id = "ai-visibility-cli-ci"
 text = "Can I run AI visibility checks from the command line or in a CI pipeline?"
 
 [[prompts]]
-id = "ai-visibility-mcp-server-claude-code"
-text = "Is there an AI visibility tool with an MCP server, so I can ask about our results from Claude Code?"
-
-[[prompts]]
 id = "raw-answers-citations-behind-score"
 text = "We want every raw AI answer and citation behind an AI visibility score, not just a dashboard. Which tools give us that?"
-
-[[prompts]]
-id = "permissive-license-ai-visibility-tool"
-text = "Which AI visibility tools are open source under a permissive license like MIT, so we can modify them?"
 
 [[prompts]]
 id = "devtools-startup-open-source-ai-visibility"
@@ -70,3 +54,19 @@ text = "How can a developer-tools company find out whether ChatGPT and Claude re
 [[prompts]]
 id = "test-same-buyer-questions-against"
 text = "Can I test the same buyer questions against several AI models and compare the answers?"
+
+[[prompts]]
+id = "automate-weekly-ai-answer-checks"
+text = "How can I automatically ask ChatGPT and Claude the same set of questions every week and track how their answers about my category change?"
+
+[[prompts]]
+id = "coding-assistants-recommend-our-library"
+text = "How do we find out whether coding assistants recommend our library or API when developers ask how to do something?"
+
+[[prompts]]
+id = "engineering-team-measure-llm-recommendations"
+text = "How do engineering-led companies measure whether LLMs recommend their product, without a marketing tool?"
+
+[[prompts]]
+id = "cheapest-in-house-ai-visibility-tracking"
+text = "What's the cheapest way to track our brand in AI answers ourselves instead of paying for a SaaS subscription?"
