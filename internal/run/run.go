@@ -78,6 +78,8 @@ type Result struct {
 	Error      *string        `json:"error,omitempty"`
 	CostUSD    float64        `json:"cost_usd"`
 	FinishedAt *string        `json:"finished_at,omitempty"`
+	// The prompt's intent was info when the run was made (see sets.Prompt); set by Intents.
+	Info bool `json:"info,omitempty"`
 }
 
 type Engine struct {
@@ -605,6 +607,20 @@ func (e *Engine) Results(ctx context.Context, id string) ([]Result, error) {
 		out = append(out, r)
 	}
 	return out, rows.Err()
+}
+
+// Intents marks the results whose prompt was an info prompt in the run's snapshot, so a prompt is
+// scored the way it was asked, whatever its intent is now.
+func (r *Run) Intents(results []Result) {
+	info := map[string]bool{}
+	for _, p := range r.Snapshot.Set.Prompts {
+		if p.Info() {
+			info[p.ID] = true
+		}
+	}
+	for i := range results {
+		results[i].Info = info[results[i].PromptID]
+	}
 }
 
 const interrupted = "interrupted by a restart; resuming"

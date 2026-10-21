@@ -12,6 +12,7 @@ text = "Our organic traffic is down and I suspect ChatGPT and Google AI Overview
 [[prompts]]
 id = "geo-aeo-llm-seo-difference"
 text = "GEO, AEO, LLM SEO: what are they, how do they differ from SEO, and which should a B2B marketing team care about?"
+intent = "info"
 
 # Measuring it
 
@@ -22,6 +23,7 @@ text = "How can I find out whether ChatGPT recommends my product when people ask
 [[prompts]]
 id = "recommended-versus-mentioned-ai-answers"
 text = "What's the difference between being mentioned and being recommended in an AI answer, and how do I measure each?"
+intent = "info"
 
 [[prompts]]
 id = "tools-track-often-ai-assistants"
@@ -46,10 +48,12 @@ text = "What's the best way to benchmark my brand's visibility in LLM answers ag
 [[prompts]]
 id = "metrics-marketing-team-use-measure"
 text = "What metrics should a marketing team use to measure presence in AI assistant answers?"
+intent = "info"
 
 [[prompts]]
 id = "which-buyer-questions-track-ai"
 text = "Which questions should we track to measure AI visibility, and how many prompts do we need before the numbers mean anything?"
+intent = "info"
 
 [[prompts]]
 id = "see-web-pages-ai-assistants"
@@ -58,16 +62,19 @@ text = "How can I see which web pages AI assistants rely on when they answer que
 [[prompts]]
 id = "web-search-versus-training-data-answers"
 text = "Do ChatGPT and Claude say different things about a product with web search on versus from training data alone, and how do I measure both?"
+intent = "info"
 
 # Keeping track
 
 [[prompts]]
 id = "often-re-check-whether-ai"
 text = "How often should we re-check whether AI assistants recommend us, and how do we track changes over time?"
+intent = "info"
 
 [[prompts]]
 id = "prove-leadership-whether-content-work"
 text = "How do I prove to leadership whether our content work is changing what AI assistants recommend?"
+intent = "info"
 
 # Products the grader folds onto one canonical name, so share of voice counts each once.
 [[competitors]]

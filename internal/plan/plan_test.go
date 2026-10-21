@@ -59,3 +59,14 @@ func TestPlanSaysWhatAChangeDoes(t *testing.T) {
 		t.Errorf("no-op plan:\n%s", got)
 	}
 }
+
+func TestPlanSaysWhenIntentChanges(t *testing.T) {
+	c := &config.Config{Brand: config.Brand{Name: "Popcorn"}}
+	set := func(intent string) []sets.Set {
+		return []sets.Set{{ID: "a", Name: "A", Tier: sets.Core, Prompts: []sets.Prompt{{ID: "how", Text: "How do I measure it?", Intent: intent}}}}
+	}
+	got := Markdown(Config{Cfg: c, Sets: set("")}, Config{Cfg: c, Sets: set(sets.Info)})
+	if !strings.Contains(got, "Now info prompts: `how`") {
+		t.Errorf("missing the intent change in:\n%s", got)
+	}
+}

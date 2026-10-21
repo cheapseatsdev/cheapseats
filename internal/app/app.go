@@ -221,6 +221,7 @@ func (a *App) RunBrand(r *run.Run) config.Brand {
 
 // Summary is a run's report over results (all of its results, or a slice of them).
 func (a *App) Summary(r *run.Run, results []run.Result) report.Summary {
+	r.Intents(results)
 	return report.Build(a.RunBrand(r), results)
 }
 

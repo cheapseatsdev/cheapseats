@@ -203,6 +203,7 @@ Public facts you may rely on: %[4]s
 %[1]s's own sites: %[8]s
 
 Below are graded answers to %[5]d buyer questions in the category "%[6]s", from several AI assistants, with and without web search.
+Prompts marked (info) ask for an explanation or a how-to, not a choice: a good answer may recommend no product, so "not recommended" there is not a loss. What counts on them is whether %[1]s is named or its pages are cited while the topic is explained; the loss is a competitor or third-party page being the source instead. Don't count info prompts in "Why %[1]s lost"; their fixes are usually the guide or reference page that answers the question.
 
 1. insights: a concise markdown report for the %[1]s team, no preamble, with these sections:
 ## Why %[1]s lost
@@ -272,7 +273,11 @@ func results2text(brand config.Brand, set sets.Set, results []run.Result) string
 		if len(rs) == 0 {
 			continue
 		}
-		fmt.Fprintf(&b, "### Prompt %d: %s\n", i+1, p.Text)
+		if p.Info() {
+			fmt.Fprintf(&b, "### Prompt %d (info): %s\n", i+1, p.Text)
+		} else {
+			fmt.Fprintf(&b, "### Prompt %d: %s\n", i+1, p.Text)
+		}
 		for _, r := range rs {
 			g := r.Grade
 			pos, top := "n/a", "none"
@@ -368,7 +373,15 @@ var task = map[Gap]func(Fix) string{
 func claudePrompt(set sets.Set, f Fix) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "# %s\n\n", f.Title)
-	fmt.Fprintf(&b, "When buyers ask an AI assistant the questions below, it doesn't recommend us, or recommends us for the wrong reasons. This is a %s gap: %s\n\n", f.Gap, strings.ToLower(Gaps[f.Gap][:1])+Gaps[f.Gap][1:])
+	lose := "it doesn't recommend us, or recommends us for the wrong reasons"
+	info := len(f.Prompts) > 0
+	for _, n := range f.Prompts {
+		info = info && set.Prompts[n-1].Info()
+	}
+	if info {
+		lose = "it explains the topic without naming us or citing our pages"
+	}
+	fmt.Fprintf(&b, "When buyers ask an AI assistant the questions below, %s. This is a %s gap: %s\n\n", lose, f.Gap, strings.ToLower(Gaps[f.Gap][:1])+Gaps[f.Gap][1:])
 	b.WriteString("## The questions it affects\n")
 	for _, n := range f.Prompts {
 		fmt.Fprintf(&b, "- %s\n", set.Prompts[n-1].Text)

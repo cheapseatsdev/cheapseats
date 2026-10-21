@@ -146,6 +146,7 @@ type Change struct {
 	Added              []string      `json:"added,omitempty"`    // prompt ids
 	Removed            []string      `json:"removed,omitempty"`  // prompt ids
 	Reworded           []string      `json:"reworded,omitempty"` // prompt ids whose text changed
+	Intent             []string      `json:"intent,omitempty"`   // prompt ids that became or stopped being info
 	CompetitorsAdded   []string      `json:"competitors_added,omitempty"`
 	CompetitorsRemoved []string      `json:"competitors_removed,omitempty"`
 	AnswerersAdded     []string      `json:"answerers_added,omitempty"`
@@ -162,7 +163,7 @@ type ModelChange struct {
 
 // PromptsChanged reports whether the day asked different questions than the day before.
 func (c *Change) PromptsChanged() bool {
-	return c != nil && len(c.Added)+len(c.Removed)+len(c.Reworded) > 0
+	return c != nil && len(c.Added)+len(c.Removed)+len(c.Reworded)+len(c.Intent) > 0
 }
 
 // Notes is the change in a few words per kind, for the rankings table.
@@ -186,6 +187,9 @@ func (c *Change) Notes() []string {
 	if len(c.Reworded) > 0 {
 		out = append(out, count(len(c.Reworded), "prompt reworded", "prompts reworded"))
 	}
+	if len(c.Intent) > 0 {
+		out = append(out, count(len(c.Intent), "prompt's intent changed", "prompts' intent changed"))
+	}
 	for _, m := range c.Models {
 		out = append(out, fmt.Sprintf("%s: %s → %s", m.Answerer, m.From, m.To))
 	}
@@ -205,7 +209,7 @@ func (c *Change) Notes() []string {
 }
 
 func (c *Change) empty() bool {
-	return len(c.Added)+len(c.Removed)+len(c.Reworded)+len(c.CompetitorsAdded)+len(c.CompetitorsRemoved)+
+	return len(c.Added)+len(c.Removed)+len(c.Reworded)+len(c.Intent)+len(c.CompetitorsAdded)+len(c.CompetitorsRemoved)+
 		len(c.AnswerersAdded)+len(c.AnswerersRemoved)+len(c.Models)+len(c.Samples) == 0
 }
 
@@ -261,6 +265,7 @@ type dayData struct {
 	snap    run.Snapshot
 	prompts map[string]string                   // prompt id -> wording hash
 	texts   map[string]string                   // prompt id -> text
+	info    map[string]bool                     // prompt ids asked as info prompts
 	order   []string                            // prompt ids in the run's order
 	models  map[string]string                   // answerer -> model
 	samples map[string]int                      // answerer -> samples per prompt
@@ -296,6 +301,7 @@ func (a *App) series(ctx context.Context, s sets.Set, lastDays int) (map[string]
 		if err != nil {
 			return nil, err
 		}
+		r.Intents(res)
 		for _, track := range []string{"search", "recall"} {
 			var slice []run.Result
 			for _, x := range res {
@@ -329,7 +335,7 @@ func newDay(r *run.Run, brand config.Brand, date string, results []run.Result) d
 	d := dayData{
 		Day:     Day{Date: date, RunID: r.ID, Method: r.Method, ConfigRev: r.ConfigRev, Rank: sum.BrandRank(), Rates: sum.Overall, Answers: sum.Done, Board: sum.Voice},
 		snap:    r.Snapshot,
-		prompts: map[string]string{}, texts: map[string]string{}, models: map[string]string{}, samples: map[string]int{},
+		prompts: map[string]string{}, texts: map[string]string{}, info: map[string]bool{}, models: map[string]string{}, samples: map[string]int{},
 		tallies: map[string]map[string]*report.Tally{},
 	}
 	if len(sum.Voice) > 0 {
@@ -343,6 +349,9 @@ func newDay(r *run.Run, brand config.Brand, date string, results []run.Result) d
 		}
 		d.prompts[x.PromptID] = x.PromptSHA
 		d.texts[x.PromptID] = x.Prompt
+		if x.Info {
+			d.info[x.PromptID] = true
+		}
 		d.models[x.Answerer] = x.Model
 		if x.Sample+1 > d.samples[x.Answerer] {
 			d.samples[x.Answerer] = x.Sample + 1
@@ -358,17 +367,19 @@ func newDay(r *run.Run, brand config.Brand, date string, results []run.Result) d
 			t = &report.Tally{}
 			d.tallies[x.PromptID][x.Answerer] = t
 		}
-		t.Add(x.Grade, name)
+		t.Add(x.Grade, name, x.Info)
 	}
 	d.Prompts = len(d.prompts)
 	d.Mean = d.mean(nil, nil)
 	return d
 }
 
-// mean is the per-prompt mean over the given prompts and answerers (nil: all of them).
+// mean is the per-prompt mean over the given prompts and answerers (nil: all of them). Info
+// prompts count toward named only, so recommended and top pick average over the prompts that ask
+// for a choice.
 func (d *dayData) mean(prompts, answerers map[string]bool) Mean {
 	var m Mean
-	n := 0
+	n, sel := 0, 0
 	for pid, byAnswerer := range d.tallies {
 		if prompts != nil && !prompts[pid] {
 			continue
@@ -378,18 +389,24 @@ func (d *dayData) mean(prompts, answerers map[string]bool) Mean {
 			if answerers != nil && !answerers[ans] {
 				continue
 			}
-			t.Top, t.Rec, t.Vis, t.N = t.Top+x.Top, t.Rec+x.Rec, t.Vis+x.Vis, t.N+x.N
+			t = t.Plus(*x)
 		}
 		if t.N == 0 {
 			continue
 		}
-		m.TopPick += float64(t.Top) / float64(t.N)
-		m.Recommended += float64(t.Rec) / float64(t.N)
 		m.Visible += float64(t.Vis) / float64(t.N)
 		n++
+		if t.Sel > 0 {
+			m.TopPick += float64(t.Top) / float64(t.Sel)
+			m.Recommended += float64(t.Rec) / float64(t.Sel)
+			sel++
+		}
 	}
 	if n > 0 {
-		m.TopPick, m.Recommended, m.Visible = m.TopPick/float64(n), m.Recommended/float64(n), m.Visible/float64(n)
+		m.Visible /= float64(n)
+	}
+	if sel > 0 {
+		m.TopPick, m.Recommended = m.TopPick/float64(sel), m.Recommended/float64(sel)
 	}
 	return m
 }
@@ -408,6 +425,9 @@ func compare(d, prev *dayData) {
 			c.Added = append(c.Added, id)
 		case sha != d.prompts[id]:
 			c.Reworded = append(c.Reworded, id)
+		}
+		if _, ok := prev.prompts[id]; ok && prev.info[id] != d.info[id] {
+			c.Intent = append(c.Intent, id)
 		}
 	}
 	for _, id := range prev.order {
@@ -442,7 +462,7 @@ func compare(d, prev *dayData) {
 	}
 	same := map[string]bool{}
 	for id, sha := range d.prompts {
-		if prev.prompts[id] == sha {
+		if prev.prompts[id] == sha && prev.info[id] == d.info[id] {
 			same[id] = true
 		}
 	}
@@ -574,6 +594,8 @@ type Cell struct {
 	Recommended int  `json:"recommended"`
 	Visible     int  `json:"visible"`
 	Reworded    bool `json:"reworded,omitempty"`
+	Info        bool `json:"info,omitempty"`   // asked as an info prompt: recommended doesn't apply
+	Intent      bool `json:"intent,omitempty"` // its intent changed since the day before
 }
 
 type HistoryDay struct {
@@ -612,13 +634,16 @@ func (a *App) History(ctx context.Context, s sets.Set, track string, lastDays in
 		for i, d := range days {
 			c := Cell{}
 			if sha, ok := d.prompts[id]; ok {
-				c.Asked = true
+				c.Asked, c.Info = true, d.info[id]
 				for _, t := range d.tallies[id] {
 					c.N, c.Recommended, c.Visible = c.N+t.N, c.Recommended+t.Rec, c.Visible+t.Vis
 				}
 				if i+1 < len(days) {
 					if before, ok := days[i+1].prompts[id]; ok && before != sha {
 						c.Reworded = true
+					}
+					if _, ok := days[i+1].prompts[id]; ok && days[i+1].info[id] != c.Info {
+						c.Intent = true
 					}
 				}
 			}

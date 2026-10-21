@@ -175,7 +175,8 @@ func runDigest(d *RunData) any {
 	type prompt struct {
 		N           int            `json:"n"`
 		Prompt      string         `json:"prompt"`
-		Recommended string         `json:"recommended"`
+		Intent      string         `json:"intent,omitempty"`
+		Recommended string         `json:"recommended,omitempty"` // not scored for info prompts
 		Named       string         `json:"named"`
 		TopPicks    []report.Count `json:"top_picks"`
 		FirstParty  bool           `json:"first_party_page_surfaced"`
@@ -185,8 +186,12 @@ func runDigest(d *RunData) any {
 	prompts := []prompt{}
 	for _, p := range sum.Prompts {
 		row := prompt{N: p.Idx + 1, Prompt: p.Prompt, TopPicks: p.TopPicks, FirstParty: p.FirstHand,
-			Recommended: fmt.Sprintf("%d/%d", p.Rates.Recommended.Hits, p.Rates.Recommended.N),
-			Named:       fmt.Sprintf("%d/%d", p.Rates.Visible.Hits, p.Rates.Visible.N)}
+			Named: fmt.Sprintf("%d/%d", p.Rates.Visible.Hits, p.Rates.Visible.N)}
+		if p.Info {
+			row.Intent = "info"
+		} else {
+			row.Recommended = fmt.Sprintf("%d/%d", p.Rates.Recommended.Hits, p.Rates.Recommended.N)
+		}
 		for _, r := range d.Results {
 			if r.PromptIdx != p.Idx {
 				continue

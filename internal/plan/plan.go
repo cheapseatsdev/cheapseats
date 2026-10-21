@@ -61,8 +61,15 @@ func Markdown(before, after Config) string {
 		if !existed {
 			lines = append(lines, fmt.Sprintf("- New set, %d prompts.", len(s.Prompts)))
 		}
-		var added, reworded []string
+		var added, reworded, toInfo, fromInfo []string
 		for _, p := range s.Prompts {
+			if was, ok := oldPrompt[p.ID]; ok && was.Info() != p.Info() {
+				if p.Info() {
+					toInfo = append(toInfo, p.ID)
+				} else {
+					fromInfo = append(fromInfo, p.ID)
+				}
+			}
 			was, ok := oldPrompt[p.ID]
 			switch {
 			case !ok:
@@ -95,6 +102,12 @@ func Markdown(before, after Config) string {
 			}
 			if len(reworded) > 0 {
 				lines = append(lines, "- Reworded: "+codes(reworded)+". Their history carries on, marked.")
+			}
+			if len(toInfo) > 0 {
+				lines = append(lines, "- Now info prompts: "+codes(toInfo)+". From the next run they're scored on being named or cited only, and leave the recommended and top-pick rates; the day it changes is marked.")
+			}
+			if len(fromInfo) > 0 {
+				lines = append(lines, "- No longer info prompts: "+codes(fromInfo)+". From the next run they count toward recommended and top pick again; the day it changes is marked.")
 			}
 			if a, r := diffNames(competitors(s), competitors(prev)); len(a)+len(r) > 0 {
 				lines = append(lines, "- Competitors: "+plusMinus(a, r))

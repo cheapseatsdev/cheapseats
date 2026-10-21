@@ -54,10 +54,12 @@ text = "Is there a free AI visibility tracker that's actually useful?"
 [[prompts]]
 id = "ai-visibility-tool-pricing-drivers"
 text = "How do AI visibility tools price their plans, and what drives the cost: prompts, models, brands or seats?"
+intent = "info"
 
 [[prompts]]
 id = "ai-visibility-numbers-accurate"
 text = "AI answers change every time you ask. How do AI visibility tools make their numbers reliable, and how can I check them?"
+intent = "info"
 
 [[prompts]]
 id = "ai-visibility-platform-soc2-enterprise"

@@ -33,10 +33,22 @@ type Competitor struct {
 // same for as long as the question means the same thing: fixing a typo or rewording keeps the id
 // (the trend continues, marked as reworded), and a different question gets a new one. Ids are
 // unique across every set, so a prompt moved between sets keeps its history, and never reused.
+//
+// Intent says what a good answer looks like. Most prompts ask an assistant to choose ("what should
+// I use for..."), so the brand is scored on being recommended. An "info" prompt asks to explain or
+// how-to ("how do I..."), where a good answer may name no product, so it's scored only on whether
+// the brand is named or cited, and left out of the recommended and top-pick rates.
 type Prompt struct {
-	ID   string `toml:"id" json:"id"`
-	Text string `toml:"text" json:"text"`
+	ID     string `toml:"id" json:"id"`
+	Text   string `toml:"text" json:"text"`
+	Intent string `toml:"intent,omitempty" json:"intent,omitempty"`
 }
+
+// Info is the intent of a prompt that asks for an explanation rather than a choice.
+const Info = "info"
+
+// Info reports whether the prompt is scored on being named rather than recommended.
+func (p Prompt) Info() bool { return p.Intent == Info }
 
 // UnmarshalJSON also reads the plain strings that run snapshots stored before prompts had ids.
 func (p *Prompt) UnmarshalJSON(b []byte) error {
@@ -214,6 +226,13 @@ func Parse(path string) (Set, error) {
 		}
 		if p.Text == "" {
 			return s, fmt.Errorf("prompt %s: text is empty", p.ID)
+		}
+		switch p.Intent = strings.TrimSpace(p.Intent); p.Intent {
+		case "", Info:
+		case "selection":
+			p.Intent = "" // the default, spelled out
+		default:
+			return s, fmt.Errorf("prompt %s: intent must be info or selection, got %q", p.ID, p.Intent)
 		}
 		if ids[p.ID] {
 			return s, fmt.Errorf("prompt id %q is used twice", p.ID)

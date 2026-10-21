@@ -87,6 +87,7 @@ type PromptRow struct {
 	Rates     Rates   `json:"rates"`
 	TopPicks  []Count `json:"top_picks"`
 	FirstHand bool    `json:"first_party_surfaced"` // any search surfaced a first-party page
+	Info      bool    `json:"info,omitempty"`       // scored on named only (see sets.Prompt)
 }
 
 type Count struct {
@@ -108,24 +109,35 @@ type Summary struct {
 	Searches int         `json:"searches"`
 }
 
-// Tally counts graded answers: how many were the brand's top pick, recommended it, or named it.
-type Tally struct{ Top, Rec, Vis, N int }
+// Tally counts graded answers: how many named the brand, and of the answers to prompts that ask for
+// a choice (Sel), how many recommended it or made it the top pick. Answers to info prompts count
+// only toward named, since a good answer to them may recommend nothing.
+type Tally struct{ Top, Rec, Vis, N, Sel int }
 
-func (t *Tally) Add(g *grade.Grade, brand string) {
+func (t *Tally) Add(g *grade.Grade, brand string, info bool) {
 	t.N++
+	if g.Verdict != grade.Absent {
+		t.Vis++
+	}
+	if info {
+		return
+	}
+	t.Sel++
 	if g.IsTopPick(brand) {
 		t.Top++
 	}
 	if g.Verdict == grade.Recommended {
 		t.Rec++
 	}
-	if g.Verdict != grade.Absent {
-		t.Vis++
-	}
+}
+
+// Plus is both tallies together.
+func (t Tally) Plus(x Tally) Tally {
+	return Tally{t.Top + x.Top, t.Rec + x.Rec, t.Vis + x.Vis, t.N + x.N, t.Sel + x.Sel}
 }
 
 func (t Tally) Rates() Rates {
-	return Rates{TopPick: NewRate(t.Top, t.N), Recommended: NewRate(t.Rec, t.N), Visible: NewRate(t.Vis, t.N)}
+	return Rates{TopPick: NewRate(t.Top, t.Sel), Recommended: NewRate(t.Rec, t.Sel), Visible: NewRate(t.Vis, t.N)}
 }
 
 func Build(brand config.Brand, results []run.Result) Summary {
@@ -138,6 +150,7 @@ func Build(brand config.Brand, results []run.Result) Summary {
 	promptText := map[int]string{}
 	promptTop := map[int]map[string]int{}
 	promptFirst := map[int]bool{}
+	promptInfo := map[int]bool{}
 	voice := map[string]*Voice{}
 	pages := map[string]*Page{}
 	// Every site, in config order, used or not.
@@ -159,6 +172,9 @@ func Build(brand config.Brand, results []run.Result) Summary {
 			sliceOrder = append(sliceOrder, key)
 		}
 		promptText[r.PromptIdx] = r.Prompt
+		if r.Info {
+			promptInfo[r.PromptIdx] = true
+		}
 		switch r.Status {
 		case "done":
 		case "error":
@@ -173,13 +189,13 @@ func Build(brand config.Brand, results []run.Result) Summary {
 			continue
 		}
 		s.Done++
-		all.Add(r.Grade, brand.Name)
-		slices[key].Add(r.Grade, brand.Name)
+		all.Add(r.Grade, brand.Name, r.Info)
+		slices[key].Add(r.Grade, brand.Name, r.Info)
 		if prompts[r.PromptIdx] == nil {
 			prompts[r.PromptIdx] = &Tally{}
 			promptTop[r.PromptIdx] = map[string]int{}
 		}
-		prompts[r.PromptIdx].Add(r.Grade, brand.Name)
+		prompts[r.PromptIdx].Add(r.Grade, brand.Name, r.Info)
 		if r.Grade.TopPick != nil {
 			promptTop[r.PromptIdx][*r.Grade.TopPick]++
 		}
@@ -311,7 +327,7 @@ func Build(brand config.Brand, results []run.Result) Summary {
 	}
 	sort.Ints(idxs)
 	for _, i := range idxs {
-		row := PromptRow{Idx: i, Prompt: promptText[i], FirstHand: promptFirst[i]}
+		row := PromptRow{Idx: i, Prompt: promptText[i], FirstHand: promptFirst[i], Info: promptInfo[i]}
 		if t := prompts[i]; t != nil {
 			row.Rates = t.Rates()
 		}
