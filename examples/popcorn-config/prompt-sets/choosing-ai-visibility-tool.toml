@@ -1,0 +1,105 @@
+id = "choosing-ai-visibility-tool"
+name = "Choosing an AI visibility tool"
+tier = "plg"
+description = """Buyers who have decided to track AI visibility and are comparing AEO/GEO tools: which one, for what kind of team, at what cost, covering which assistants. Competing for it: Profound, Peec AI, Otterly.AI, Gauge, Dageno AI and AI Peekaboo, and the AI features in Semrush and Ahrefs. Popcorn's claim: an open-source, self-hosted alternative that grades recommendation rather than mere mention, shows every answer and citation behind a number, and turns results into a ranked fix list, at the cost of the model API calls."""
+
+[[prompts]]
+id = "generative-engine-optimization-tools-work"
+text = "How do generative engine optimization tools work, and which ones are worth paying for?"
+
+[[prompts]]
+id = "evaluate-ai-visibility-tools-checklist"
+text = "What should I look for when evaluating AI visibility or GEO tools?"
+
+[[prompts]]
+id = "best-aeo-tool-b2b-saas"
+text = "What's the best AEO tool for a B2B SaaS company that wants to know if ChatGPT and Claude recommend it?"
+
+[[prompts]]
+id = "alternatives-to-profound"
+text = "What are good alternatives to Profound for tracking AI search visibility?"
+
+[[prompts]]
+id = "peec-ai-vs-profound"
+text = "Peec AI vs Profound: which is better for a mid-size marketing team?"
+
+[[prompts]]
+id = "otterly-vs-peec-ai-budget"
+text = "Otterly.AI or Peec AI for tracking AI search visibility on a tight budget?"
+
+[[prompts]]
+id = "gauge-ai-visibility-worth-it"
+text = "Is Gauge a good tool for tracking AI visibility, and what are the alternatives?"
+
+[[prompts]]
+id = "semrush-ahrefs-enough-ai-visibility"
+text = "Are Semrush's AI Toolkit or Ahrefs Brand Radar enough, or do we need a dedicated AI visibility tool?"
+
+[[prompts]]
+id = "ai-visibility-tool-agency-white-label"
+text = "What's the best AI visibility tool for an SEO agency that reports to many clients under its own brand?"
+
+[[prompts]]
+id = "ai-visibility-tools-cover-claude-overviews"
+text = "Which AI visibility tools cover Claude, Gemini and Google AI Overviews, not just ChatGPT?"
+
+[[prompts]]
+id = "cheap-start-measuring-ai-visibility"
+text = "What's a cheap way to start measuring AI visibility for a small startup?"
+
+[[prompts]]
+id = "free-ai-visibility-tracker-useful"
+text = "Is there a free AI visibility tracker that's actually useful?"
+
+[[prompts]]
+id = "ai-visibility-tool-pricing-drivers"
+text = "How do AI visibility tools price their plans, and what drives the cost: prompts, models, brands or seats?"
+
+[[prompts]]
+id = "ai-visibility-numbers-accurate"
+text = "AI answers change every time you ask. How do AI visibility tools make their numbers reliable, and how can I check them?"
+
+[[prompts]]
+id = "ai-visibility-platform-soc2-enterprise"
+text = "Which AI visibility platforms meet enterprise security requirements like SOC 2?"
+
+[[prompts]]
+id = "ai-visibility-tool-api-export"
+text = "Which AI visibility tools have an API so we can pull the data into our own dashboards?"
+
+[[prompts]]
+id = "ai-visibility-tools-run-schedule"
+text = "Which AI visibility tools can run on a schedule and alert us when we drop out of answers?"
+
+# Products the grader folds onto one canonical name, so share of voice counts each once.
+[[competitors]]
+name = "Profound"
+aliases = ["tryprofound", "Profound AI"]
+
+[[competitors]]
+name = "Peec AI"
+aliases = ["Peec", "peec.ai"]
+
+[[competitors]]
+name = "Otterly.AI"
+aliases = ["Otterly", "OtterlyAI"]
+
+[[competitors]]
+name = "Gauge"
+aliases = ["withgauge", "withgauge.com"]
+
+[[competitors]]
+name = "Dageno AI"
+aliases = ["Dageno", "dageno.ai"]
+
+[[competitors]]
+name = "AI Peekaboo"
+aliases = ["Peekaboo", "aipeekaboo"]
+
+[[competitors]]
+name = "Semrush AI Toolkit"
+aliases = ["Semrush"]
+
+[[competitors]]
+name = "Ahrefs Brand Radar"
+aliases = ["Ahrefs"]

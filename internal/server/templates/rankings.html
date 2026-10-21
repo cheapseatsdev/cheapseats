@@ -1,0 +1,15 @@
+{{define "title"}}Rankings · {{end}}{{define "body"}}
+<h1>Rankings</h1><p class="sub">{{brand}}'s place on each category's share-of-voice board, day by day: the newest finished run each UTC day, search and recall apart. Rates count each prompt once. When a set's prompts, competitors or answerers change, the trend carries on and the day says what changed; "vs day before" only compares the prompts both days asked, worded the same, of the same answerers. A change in how answers are asked or graded starts the comparison over.</p>
+{{if not .Rankings}}<p class="muted">No finished runs yet.</p>{{end}}
+{{range .Rankings}}<h2>{{.SetName}} · {{.Track}} <span class="chip">{{.Tier}}</span></h2>
+<p class="muted small">Named, 7-day average, with its 95% band; dots are single days, lines mark a change to the set.</p>
+{{trend .}}
+<details class="table-view"><summary class="muted small">Day by day</summary>
+<div class="scroll"><table><tr><th>Day</th><th>Rank</th><th>Leader</th><th>Recommended</th><th>Named</th><th>7-day named</th><th>Vs day before</th><th>What changed</th></tr>
+{{range .Days}}<tr{{if .NewMethod}} class="new-method"{{end}}><td><a href="/runs/{{.RunID}}">{{.Date}}</a></td>
+<td>{{if .Rank}}#{{.Rank}}{{else}}–{{end}}{{if gt .DeltaRank 0}} <span class="v-recommended">{{icon "arrow-up" 14}}{{.DeltaRank}}<span class="sr"> places up</span></span>{{else if lt .DeltaRank 0}} <span class="down">{{icon "arrow-down" 14}}{{neg .DeltaRank}}<span class="sr"> places down</span></span>{{end}}</td>
+<td>{{.Leader}}</td><td>{{pct .Mean.Recommended}}</td><td>{{pct .Mean.Visible}}</td>
+<td>{{pct .Rolling.Visible}} <span class="muted">({{.Window}}d)</span></td>
+<td>{{with .Compare}}named {{pts .Visible}}{{if lt .Common .Of}} <span class="muted">on {{.Common}} of {{.Of}} prompts</span>{{end}}{{else}}<span class="muted">–</span>{{end}}</td>
+<td>{{if .NewMethod}}<span class="chip">asked or graded differently: not compared</span>{{end}}{{range .Change.Notes}}<span class="chip">{{.}}</span> {{end}}{{if and .Change .ConfigRev}}<span class="muted">in <span class="mono">{{short .ConfigRev}}</span></span>{{end}}</td></tr>{{end}}</table></div></details>
+{{end}}{{end}}

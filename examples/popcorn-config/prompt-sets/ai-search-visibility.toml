@@ -1,0 +1,103 @@
+id = "ai-search-visibility"
+name = "Finding out whether AI assistants recommend us"
+tier = "core"
+description = """The first questions a marketer, founder or SEO lead asks once buyers start asking ChatGPT, Claude, Perplexity, Gemini and Google AI Overviews instead of searching: is AI search costing us traffic, and are we in the answer? Competing for it: AI visibility (AEO/GEO) trackers such as Profound, Peec AI, Otterly.AI, Gauge and Dageno AI, and SEO suites adding AI features (Semrush AI Toolkit, Ahrefs Brand Radar). Popcorn's claim: an open-source, self-hosted tool that asks assistants your own buyer questions, with and without web search, grades whether they recommend you or merely mention you, and tells you what to fix."""
+
+# Problem awareness: is AI search affecting us, and what is this category called?
+
+[[prompts]]
+id = "ai-search-hurting-organic-traffic"
+text = "Our organic traffic is down and I suspect ChatGPT and Google AI Overviews. How do I check whether AI search is what's taking it?"
+
+[[prompts]]
+id = "geo-aeo-llm-seo-difference"
+text = "GEO, AEO, LLM SEO: what are they, how do they differ from SEO, and which should a B2B marketing team care about?"
+
+# Measuring it
+
+[[prompts]]
+id = "find-whether-chatgpt-recommends-product"
+text = "How can I find out whether ChatGPT recommends my product when people ask about my category?"
+
+[[prompts]]
+id = "recommended-versus-mentioned-ai-answers"
+text = "What's the difference between being mentioned and being recommended in an AI answer, and how do I measure each?"
+
+[[prompts]]
+id = "tools-track-often-ai-assistants"
+text = "What tools track how often AI assistants like ChatGPT, Claude, Perplexity and Gemini mention a brand?"
+
+[[prompts]]
+id = "measure-share-voice-ai-chatbot"
+text = "Is there a way to measure our share of voice in AI chatbot answers?"
+
+[[prompts]]
+id = "google-ai-overviews-mention-brand"
+text = "How can I tell whether Google AI Overviews and AI Mode mention our brand for the topics we care about?"
+
+[[prompts]]
+id = "monitor-whether-ai-search-engines"
+text = "How do I monitor whether AI search engines cite our website?"
+
+[[prompts]]
+id = "benchmark-brands-visibility-llm-answers"
+text = "What's the best way to benchmark my brand's visibility in LLM answers against competitors?"
+
+[[prompts]]
+id = "metrics-marketing-team-use-measure"
+text = "What metrics should a marketing team use to measure presence in AI assistant answers?"
+
+[[prompts]]
+id = "which-buyer-questions-track-ai"
+text = "Which questions should we track to measure AI visibility, and how many prompts do we need before the numbers mean anything?"
+
+[[prompts]]
+id = "see-web-pages-ai-assistants"
+text = "How can I see which web pages AI assistants rely on when they answer questions in my category?"
+
+[[prompts]]
+id = "web-search-versus-training-data-answers"
+text = "Do ChatGPT and Claude say different things about a product with web search on versus from training data alone, and how do I measure both?"
+
+# Keeping track
+
+[[prompts]]
+id = "often-re-check-whether-ai"
+text = "How often should we re-check whether AI assistants recommend us, and how do we track changes over time?"
+
+[[prompts]]
+id = "prove-leadership-whether-content-work"
+text = "How do I prove to leadership whether our content work is changing what AI assistants recommend?"
+
+# Products the grader folds onto one canonical name, so share of voice counts each once.
+[[competitors]]
+name = "Profound"
+aliases = ["tryprofound", "Profound AI"]
+
+[[competitors]]
+name = "Peec AI"
+aliases = ["Peec", "peec.ai"]
+
+[[competitors]]
+name = "Otterly.AI"
+aliases = ["Otterly", "OtterlyAI"]
+
+[[competitors]]
+name = "Gauge"
+aliases = ["withgauge", "withgauge.com"]
+
+[[competitors]]
+name = "Dageno AI"
+aliases = ["Dageno", "dageno.ai"]
+
+[[competitors]]
+name = "AI Peekaboo"
+aliases = ["Peekaboo", "aipeekaboo"]
+
+[[competitors]]
+name = "Semrush AI Toolkit"
+aliases = ["Semrush"]
+
+[[competitors]]
+name = "Ahrefs Brand Radar"
+aliases = ["Ahrefs"]

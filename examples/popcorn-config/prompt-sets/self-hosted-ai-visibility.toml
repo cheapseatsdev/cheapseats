@@ -1,0 +1,106 @@
+id = "self-hosted-ai-visibility"
+name = "Open-source and self-hosted AI visibility"
+tier = "plg"
+description = """Buyers who want to build rather than buy, or must keep their data in-house: developer-tools companies, technical founders, privacy-conscious and cost-conscious teams looking for open-source or self-hosted ways to track AI visibility. Competing for it: building it yourself on the model APIs, and SaaS trackers (Profound, Peec AI, Otterly.AI, Gauge). Popcorn's claim: MIT-licensed, one Docker container or a Helm chart, prompts kept in a git repo you own, your own API keys or Claude and ChatGPT subscriptions, a daily spend cap, and a CLI and MCP server alongside the web UI."""
+
+[[prompts]]
+id = "open-source-tools-measuring-ai"
+text = "Are there open-source tools for measuring AI search visibility?"
+
+[[prompts]]
+id = "open-source-alternative-profound-peec"
+text = "Is there an open-source alternative to Profound or Peec AI?"
+
+[[prompts]]
+id = "want-track-ai-answer-visibility"
+text = "We want to track AI answer visibility without sending our data to another SaaS vendor. What are our options?"
+
+[[prompts]]
+id = "build-own-ai-visibility-tracker"
+text = "Should we build our own AI visibility tracker on the OpenAI and Anthropic APIs, or buy a tool?"
+
+[[prompts]]
+id = "self-hosted-ai-visibility-docker"
+text = "Is there a self-hosted AI visibility tracker I can run in Docker?"
+
+[[prompts]]
+id = "ai-visibility-tracker-kubernetes"
+text = "Can we run an AI search visibility tracker on our own Kubernetes cluster?"
+
+[[prompts]]
+id = "ai-visibility-chatgpt-claude-subscription"
+text = "Can I check what ChatGPT and Claude recommend in my category using my existing subscriptions instead of paying for API calls?"
+
+[[prompts]]
+id = "ai-visibility-bring-own-api-keys"
+text = "Which AI visibility tools let us use our own OpenAI and Anthropic API keys?"
+
+[[prompts]]
+id = "cost-run-own-ai-visibility-checks"
+text = "How much does it cost in API fees to run our own AI visibility checks every day, and how do we cap it?"
+
+[[prompts]]
+id = "tracked-prompts-git-code-review"
+text = "Is there an AI visibility tool that keeps the tracked questions in a git repository, so changes go through code review?"
+
+[[prompts]]
+id = "ai-visibility-cli-ci"
+text = "Can I run AI visibility checks from the command line or in a CI pipeline?"
+
+[[prompts]]
+id = "ai-visibility-mcp-server-claude-code"
+text = "Is there an AI visibility tool with an MCP server, so I can ask about our results from Claude Code?"
+
+[[prompts]]
+id = "raw-answers-citations-behind-score"
+text = "We want every raw AI answer and citation behind an AI visibility score, not just a dashboard. Which tools give us that?"
+
+[[prompts]]
+id = "permissive-license-ai-visibility-tool"
+text = "Which AI visibility tools are open source under a permissive license like MIT, so we can modify them?"
+
+[[prompts]]
+id = "devtools-startup-open-source-ai-visibility"
+text = "What's a good open-source way for a developer-tools startup to check whether AI assistants recommend it over alternatives?"
+
+[[prompts]]
+id = "developer-tool-ai-recommends-it"
+text = "How can a developer-tools company find out whether ChatGPT and Claude recommend it when developers ask which tool to use?"
+
+[[prompts]]
+id = "test-same-buyer-questions-against"
+text = "Can I test the same buyer questions against several AI models and compare the answers?"
+
+# Products the grader folds onto one canonical name, so share of voice counts each once.
+
+[[competitors]]
+name = "Profound"
+aliases = ["tryprofound", "Profound AI"]
+
+[[competitors]]
+name = "Peec AI"
+aliases = ["Peec", "peec.ai"]
+
+[[competitors]]
+name = "Otterly.AI"
+aliases = ["Otterly", "OtterlyAI"]
+
+[[competitors]]
+name = "Gauge"
+aliases = ["withgauge", "withgauge.com"]
+
+[[competitors]]
+name = "Dageno AI"
+aliases = ["Dageno", "dageno.ai"]
+
+[[competitors]]
+name = "AI Peekaboo"
+aliases = ["Peekaboo", "aipeekaboo"]
+
+[[competitors]]
+name = "Semrush AI Toolkit"
+aliases = ["Semrush"]
+
+[[competitors]]
+name = "Ahrefs Brand Radar"
+aliases = ["Ahrefs"]

@@ -1,0 +1,123 @@
+id = "fix-ai-recommendations"
+name = "Getting recommended instead of a competitor"
+tier = "core"
+description = """Past measuring: the buyer already knows assistants recommend someone else, or get the product wrong, and wants to change it. Competing for it: AEO/GEO agencies and consultants, and AI visibility platforms that add content recommendations (Profound, Gauge, Dageno AI, Peec AI). Popcorn's claim: its fix list names the exact page to publish or change, what it must say, which of the brand's sites it belongs on and who owns it, and the prompts it should flip, ranked by how fast it pays off."""
+
+# Why we lose, and what to change
+
+[[prompts]]
+id = "chatgpt-keeps-recommending-competitor-instead"
+text = "ChatGPT keeps recommending our competitor instead of us. What can we actually do about it?"
+
+[[prompts]]
+id = "find-why-ai-assistant-prefers"
+text = "How can I find out why an AI assistant prefers a competitor's product over ours?"
+
+[[prompts]]
+id = "ai-gets-product-facts-wrong"
+text = "ChatGPT gets our features and pricing wrong. How do we correct what AI assistants say about our product?"
+
+[[prompts]]
+id = "answer-objections-ai-raises"
+text = "AI assistants mention our product but add caveats that steer buyers away. How do we address the objections they raise?"
+
+[[prompts]]
+id = "product-mentioned-claudes-chatgpts-answers"
+text = "How do I get my product mentioned in Claude's and ChatGPT's answers?"
+
+[[prompts]]
+id = "change-what-model-believes-without-search"
+text = "How do we change what an AI model says about us from its training data, not just what it finds when it searches the web?"
+
+# Content and sources
+
+[[prompts]]
+id = "kind-content-makes-ai-assistants"
+text = "What kind of content makes AI assistants more likely to recommend a product?"
+
+[[prompts]]
+id = "comparison-pages-help-product-show"
+text = "Do comparison pages help a product show up in AI answers?"
+
+[[prompts]]
+id = "aeo-content-strategy-b2b-saas"
+text = "What does an answer engine optimization content strategy look like for a B2B SaaS company?"
+
+[[prompts]]
+id = "docs-structure-ai-recommends-developer-tool"
+text = "How should we write and structure our documentation so AI assistants recommend our developer tool?"
+
+[[prompts]]
+id = "third-party-sites-matter-getting"
+text = "Which third-party sites matter most for getting cited by AI search engines?"
+
+[[prompts]]
+id = "competitor-cited-reddit-listicles"
+text = "AI answers in our category keep citing Reddit threads, review sites and listicles that only mention our competitors. How do we get onto those sources?"
+
+[[prompts]]
+id = "see-search-results-llm-reads"
+text = "How can I see the web search results an AI assistant gets for a question before it writes its answer, to understand why we're missing?"
+
+[[prompts]]
+id = "llms-txt-worth-adding-site"
+text = "Is llms.txt worth adding to our site for AI visibility?"
+
+[[prompts]]
+id = "schema-markup-ai-citations"
+text = "Does structured data or schema markup help a site get cited in Google AI Overviews and ChatGPT search?"
+
+# Acting on it
+
+[[prompts]]
+id = "prioritize-fixes-improve-ai-assistants"
+text = "How should we prioritize fixes to improve how AI assistants describe our product?"
+
+[[prompts]]
+id = "fastest-wins-ai-search-visibility"
+text = "What are the quickest wins for improving our brand's visibility in AI search?"
+
+[[prompts]]
+id = "who-owns-ai-visibility-work"
+text = "Who should own AI visibility work: SEO, content, product marketing or the docs team?"
+
+[[prompts]]
+id = "how-long-content-changes-ai-answers"
+text = "How long does it take for new content to change what ChatGPT and Perplexity say about us?"
+
+[[prompts]]
+id = "tools-say-what-content-create"
+text = "Which AI visibility tools tell you what content to create or change, not just where you rank?"
+
+# Products the grader folds onto one canonical name, so share of voice counts each once.
+[[competitors]]
+name = "Profound"
+aliases = ["tryprofound", "Profound AI"]
+
+[[competitors]]
+name = "Peec AI"
+aliases = ["Peec", "peec.ai"]
+
+[[competitors]]
+name = "Otterly.AI"
+aliases = ["Otterly", "OtterlyAI"]
+
+[[competitors]]
+name = "Gauge"
+aliases = ["withgauge", "withgauge.com"]
+
+[[competitors]]
+name = "Dageno AI"
+aliases = ["Dageno", "dageno.ai"]
+
+[[competitors]]
+name = "AI Peekaboo"
+aliases = ["Peekaboo", "aipeekaboo"]
+
+[[competitors]]
+name = "Semrush AI Toolkit"
+aliases = ["Semrush"]
+
+[[competitors]]
+name = "Ahrefs Brand Radar"
+aliases = ["Ahrefs"]

@@ -1,0 +1,10 @@
+apiVersion: v2
+name: popcorn
+description: Popcorn asks AI assistants your buyers' questions and grades whether they recommend you.
+type: application
+# Released with the app: the chart and image share a version.
+version: 0.0.0
+appVersion: "0.0.0"
+home: https://popcorn.zone
+sources:
+  - https://github.com/metcalfc/popcorn

@@ -1,0 +1,56 @@
+{{define "title"}}{{.Run.Name}} · {{end}}{{define "body"}}{{$set := .Run.Snapshot.Set}}{{$d := .}}
+<h1>{{.Run.Name}}</h1>
+<p class="sub"><span class="s-{{.Run.Status}}">{{sicon .Run.Status}}{{.Run.Status}}</span> · {{.Summary.Done}} graded, {{.Summary.Pending}} pending, {{.Summary.Errors}} errors · {{money .Summary.CostUSD}} · {{.Summary.Searches}} searches
+{{if or .Run.ConfigRev .Run.AppVersion}}<br><span class="muted">{{with .Run.ConfigRev}}config <span class="mono">{{short .}}</span>{{end}}{{if and .Run.ConfigRev .Run.AppVersion}} · {{end}}{{with .Run.AppVersion}}popcorn <span class="mono">{{.}}</span>{{end}}</span>{{end}}
+{{with .Run.Error}}<br><span class="err">{{.}}</span>{{end}}{{with .Run.Snapshot.Skipped}}<br>Skipped (no API key): {{range .}}{{aname .}} {{end}}{{end}}</p>
+{{with .Progress}}{{template "progress" .}}{{end}}
+<div class="row">{{if and .Active (not .Progress)}}<form class="inline" method="post" action="/runs/{{.Run.ID}}/cancel"><button class="ghost">{{icon "x"}}Cancel</button></form>{{else if not .Active}}{{if or .Summary.Pending .Summary.Errors}}<form class="inline" method="post" action="/runs/{{.Run.ID}}/retry"><button class="ghost">{{icon "rotate-ccw"}}Retry unfinished</button></form>{{end}}{{end}}
+<a class="iconlink" href="/runs/{{.Run.ID}}/export.csv">{{icon "download"}}CSV</a> <a class="iconlink" href="/runs/{{.Run.ID}}/export.json">{{icon "download"}}JSON</a> <a class="iconlink" href="/sets/{{$set.ID}}">{{icon "list"}}Set</a></div>
+
+<nav class="runnav" aria-label="Sections"><a href="#scores">Scores</a><a href="#grid">Prompt by prompt</a><a href="#fixes">Fixes</a>{{if .Insights}}<a href="#insights">Insights</a>{{end}}{{if .Summary.Sites}}<a href="#sites">Sites</a>{{end}}<a href="#voice">Share of voice</a><a href="#pages">Pages</a><a href="#answers">Every answer</a></nav>
+
+<h2 id="scores">Scores</h2>
+<div class="tracks">{{range .Tracks}}<div class="card"><h3>{{.Track}}</h3><p class="muted small">{{if eq .Track "search"}}The assistant searched the web before answering.{{else}}No tools: only what the model already believes.{{end}}</p>
+<div class="kpis"><div class="kpi"><b>{{pct .Visible.P}}</b><small>named</small></div><div class="kpi"><b>{{pct .Recommended.P}}</b><small>recommended</small></div><div class="kpi"><b>{{pct .TopPick.P}}</b><small>top pick</small></div></div></div>{{end}}</div>
+<div class="scroll"><table><thead><tr><th>Answerer</th><th>Track</th><th class="num">Named</th><th class="num">Recommended</th><th class="num">Top pick</th><th class="num">Errors</th></tr></thead>
+<tbody>{{range .Summary.Slices}}<tr><td>{{aname .Answerer}}</td><td>{{.Track}}</td><td class="num">{{rate .Visible}}</td><td class="num">{{rate .Recommended}}</td><td class="num">{{rate .TopPick}}</td><td class="num">{{.Errors}}</td></tr>{{end}}</tbody></table></div>
+<p class="muted small">95% intervals in brackets.</p>
+
+<h2 id="grid">Prompt by prompt</h2>
+<p class="sub">One mark per answer: {{sicon "recommended"}}recommended, {{sicon "mentioned"}}named, {{sicon "absent"}}absent. Open a prompt for its answers.</p>
+<div class="scroll"><table class="grid-table"><thead><tr><th class="num">#</th><th>Prompt</th>{{range .Grid.Cols}}<th class="gcol">{{aname .Answerer}}<br><span class="muted">{{.Track}}</span></th>{{end}}</tr></thead>
+<tbody>{{range .Grid.Rows}}<tr><td class="num muted">{{.N}}</td><td><a href="#prompt-{{.N}}">{{.Prompt}}</a></td>{{range .Cells}}<td class="gcell">{{range .}}<span class="v-{{.}} s-{{.}}" title="{{.}}">{{sicon .}}<span class="sr">{{.}}</span></span>{{end}}</td>{{end}}</tr>{{end}}</tbody></table></div>
+
+<h2 id="fixes">Fix these first</h2>
+{{with .FixError}}<p class="err">Fix list failed: {{.}}</p>{{end}}
+{{if .Fixes}}{{range $i, $f := .Fixes}}<details id="fix-{{$f.Rank}}" {{if eq $i 0}}open{{end}}><summary><b>{{add $i 1}}. {{$f.Title}}</b> <span class="chip p-{{$f.Priority}}">{{$f.Priority}}</span> <span class="chip">{{$f.Gap}}</span> <span class="chip">effort {{$f.Effort}}</span>{{with $f.Site}} <span class="chip mono">{{.}}</span>{{end}} <span class="chip">flips {{len $f.Prompts}}</span>{{if $f.Owner}} <span class="chip">{{$f.Owner}}</span>{{end}}</summary>
+<p><b>Where:</b> <span class="mono">{{$f.Target}}</span><br><b>Must say:</b> {{$f.Claim}}<br><b>Done when:</b> {{$f.DoneWhen}}{{with $f.Displaces}}<br><b>Displaces:</b> <a class="mono" href="{{.}}">{{.}}</a>{{end}}{{with $f.Evidence}}<br><b>Why:</b> {{.}}{{end}}</p>
+<p><b>Prompts it could flip:</b></p><ol>{{range $f.Prompts}}<li value="{{.}}"><a href="#prompt-{{.}}">{{prompt $set .}}</a></li>{{end}}</ol>
+<details><summary class="muted">Prompt for Claude Code</summary><pre>{{$f.ClaudePrompt}}</pre></details></details>{{end}}
+<details><summary class="muted">The whole list as markdown</summary><pre>{{fixmd $set .Fixes}}</pre></details>
+{{else}}<p class="muted">{{if eq .Run.Status "done"}}{{if not .FixError}}Building the fix list…{{end}}{{else}}Built when the run finishes.{{end}}</p>{{end}}
+{{if eq .Run.Status "done"}}<form method="post" action="/runs/{{.Run.ID}}/fixes"><button class="ghost">{{icon "refresh-cw"}}Regenerate fix list and insights</button></form>{{end}}
+{{with .Insights}}<h2 id="insights">Insights</h2><div class="card insights">{{markdown .}}</div>{{end}}
+
+{{with .Summary.Sites}}<h2 id="sites">{{brand}}'s sites in these answers</h2>
+<div class="scroll"><table><thead><tr><th>Site</th><th>Kind</th><th class="num">Cited</th><th class="num">Surfaced</th><th class="num">Pages</th><th class="num">Prompts</th></tr></thead>
+<tbody>{{range .}}<tr><td class="mono">{{.URL}}</td><td>{{.Kind}}</td><td class="num">{{.Cited}}</td><td class="num">{{.Surfaced}}</td><td class="num">{{.Pages}}</td><td class="num">{{if .Prompts}}{{.Prompts}}{{else}}<span class="muted">never reached</span>{{end}}</td></tr>{{end}}</tbody></table></div>{{end}}
+
+<h2 id="voice">Share of voice</h2>
+<div class="scroll"><table><thead><tr><th class="num">#</th><th>Product</th><th class="num">Answers naming it</th><th aria-hidden="true"></th><th class="num">Top pick</th></tr></thead>
+<tbody>{{range $i, $v := .Voice}}<tr{{if $v.IsBrand}} class="us"{{end}}><td class="num muted">{{if and $v.IsBrand (ge $i 20)}}{{$d.Summary.BrandRank}}{{else}}{{add $i 1}}{{end}}</td><td>{{if $v.IsBrand}}<b>{{$v.Name}}</b>{{else}}{{$v.Name}}{{end}}</td><td class="num">{{$v.Answers}} ({{pct $v.Share}})</td><td class="barcell" aria-hidden="true"><div class="bar"><i class="{{if $v.IsBrand}}us{{end}}" style="width:{{bar $v.Share}}%"></i></div></td><td class="num">{{$v.TopPick}}</td></tr>{{end}}</tbody></table></div>
+{{if .VoiceMore}}<p class="muted small">Showing the top 20{{if gt .Summary.BrandRank 20}} and {{brand}}{{end}}; {{.VoiceMore}} more named less often.</p>{{end}}
+
+<h2 id="pages">Pages referenced</h2>
+<div class="scroll"><table><thead><tr><th>Page</th><th class="num">Cited</th><th class="num">Surfaced</th><th class="num">Prompts</th></tr></thead>
+<tbody>{{range .Pages}}<tr><td class="mono"><a href="{{.URL}}">{{.URL}}</a>{{if .FirstParty}} <span class="chip">ours · {{.SiteKind}}</span>{{end}}</td><td class="num">{{.Cited}}</td><td class="num">{{.Surfaced}}</td><td class="num muted">{{len .Prompts}}</td></tr>{{end}}</tbody></table></div>
+{{if .PagesMore}}<p class="muted small">Showing the 60 most cited; {{.PagesMore}} more in the JSON export.</p>{{end}}
+
+<h2 id="answers">Every answer</h2>
+{{range .Summary.Prompts}}{{$p := .}}<details id="prompt-{{add .Idx 1}}"><summary><span class="muted">{{add .Idx 1}}.</span> {{.Prompt}} <span class="muted">— recommended {{.Rates.Recommended.Hits}}/{{.Rates.Recommended.N}}, named {{.Rates.Visible.Hits}}/{{.Rates.Visible.N}}{{if not .FirstHand}}, none of {{brand}}'s pages in search{{end}}</span></summary>
+{{if .TopPicks}}<p class="muted">Top picks: {{range .TopPicks}}{{.Name}} ×{{.N}} {{end}}</p>{{end}}
+{{range $d.Results}}{{if eq .PromptIdx $p.Idx}}<details id="result-{{.ID}}"><summary><span class="chip">{{aname .Answerer}} · {{.Track}} · #{{.Sample}}</span> {{with .Grade}}<span class="v-{{.Verdict}}">{{sicon .Verdict}}{{.Verdict}}</span> {{with .TopPick}}· top: {{.}}{{end}}{{else}}<span class="s-{{.Status}}">{{sicon .Status}}{{.Status}}</span> {{deref .Error}}{{end}}</summary>
+{{with .Grade}}<p>{{.Reasoning}}{{with .WhyNotTop}}<br><b>Why not {{brand}}:</b> {{.}}{{end}}{{if .Objections}}<br><b>Objections:</b> {{range .Objections}}{{.}}; {{end}}{{end}}</p>{{end}}
+{{with .Answer}}<pre>{{.Text}}</pre>{{if .Searches}}<p class="muted">Searches: {{range .Searches}}“{{.Query}}” {{end}}</p>{{end}}{{if .Citations}}<p class="muted">Cited: {{range .Citations}}<a href="{{.URL}}">{{.URL}}</a> {{end}}</p>{{end}}{{end}}
+</details>{{end}}{{end}}</details>{{end}}
+{{end}}

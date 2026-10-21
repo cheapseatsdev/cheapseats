@@ -1,0 +1,13 @@
+{{define "title"}}{{.Set.Name}} · {{end}}{{define "body"}}
+<h1>{{.Set.Name}}</h1><p class="sub"><span class="chip">{{.Set.Tier}}</span> <span class="chip mono">{{.Set.ID}} · v{{.Set.Version}}</span></p>
+<p>{{.Set.Description}}</p>
+<form method="post" action="/sets/{{.Set.ID}}/run"><button>{{icon "play"}}Start a run</button> <span class="muted">Today: {{money (index .Spend "spent_today_usd")}} of {{money (index .Spend "daily_budget_usd")}}</span></form>
+<h2>Prompts</h2>
+{{with .History}}{{if .Days}}<p class="sub">Each prompt day by day ({{.Track}} track{{if eq .Track "search"}}, <a href="?track=recall">recall</a>{{else}}, <a href="?track=search">search</a>{{end}}): how many answers named {{brand}}. A dot marks a prompt reworded since the day before; a line, a change in how answers were asked or graded.</p>{{end}}
+<div class="scroll"><table class="history"><tr><th>#</th><th>Prompt</th>{{range .Days}}<th class="{{if .NewMethod}}new-method{{end}}"><a href="/runs/{{.RunID}}">{{slice .Date 5}}</a></th>{{end}}</tr>
+{{range $i, $row := .Rows}}<tr class="{{if not .Current}}retired{{end}}"><td class="muted">{{if .Current}}{{add $i 1}}{{end}}</td><td>{{.Text}} <span class="muted mono">{{.ID}}</span>{{if not .Current}} <span class="chip">no longer asked</span>{{end}}</td>
+{{range $j, $c := .Cells}}<td class="hcell {{shade $c}}{{with index $.History.Days $j}}{{if .NewMethod}} new-method{{end}}{{end}}" title="{{if $c.Asked}}named in {{$c.Visible}} of {{$c.N}}, recommended in {{$c.Recommended}}{{if $c.Reworded}}; reworded since the day before{{end}}{{else}}not asked{{end}}">{{if $c.Asked}}{{$c.Visible}}/{{$c.N}}{{if $c.Reworded}}<sup>•</sup>{{end}}{{end}}</td>{{end}}</tr>{{end}}</table></div>{{end}}
+<h2>Competitors the grader folds onto</h2><p class="sub">Answers that name one of these by an alias are counted under its name.</p>
+<ul class="competitors">{{range .Set.Competitors}}<li><b>{{.Name}}</b>{{with .Aliases}} <span class="muted">also {{range $i, $a := .}}{{if $i}}, {{end}}{{$a}}{{end}}</span>{{end}}</li>{{end}}</ul>
+<h2>Runs</h2>{{if .Runs}}<div class="scroll"><table><tr><th>Run</th><th>Status</th><th>Trigger</th><th>Created</th></tr>{{range .Runs}}<tr><td><a href="/runs/{{.ID}}">{{.Name}}</a></td><td class="s-{{.Status}}">{{sicon .Status}}{{.Status}}</td><td>{{.Trigger}}</td><td class="muted">{{day .CreatedAt}}</td></tr>{{end}}</table></div>{{else}}<p class="muted">None yet.</p>{{end}}
+{{end}}

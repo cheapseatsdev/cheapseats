@@ -1,0 +1,86 @@
+id = "head-to-heads"
+name = "Popcorn head to heads"
+tier = "plg"
+description = """The only set that names the brand: buyers who already know Popcorn and are comparing it with the alternatives, or asking whether it fits their team."""
+
+# Popcorn against each major alternative
+
+[[prompts]]
+id = "popcorn-vs-profound-tracking-whether"
+text = "Popcorn vs Profound for tracking whether AI assistants recommend us: which should I pick?"
+
+[[prompts]]
+id = "popcorn-peec-ai-small-marketing"
+text = "Popcorn or Peec AI for a small marketing team?"
+
+[[prompts]]
+id = "popcorn-vs-otterly-startup"
+text = "Popcorn vs Otterly.AI for a startup that wants to track AI visibility cheaply?"
+
+[[prompts]]
+id = "popcorn-vs-gauge"
+text = "How does Popcorn compare with Gauge for tracking and improving AI visibility?"
+
+[[prompts]]
+id = "popcorn-vs-semrush-ai-toolkit"
+text = "Popcorn or Semrush AI Toolkit for tracking our brand in ChatGPT and Claude?"
+
+# Is Popcorn right for...
+
+[[prompts]]
+id = "popcorn-open-source-alternative-paid"
+text = "Is Popcorn a good open-source alternative to paid AI visibility tools?"
+
+[[prompts]]
+id = "downsides-self-hosting-popcorn-measure"
+text = "What are the downsides of self-hosting Popcorn to measure AI search visibility?"
+
+[[prompts]]
+id = "popcorn-decide-whether-ai-assistant"
+text = "How does Popcorn decide whether an AI assistant recommended a brand?"
+
+[[prompts]]
+id = "popcorn-fit-agency-many-clients"
+text = "Is Popcorn a good fit for an agency tracking AI visibility for many clients?"
+
+[[prompts]]
+id = "popcorn-fit-developer-tools-company"
+text = "Is Popcorn a good fit for a developer-tools company checking whether ChatGPT and Claude recommend it?"
+
+[[prompts]]
+id = "popcorn-daily-running-cost"
+text = "What does it cost to run Popcorn every day, and how do I keep the spend under control?"
+
+# Products the grader folds onto one canonical name, so share of voice counts each once.
+
+[[competitors]]
+name = "Profound"
+aliases = ["tryprofound", "Profound AI"]
+
+[[competitors]]
+name = "Peec AI"
+aliases = ["Peec", "peec.ai"]
+
+[[competitors]]
+name = "Otterly.AI"
+aliases = ["Otterly", "OtterlyAI"]
+
+[[competitors]]
+name = "Gauge"
+aliases = ["withgauge", "withgauge.com"]
+
+[[competitors]]
+name = "Dageno AI"
+aliases = ["Dageno", "dageno.ai"]
+
+[[competitors]]
+name = "AI Peekaboo"
+aliases = ["Peekaboo", "aipeekaboo"]
+
+[[competitors]]
+name = "Semrush AI Toolkit"
+aliases = ["Semrush"]
+
+[[competitors]]
+name = "Ahrefs Brand Radar"
+aliases = ["Ahrefs"]

@@ -1,0 +1,7 @@
+Popcorn is starting: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+
+  kubectl rollout status deployment/{{ include "popcorn.fullname" . }}
+  kubectl port-forward svc/{{ include "popcorn.fullname" . }} 3000:{{ .Values.service.port }}
+
+Then open http://127.0.0.1:3000 and sign in with a token from POPCORN_TOKENS.
+The database is on PersistentVolumeClaim {{ include "popcorn.claim" . }}, which uninstalling keeps.

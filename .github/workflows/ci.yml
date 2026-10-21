@@ -1,0 +1,40 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+      - run: go vet ./...
+      - run: go test -race ./...
+      - name: the example config passes its own checks
+        run: POPCORN_CONFIG=examples/popcorn-config/popcorn.toml go run ./cmd/popcorn check
+      - name: scripts parse
+        run: bash -n deploy/*.sh
+
+  # Installs the chart on kind the way a client deploys, and checks it serves, keeps its data
+  # across restarts, upgrades, and rolls back a broken config.
+  kubernetes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: azure/setup-helm@v4
+        with:
+          version: v4.3.0
+      - uses: helm/kind-action@v1
+        with:
+          install_only: true
+      - run: helm lint charts/popcorn --set image.repository=x --set image.tag=y --set existingSecret=s
+      - run: deploy/kind-smoke.sh
