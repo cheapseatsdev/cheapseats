@@ -41,6 +41,7 @@ config_image() { # tag, config dir
 	kind load docker-image "popcorn-config:$1" --name "$CLUSTER" >/dev/null
 }
 config_image v1 examples/popcorn-config
+nsets=$(find examples/popcorn-config/prompt-sets -name '*.toml' | wc -l | tr -d ' ')
 
 say "install"
 kubectl -n "$NS" create secret generic popcorn --from-literal=POPCORN_TOKENS="$TOKEN" \
@@ -72,10 +73,10 @@ forward
 [ "$(curl -fsS "http://127.0.0.1:$PORT/healthz")" = "ok" ] || fail "healthz"
 code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$PORT/api/status")
 [ "$code" = "401" ] || fail "the API answered $code without a token"
-[ "$(api /api/status | field sets)" = "3" ] || fail "want the example's 3 sets"
+[ "$(api /api/status | field sets)" = "$nsets" ] || fail "want the example's $nsets sets"
 [ "$(api /api/version | field version)" = "v0.0.0-smoke" ] || fail "version"
 [ "$(api /api/version | field config_rev)" = "v1" ] || fail "config_rev"
-echo "ok: healthz, token required, 3 sets, version and config commit"
+echo "ok: healthz, token required, $nsets sets, version and config commit"
 
 say "the database survives the pod"
 kubectl -n "$NS" scale deployment/popcorn --replicas=0 >/dev/null
@@ -97,7 +98,7 @@ peek 'test -s /data/popcorn.db && touch /data/marker && echo db present'
 kubectl -n "$NS" scale deployment/popcorn --replicas=1 >/dev/null
 kubectl -n "$NS" rollout status deployment/popcorn --timeout=120s >/dev/null
 forward
-[ "$(api /api/status | field sets)" = "3" ] || fail "after restart"
+[ "$(api /api/status | field sets)" = "$nsets" ] || fail "after restart"
 kubectl -n "$NS" scale deployment/popcorn --replicas=0 >/dev/null
 kubectl -n "$NS" wait --for=delete pod -l app.kubernetes.io/name=popcorn --timeout=60s >/dev/null 2>&1 || true
 peek 'test -f /data/marker && test -s /data/popcorn.db && echo marker and db kept'
@@ -111,7 +112,7 @@ rm "$work/v2/prompt-sets/head-to-heads.toml"
 config_image v2 "$work/v2"
 install v2
 forward
-[ "$(api /api/status | field sets)" = "2" ] || fail "want 2 sets after the upgrade"
+[ "$(api /api/status | field sets)" = "$((nsets - 1))" ] || fail "want $((nsets - 1)) sets after the upgrade"
 [ "$(api /api/version | field config_rev)" = "v2" ] || fail "config_rev after the upgrade"
 echo "ok: upgraded in place, new config live"
 

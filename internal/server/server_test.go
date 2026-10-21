@@ -287,7 +287,7 @@ func limit(s string) string {
 func TestProxyEmailHeader(t *testing.T) {
 	t.Setenv("POPCORN_TOKENS", "tok")
 	t.Setenv("POPCORN_AUTH_HEADER", "X-ExeDev-Email")
-	t.Setenv("POPCORN_ALLOWED_EMAILS", "kim@acme.com, @team.example")
+	t.Setenv("POPCORN_ALLOWED_EMAILS", "alice@acme.com, @team.example")
 	d, _ := store.Open(t.TempDir())
 	defer d.Close()
 	s, err := New(newApp(t, testConfig(t), d))
@@ -299,8 +299,8 @@ func TestProxyEmailHeader(t *testing.T) {
 		email, bearer, path string
 		code                int
 	}{
-		{"kim@acme.com", "", "/", 200},
-		{"KIM@acme.com", "", "/api/status", 200},
+		{"alice@acme.com", "", "/", 200},
+		{"ALICE@acme.com", "", "/api/status", 200},
 		{"anyone@team.example", "", "/rankings", 200},
 		{"eve@acme.com", "", "/", 403},
 		{"eve@notteam.example", "", "/", 403},
