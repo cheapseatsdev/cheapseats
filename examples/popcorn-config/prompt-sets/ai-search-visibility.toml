@@ -75,36 +75,3 @@ intent = "info"
 id = "prove-leadership-whether-content-work"
 text = "How do I prove to leadership whether our content work is changing what AI assistants recommend?"
 intent = "info"
-
-# Products the grader folds onto one canonical name, so share of voice counts each once.
-[[competitors]]
-name = "Profound"
-aliases = ["tryprofound", "Profound AI"]
-
-[[competitors]]
-name = "Peec AI"
-aliases = ["Peec", "peec.ai"]
-
-[[competitors]]
-name = "Otterly.AI"
-aliases = ["Otterly", "OtterlyAI"]
-
-[[competitors]]
-name = "Gauge"
-aliases = ["withgauge", "withgauge.com"]
-
-[[competitors]]
-name = "Dageno AI"
-aliases = ["Dageno", "dageno.ai"]
-
-[[competitors]]
-name = "AI Peekaboo"
-aliases = ["Peekaboo", "aipeekaboo"]
-
-[[competitors]]
-name = "Semrush AI Toolkit"
-aliases = ["Semrush"]
-
-[[competitors]]
-name = "Ahrefs Brand Radar"
-aliases = ["Ahrefs"]

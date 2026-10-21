@@ -50,37 +50,3 @@ text = "Is Popcorn a good fit for a developer-tools company checking whether Cha
 [[prompts]]
 id = "popcorn-daily-running-cost"
 text = "What does it cost to run Popcorn every day, and how do I keep the spend under control?"
-
-# Products the grader folds onto one canonical name, so share of voice counts each once.
-
-[[competitors]]
-name = "Profound"
-aliases = ["tryprofound", "Profound AI"]
-
-[[competitors]]
-name = "Peec AI"
-aliases = ["Peec", "peec.ai"]
-
-[[competitors]]
-name = "Otterly.AI"
-aliases = ["Otterly", "OtterlyAI"]
-
-[[competitors]]
-name = "Gauge"
-aliases = ["withgauge", "withgauge.com"]
-
-[[competitors]]
-name = "Dageno AI"
-aliases = ["Dageno", "dageno.ai"]
-
-[[competitors]]
-name = "AI Peekaboo"
-aliases = ["Peekaboo", "aipeekaboo"]
-
-[[competitors]]
-name = "Semrush AI Toolkit"
-aliases = ["Semrush"]
-
-[[competitors]]
-name = "Ahrefs Brand Radar"
-aliases = ["Ahrefs"]

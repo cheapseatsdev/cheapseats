@@ -19,6 +19,7 @@ text = "What's the difference between being mentioned and being recommended in a
 intent = "info"                   # asks to explain, not to choose: scored on named, not recommended
 
 # Products the grader folds onto one canonical name, so share of voice counts "Peec" as Peec AI.
+# Competitors every set shares go once in popcorn.toml; list one here only for this set.
 [[competitors]]
 name = "Peec AI"
 aliases = ["Peec"]

@@ -80,7 +80,7 @@ func loadConfigDir(dir string) (plan.Config, error) {
 		return plan.Config{}, err
 	}
 	all, err := sets.LoadAll(filepath.Join(dir, "prompt-sets"))
-	return plan.Config{Cfg: cfg, Sets: all}, err
+	return plan.Config{Cfg: cfg, Sets: sets.Share(all, cfg.Competitors)}, err
 }
 
 // configPath is POPCORN_CONFIG, or the example config, so a fresh checkout runs as-is and never

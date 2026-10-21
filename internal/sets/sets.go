@@ -155,6 +155,30 @@ func load(dir string) ([]Set, []error) {
 	return out, errs
 }
 
+// Share adds the competitors every set shares to each set that doesn't list them itself (by name,
+// ignoring case), so the grader folds the same names everywhere. The set's own entry wins.
+func Share(all []Set, shared []Competitor) []Set {
+	if len(shared) == 0 {
+		return all
+	}
+	out := make([]Set, len(all))
+	for i, s := range all {
+		have := map[string]bool{}
+		for _, c := range s.Competitors {
+			have[strings.ToLower(strings.TrimSpace(c.Name))] = true
+		}
+		s.Competitors = append([]Competitor(nil), s.Competitors...)
+		for _, c := range shared {
+			if !have[strings.ToLower(strings.TrimSpace(c.Name))] {
+				s.Competitors = append(s.Competitors, c)
+			}
+		}
+		s.Version = Fingerprint(s)
+		out[i] = s
+	}
+	return out
+}
+
 // Check is LoadAll plus the rules for writing sets, for `popcorn check` in the config repo: the
 // same question isn't asked twice, and only head-to-heads may name the brand.
 func Check(dir string, brand []string) error {

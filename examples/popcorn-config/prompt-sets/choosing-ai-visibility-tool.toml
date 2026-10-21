@@ -72,36 +72,3 @@ text = "Which AI visibility tools have an API so we can pull the data into our o
 [[prompts]]
 id = "ai-visibility-tools-run-schedule"
 text = "Which AI visibility tools can run on a schedule and alert us when we drop out of answers?"
-
-# Products the grader folds onto one canonical name, so share of voice counts each once.
-[[competitors]]
-name = "Profound"
-aliases = ["tryprofound", "Profound AI"]
-
-[[competitors]]
-name = "Peec AI"
-aliases = ["Peec", "peec.ai"]
-
-[[competitors]]
-name = "Otterly.AI"
-aliases = ["Otterly", "OtterlyAI"]
-
-[[competitors]]
-name = "Gauge"
-aliases = ["withgauge", "withgauge.com"]
-
-[[competitors]]
-name = "Dageno AI"
-aliases = ["Dageno", "dageno.ai"]
-
-[[competitors]]
-name = "AI Peekaboo"
-aliases = ["Peekaboo", "aipeekaboo"]
-
-[[competitors]]
-name = "Semrush AI Toolkit"
-aliases = ["Semrush"]
-
-[[competitors]]
-name = "Ahrefs Brand Radar"
-aliases = ["Ahrefs"]

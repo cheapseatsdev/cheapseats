@@ -56,3 +56,24 @@ func TestSites(t *testing.T) {
 		t.Fatalf("want a kind error, got %v", err)
 	}
 }
+
+func TestSharedCompetitors(t *testing.T) {
+	load := func(body string) (*Config, error) {
+		p := filepath.Join(t.TempDir(), "popcorn.toml")
+		os.WriteFile(p, []byte("[brand]\nname = \"Acme\"\naliases = [\"acme.dev\"]\n"+body), 0o644)
+		return Load(p)
+	}
+	c, err := load("[[competitors]]\nname = \"Peec AI\"\naliases = [\"Peec\"]\n")
+	if err != nil || len(c.Competitors) != 1 || c.Competitors[0].Aliases[0] != "Peec" {
+		t.Fatalf("%+v %v", c, err)
+	}
+	for _, bad := range []string{
+		"[[competitors]]\nname = \"\"\n",
+		"[[competitors]]\nname = \"Peec\"\n[[competitors]]\nname = \"peec\"\n",
+		"[[competitors]]\nname = \"acme.dev\"\n",
+	} {
+		if _, err := load(bad); err == nil {
+			t.Errorf("should fail: %q", bad)
+		}
+	}
+}

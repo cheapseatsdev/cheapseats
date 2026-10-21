@@ -42,7 +42,7 @@ func New(cfg *config.Config, db *store.DB) (*App, error) {
 	if err != nil {
 		return nil, fmt.Errorf("prompt sets: %w", err)
 	}
-	a := &App{Cfg: cfg, DB: db, Runs: run.New(cfg, db), sets: all}
+	a := &App{Cfg: cfg, DB: db, Runs: run.New(cfg, db), sets: sets.Share(all, cfg.Competitors)}
 	if err := a.Backfill(context.Background()); err != nil {
 		slog.Error("backfilling prompt ids", "err", err)
 	}

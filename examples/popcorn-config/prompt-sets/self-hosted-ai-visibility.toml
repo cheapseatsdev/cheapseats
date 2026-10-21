@@ -70,37 +70,3 @@ text = "How can a developer-tools company find out whether ChatGPT and Claude re
 [[prompts]]
 id = "test-same-buyer-questions-against"
 text = "Can I test the same buyer questions against several AI models and compare the answers?"
-
-# Products the grader folds onto one canonical name, so share of voice counts each once.
-
-[[competitors]]
-name = "Profound"
-aliases = ["tryprofound", "Profound AI"]
-
-[[competitors]]
-name = "Peec AI"
-aliases = ["Peec", "peec.ai"]
-
-[[competitors]]
-name = "Otterly.AI"
-aliases = ["Otterly", "OtterlyAI"]
-
-[[competitors]]
-name = "Gauge"
-aliases = ["withgauge", "withgauge.com"]
-
-[[competitors]]
-name = "Dageno AI"
-aliases = ["Dageno", "dageno.ai"]
-
-[[competitors]]
-name = "AI Peekaboo"
-aliases = ["Peekaboo", "aipeekaboo"]
-
-[[competitors]]
-name = "Semrush AI Toolkit"
-aliases = ["Semrush"]
-
-[[competitors]]
-name = "Ahrefs Brand Radar"
-aliases = ["Ahrefs"]

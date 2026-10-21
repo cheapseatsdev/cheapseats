@@ -27,3 +27,20 @@ func TestIntent(t *testing.T) {
 		t.Errorf("an unknown intent should fail: %v", err)
 	}
 }
+
+func TestShareAddsCompetitorsASetDoesntList(t *testing.T) {
+	own := Set{ID: "a", Prompts: []Prompt{{ID: "q", Text: "q"}}, Competitors: []Competitor{{Name: "Peec AI", Aliases: []string{"Peec"}}}}
+	own.Version = Fingerprint(own)
+	shared := []Competitor{{Name: "peec ai"}, {Name: "Profound"}}
+	got := Share([]Set{own}, shared)[0]
+	if len(got.Competitors) != 2 || got.Competitors[0].Aliases[0] != "Peec" || got.Competitors[1].Name != "Profound" {
+		t.Fatalf("%+v", got.Competitors)
+	}
+	if got.Version == own.Version || len(own.Competitors) != 1 {
+		t.Errorf("the merged set is a new version, and the original is untouched")
+	}
+	moved := Share([]Set{{ID: "a", Prompts: own.Prompts}}, []Competitor{{Name: "Peec AI", Aliases: []string{"Peec"}}})[0]
+	if moved.Version != own.Version {
+		t.Errorf("moving a set's competitors to the shared list should change nothing")
+	}
+}

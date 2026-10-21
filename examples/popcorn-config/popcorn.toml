@@ -84,6 +84,41 @@ samples = { search = 2, recall = 1 }
 # model = "gpt-6.1-sol"
 # samples = { search = 2, recall = 1 }
 
+# Competitors the grader folds onto one canonical name in every prompt set, so share of voice counts
+# "Peec" and "peec.ai" as Peec AI. A set can add its own [[competitors]], and its entry for the same
+# name wins. Adding one is noted on the trend; it never restarts it.
+[[competitors]]
+name = "Profound"
+aliases = ["tryprofound", "Profound AI"]
+
+[[competitors]]
+name = "Peec AI"
+aliases = ["Peec", "peec.ai"]
+
+[[competitors]]
+name = "Otterly.AI"
+aliases = ["Otterly", "OtterlyAI"]
+
+[[competitors]]
+name = "Gauge"
+aliases = ["withgauge", "withgauge.com"]
+
+[[competitors]]
+name = "Dageno AI"
+aliases = ["Dageno", "dageno.ai"]
+
+[[competitors]]
+name = "AI Peekaboo"
+aliases = ["Peekaboo", "aipeekaboo"]
+
+[[competitors]]
+name = "Semrush AI Toolkit"
+aliases = ["Semrush"]
+
+[[competitors]]
+name = "Ahrefs Brand Radar"
+aliases = ["Ahrefs"]
+
 [grader]
 model = "claude-haiku-5-5"
 

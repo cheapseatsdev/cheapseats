@@ -13,6 +13,7 @@ import (
 	"unicode"
 
 	"github.com/BurntSushi/toml"
+	"github.com/metcalfc/popcorn/internal/sets"
 )
 
 type Config struct {
@@ -25,6 +26,9 @@ type Config struct {
 	Tiers     Tiers              `toml:"tiers"`
 	Owners    Owners             `toml:"owners"`
 	Pricing   map[string]Pricing `toml:"pricing"`
+	// Competitors every prompt set folds names onto, so a list shared by all sets is written
+	// once. A set's own [[competitors]] entry for the same name wins.
+	Competitors []sets.Competitor `toml:"competitors"`
 	// The directory popcorn.toml was read from: prompt sets live beside it.
 	Dir string `toml:"-"`
 	// The config repo's commit, if known (see Revision).
@@ -175,6 +179,20 @@ func Load(path string) (*Config, error) {
 		if !slices.Contains(SiteKinds, s.Kind) {
 			return nil, fmt.Errorf("%s: brand.sites[%d] (%s): kind must be one of %s", path, i, s.URL, strings.Join(SiteKinds, ", "))
 		}
+	}
+	names := map[string]bool{strings.ToLower(c.Brand.Name): true}
+	for _, a := range c.Brand.Aliases {
+		names[strings.ToLower(a)] = true
+	}
+	for i, comp := range c.Competitors {
+		n := strings.ToLower(strings.TrimSpace(comp.Name))
+		if n == "" {
+			return nil, fmt.Errorf("%s: competitors[%d]: name is required", path, i)
+		}
+		if names[n] {
+			return nil, fmt.Errorf("%s: competitor %q is listed twice or is the brand", path, comp.Name)
+		}
+		names[n] = true
 	}
 	seen := map[string]bool{}
 	for _, a := range c.Answerers {
