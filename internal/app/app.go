@@ -208,6 +208,22 @@ func (a *App) QuickWins(ctx context.Context) ([]QuickWin, error) {
 	return out, nil
 }
 
+// RunBrand is the brand a past run is summarized with: who the brand is (name, aliases, about,
+// audience, facts) as that run saw it, since that shaped how it was graded, and its sites as
+// configured today, since sites only decide which pages count as its own and never make runs
+// incomparable. Every view of a run (its page, rankings, the API, MCP and the CLI) uses it, so
+// they agree about the same run.
+func (a *App) RunBrand(r *run.Run) config.Brand {
+	b := r.Snapshot.Brand
+	b.Sites, b.Domains = a.Cfg.Brand.Sites, a.Cfg.Brand.Domains
+	return b
+}
+
+// Summary is a run's report over results (all of its results, or a slice of them).
+func (a *App) Summary(r *run.Run, results []run.Result) report.Summary {
+	return report.Build(a.RunBrand(r), results)
+}
+
 // QuickWinFilter narrows quick wins; empty fields match everything. Site is one of the brand's
 // sites by url or kind ("docs"), or "elsewhere" for fixes off its sites (outreach, product).
 type QuickWinFilter struct{ Gap, Set, Site string }

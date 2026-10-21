@@ -77,7 +77,7 @@ func (s *Server) mcpHandler() http.Handler {
 			out := []row{}
 			for _, x := range runs {
 				res, _ := s.App.Runs.Results(ctx, x.ID)
-				sum := report.Build(s.App.Cfg.Brand, res)
+				sum := s.App.Summary(&x, res)
 				out = append(out, row{x.ID, x.Name, x.SetID, x.Status, x.CreatedAt, sum.Overall, sum.BrandRank()})
 			}
 			return out, nil

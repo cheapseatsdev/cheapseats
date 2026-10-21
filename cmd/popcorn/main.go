@@ -331,7 +331,7 @@ func printReport(a *app.App, id string, asJSON bool) error {
 	if err != nil {
 		return err
 	}
-	s := report.Build(a.Cfg.Brand, res)
+	s := a.Summary(r, res)
 	if asJSON {
 		e := json.NewEncoder(os.Stdout)
 		e.SetIndent("", "  ")

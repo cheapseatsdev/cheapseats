@@ -108,32 +108,33 @@ type Summary struct {
 	Searches int         `json:"searches"`
 }
 
-type tally struct{ top, rec, vis, n int }
+// Tally counts graded answers: how many were the brand's top pick, recommended it, or named it.
+type Tally struct{ Top, Rec, Vis, N int }
 
-func (t *tally) add(g *grade.Grade, brand string) {
-	t.n++
+func (t *Tally) Add(g *grade.Grade, brand string) {
+	t.N++
 	if g.IsTopPick(brand) {
-		t.top++
+		t.Top++
 	}
 	if g.Verdict == grade.Recommended {
-		t.rec++
+		t.Rec++
 	}
 	if g.Verdict != grade.Absent {
-		t.vis++
+		t.Vis++
 	}
 }
 
-func (t tally) rates() Rates {
-	return Rates{TopPick: NewRate(t.top, t.n), Recommended: NewRate(t.rec, t.n), Visible: NewRate(t.vis, t.n)}
+func (t Tally) Rates() Rates {
+	return Rates{TopPick: NewRate(t.Top, t.N), Recommended: NewRate(t.Rec, t.N), Visible: NewRate(t.Vis, t.N)}
 }
 
 func Build(brand config.Brand, results []run.Result) Summary {
 	var s Summary
-	var all tally
-	slices := map[[2]string]*tally{}
+	var all Tally
+	slices := map[[2]string]*Tally{}
 	sliceErr := map[[2]string]int{}
 	var sliceOrder [][2]string
-	prompts := map[int]*tally{}
+	prompts := map[int]*Tally{}
 	promptText := map[int]string{}
 	promptTop := map[int]map[string]int{}
 	promptFirst := map[int]bool{}
@@ -154,7 +155,7 @@ func Build(brand config.Brand, results []run.Result) Summary {
 		s.CostUSD += r.CostUSD
 		key := [2]string{r.Answerer, string(r.Track)}
 		if _, ok := slices[key]; !ok {
-			slices[key] = &tally{}
+			slices[key] = &Tally{}
 			sliceOrder = append(sliceOrder, key)
 		}
 		promptText[r.PromptIdx] = r.Prompt
@@ -172,13 +173,13 @@ func Build(brand config.Brand, results []run.Result) Summary {
 			continue
 		}
 		s.Done++
-		all.add(r.Grade, brand.Name)
-		slices[key].add(r.Grade, brand.Name)
+		all.Add(r.Grade, brand.Name)
+		slices[key].Add(r.Grade, brand.Name)
 		if prompts[r.PromptIdx] == nil {
-			prompts[r.PromptIdx] = &tally{}
+			prompts[r.PromptIdx] = &Tally{}
 			promptTop[r.PromptIdx] = map[string]int{}
 		}
-		prompts[r.PromptIdx].add(r.Grade, brand.Name)
+		prompts[r.PromptIdx].Add(r.Grade, brand.Name)
 		if r.Grade.TopPick != nil {
 			promptTop[r.PromptIdx][*r.Grade.TopPick]++
 		}
@@ -264,9 +265,9 @@ func Build(brand config.Brand, results []run.Result) Summary {
 		}
 	}
 
-	s.Overall = all.rates()
+	s.Overall = all.Rates()
 	for _, k := range sliceOrder {
-		s.Slices = append(s.Slices, Slice{Answerer: k[0], Track: answer.Track(k[1]), Rates: slices[k].rates(), Errors: sliceErr[k]})
+		s.Slices = append(s.Slices, Slice{Answerer: k[0], Track: answer.Track(k[1]), Rates: slices[k].Rates(), Errors: sliceErr[k]})
 	}
 	for _, v := range voice {
 		if s.Done > 0 {
@@ -312,7 +313,7 @@ func Build(brand config.Brand, results []run.Result) Summary {
 	for _, i := range idxs {
 		row := PromptRow{Idx: i, Prompt: promptText[i], FirstHand: promptFirst[i]}
 		if t := prompts[i]; t != nil {
-			row.Rates = t.rates()
+			row.Rates = t.Rates()
 		}
 		for n, c := range promptTop[i] {
 			row.TopPicks = append(row.TopPicks, Count{n, c})

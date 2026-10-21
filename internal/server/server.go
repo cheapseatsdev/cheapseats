@@ -391,7 +391,7 @@ func (s *Server) cards(ctx context.Context, progress []app.Progress) []SetCard {
 			}
 			c.Baseline = r
 			c.Older = askedDifferently(st, res)
-			sum := report.Build(r.Snapshot.Brand, res)
+			sum := s.App.Summary(r, res)
 			c.Summary = &sum
 			c.Rank = sum.BrandRank()
 			break
@@ -468,7 +468,7 @@ func (s *Server) runData(ctx context.Context, id string) (*RunData, error) {
 		return nil, err
 	}
 	fx, fe, _ := s.App.Fixes(ctx, id)
-	d := &RunData{Run: r, Active: s.App.Runs.IsActive(id), Summary: report.Build(s.App.Cfg.Brand, res), Results: res, Fixes: fx, FixError: fe}
+	d := &RunData{Run: r, Active: s.App.Runs.IsActive(id), Summary: s.App.Summary(r, res), Results: res, Fixes: fx, FixError: fe}
 	var insights sql.NullString
 	s.App.DB.QueryRowContext(ctx, `SELECT insights FROM runs WHERE id=?`, id).Scan(&insights)
 	d.Insights = insights.String
@@ -484,7 +484,7 @@ func (s *Server) runData(ctx context.Context, id string) (*RunData, error) {
 			}
 		}
 		if len(slice) > 0 {
-			d.Tracks = append(d.Tracks, TrackRates{t, report.Build(s.App.Cfg.Brand, slice).Overall})
+			d.Tracks = append(d.Tracks, TrackRates{t, s.App.Summary(r, slice).Overall})
 		}
 	}
 	col := map[GridCol]int{}
@@ -592,7 +592,7 @@ func (s *Server) setPage(w http.ResponseWriter, r *http.Request) {
 					}
 				}
 				if len(search) > 0 {
-					sum := report.Build(s.App.Cfg.Brand, search)
+					sum := s.App.Summary(&rn, search)
 					row.Scored, row.Named, row.Recommended, row.Rank = true, sum.Overall.Visible.P, sum.Overall.Recommended.P, sum.BrandRank()
 				}
 			}
@@ -766,7 +766,7 @@ func (s *Server) apiRuns(w http.ResponseWriter, r *http.Request) {
 	var out []row
 	for _, x := range runs {
 		res, _ := s.App.Runs.Results(r.Context(), x.ID)
-		sum := report.Build(s.App.Cfg.Brand, res)
+		sum := s.App.Summary(&x, res)
 		x.Snapshot.Set.Prompts = nil
 		out = append(out, row{Run: x, Rates: sum.Overall, Rank: sum.BrandRank()})
 	}

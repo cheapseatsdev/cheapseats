@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/metcalfc/popcorn/internal/config"
 	"github.com/metcalfc/popcorn/internal/report"
 	"github.com/metcalfc/popcorn/internal/run"
 	"github.com/metcalfc/popcorn/internal/sets"
@@ -254,19 +255,16 @@ type Ranking struct {
 	Days    []Day  `json:"days"` // newest first
 }
 
-// tally counts one prompt's graded answers from one answerer.
-type tally struct{ top, rec, vis, n int }
-
 // dayData is what a day's comparisons are worked out from.
 type dayData struct {
 	Day
 	snap    run.Snapshot
-	prompts map[string]string            // prompt id -> wording hash
-	texts   map[string]string            // prompt id -> text
-	order   []string                     // prompt ids in the run's order
-	models  map[string]string            // answerer -> model
-	samples map[string]int               // answerer -> samples per prompt
-	tallies map[string]map[string]*tally // prompt id -> answerer -> tally
+	prompts map[string]string                   // prompt id -> wording hash
+	texts   map[string]string                   // prompt id -> text
+	order   []string                            // prompt ids in the run's order
+	models  map[string]string                   // answerer -> model
+	samples map[string]int                      // answerer -> samples per prompt
+	tallies map[string]map[string]*report.Tally // prompt id -> answerer -> tally
 }
 
 // series is each track's days for one set, newest first, with changes and comparisons filled in.
@@ -308,7 +306,7 @@ func (a *App) series(ctx context.Context, s sets.Set, lastDays int) (map[string]
 			if len(slice) == 0 {
 				continue
 			}
-			out[track] = append(out[track], newDay(r, p.day, slice))
+			out[track] = append(out[track], newDay(r, a.RunBrand(r), p.day, slice))
 		}
 	}
 	for track := range out {
@@ -326,18 +324,18 @@ func (a *App) series(ctx context.Context, s sets.Set, lastDays int) (map[string]
 	return out, nil
 }
 
-func newDay(r *run.Run, date string, results []run.Result) dayData {
-	sum := report.Build(r.Snapshot.Brand, results)
+func newDay(r *run.Run, brand config.Brand, date string, results []run.Result) dayData {
+	sum := report.Build(brand, results)
 	d := dayData{
 		Day:     Day{Date: date, RunID: r.ID, Method: r.Method, ConfigRev: r.ConfigRev, Rank: sum.BrandRank(), Rates: sum.Overall, Answers: sum.Done, Board: sum.Voice},
 		snap:    r.Snapshot,
 		prompts: map[string]string{}, texts: map[string]string{}, models: map[string]string{}, samples: map[string]int{},
-		tallies: map[string]map[string]*tally{},
+		tallies: map[string]map[string]*report.Tally{},
 	}
 	if len(sum.Voice) > 0 {
 		d.Leader = sum.Voice[0].Name
 	}
-	brand := r.Snapshot.Brand.Name
+	name := brand.Name
 	for _, x := range results {
 		x.PromptID, x.PromptSHA = promptKey(x)
 		if _, ok := d.prompts[x.PromptID]; !ok {
@@ -353,23 +351,14 @@ func newDay(r *run.Run, date string, results []run.Result) dayData {
 			continue
 		}
 		if d.tallies[x.PromptID] == nil {
-			d.tallies[x.PromptID] = map[string]*tally{}
+			d.tallies[x.PromptID] = map[string]*report.Tally{}
 		}
 		t := d.tallies[x.PromptID][x.Answerer]
 		if t == nil {
-			t = &tally{}
+			t = &report.Tally{}
 			d.tallies[x.PromptID][x.Answerer] = t
 		}
-		t.n++
-		if x.Grade.IsTopPick(brand) {
-			t.top++
-		}
-		if x.Grade.Verdict == "recommended" {
-			t.rec++
-		}
-		if x.Grade.Verdict != "absent" {
-			t.vis++
-		}
+		t.Add(x.Grade, name)
 	}
 	d.Prompts = len(d.prompts)
 	d.Mean = d.mean(nil, nil)
@@ -384,19 +373,19 @@ func (d *dayData) mean(prompts, answerers map[string]bool) Mean {
 		if prompts != nil && !prompts[pid] {
 			continue
 		}
-		var t tally
+		var t report.Tally
 		for ans, x := range byAnswerer {
 			if answerers != nil && !answerers[ans] {
 				continue
 			}
-			t.top, t.rec, t.vis, t.n = t.top+x.top, t.rec+x.rec, t.vis+x.vis, t.n+x.n
+			t.Top, t.Rec, t.Vis, t.N = t.Top+x.Top, t.Rec+x.Rec, t.Vis+x.Vis, t.N+x.N
 		}
-		if t.n == 0 {
+		if t.N == 0 {
 			continue
 		}
-		m.TopPick += float64(t.top) / float64(t.n)
-		m.Recommended += float64(t.rec) / float64(t.n)
-		m.Visible += float64(t.vis) / float64(t.n)
+		m.TopPick += float64(t.Top) / float64(t.N)
+		m.Recommended += float64(t.Rec) / float64(t.N)
+		m.Visible += float64(t.Vis) / float64(t.N)
 		n++
 	}
 	if n > 0 {
@@ -496,7 +485,7 @@ func band(days []dayData, i, window int, mean float64) (float64, float64) {
 		for _, byAnswerer := range days[j].tallies {
 			var vis, n int
 			for _, t := range byAnswerer {
-				vis, n = vis+t.vis, n+t.n
+				vis, n = vis+t.Vis, n+t.N
 			}
 			if n > 0 {
 				xs = append(xs, float64(vis)/float64(n))
@@ -625,7 +614,7 @@ func (a *App) History(ctx context.Context, s sets.Set, track string, lastDays in
 			if sha, ok := d.prompts[id]; ok {
 				c.Asked = true
 				for _, t := range d.tallies[id] {
-					c.N, c.Recommended, c.Visible = c.N+t.n, c.Recommended+t.rec, c.Visible+t.vis
+					c.N, c.Recommended, c.Visible = c.N+t.N, c.Recommended+t.Rec, c.Visible+t.Vis
 				}
 				if i+1 < len(days) {
 					if before, ok := days[i+1].prompts[id]; ok && before != sha {
