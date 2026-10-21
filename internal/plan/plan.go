@@ -184,7 +184,11 @@ func volume(c Config) string {
 		}
 		fmt.Fprintf(&b, "| %s | %s | %d | %d |\n", s.ID, s.Tier, len(s.Prompts), n)
 	}
-	fmt.Fprintf(&b, "\nCore sets run daily: %d answers a day, each graded once. Subscription answerers cost nothing per answer; API ones are billed per token against `budget.daily_usd`.\n", total)
+	every := "daily"
+	if n := c.Cfg.Tiers.Core.EveryDays; n > 1 {
+		every = fmt.Sprintf("every %d days", n)
+	}
+	fmt.Fprintf(&b, "\nCore sets run %s: %d answers each time, each graded once. Subscription answerers cost nothing per answer; API ones are billed per token against `budget.daily_usd`.\n", every, total)
 	return b.String()
 }
 

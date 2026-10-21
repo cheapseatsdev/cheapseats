@@ -33,6 +33,7 @@ func TestPlanSaysWhatAChangeDoes(t *testing.T) {
 		"`b` removed",
 		"`claude`: model opus-1 → opus-2",
 		"| a | core | 5 | 15 |",
+		"Core sets run daily: 15 answers each time",
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q in:\n%s", want, got)
@@ -41,6 +42,11 @@ func TestPlanSaysWhatAChangeDoes(t *testing.T) {
 	if strings.Contains(got, "starts over") {
 		t.Errorf("nothing here changes the method:\n%s", got)
 	}
+	after.Cfg.Tiers.Core.EveryDays = 7
+	if got := Markdown(before, after); !strings.Contains(got, "Core sets run every 7 days") {
+		t.Errorf("weekly cadence:\n%s", got)
+	}
+	after.Cfg.Tiers.Core.EveryDays = 0
 	after.Cfg.Brand.Sites = []config.Site{{URL: "docs.popcorn.example", Kind: "docs"}}
 	if got := Markdown(before, after); strings.Contains(got, "starts over") || !strings.Contains(got, "The brand's sites changed") {
 		t.Errorf("a site change notes where fixes go and keeps trends:\n%s", got)
