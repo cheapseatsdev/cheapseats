@@ -334,7 +334,12 @@ func Build(brand config.Brand, results []run.Result) Summary {
 		for n, c := range promptTop[i] {
 			row.TopPicks = append(row.TopPicks, Count{n, c})
 		}
-		sort.Slice(row.TopPicks, func(a, b int) bool { return row.TopPicks[a].N > row.TopPicks[b].N })
+		sort.Slice(row.TopPicks, func(a, b int) bool {
+			if row.TopPicks[a].N != row.TopPicks[b].N {
+				return row.TopPicks[a].N > row.TopPicks[b].N
+			}
+			return row.TopPicks[a].Name < row.TopPicks[b].Name
+		})
 		s.Prompts = append(s.Prompts, row)
 	}
 	return s

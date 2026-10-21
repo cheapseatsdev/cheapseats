@@ -502,7 +502,8 @@ func rolling(days []dayData, i int) (Mean, int) {
 func band(days []dayData, i, window int, mean float64) (float64, float64) {
 	var xs []float64
 	for j := i; j < i+window && j < len(days); j++ {
-		for _, byAnswerer := range days[j].tallies {
+		for _, pid := range days[j].order { // in order, so the sums come out the same every time
+			byAnswerer := days[j].tallies[pid]
 			var vis, n int
 			for _, t := range byAnswerer {
 				vis, n = vis+t.Vis, n+t.N
