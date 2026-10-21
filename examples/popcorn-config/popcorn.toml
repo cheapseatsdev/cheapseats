@@ -34,19 +34,19 @@ url = "popcorn.zone"
 kind = "marketing"
 # owner = "web team"
 
+# A path is its own site: pages under popcorn.zone/docs count as docs, the rest as marketing.
+[[brand.sites]]
+url = "popcorn.zone/docs"
+kind = "docs"
+# owner = "docs team"
+
+[[brand.sites]]
+url = "popcorn.zone/blog"
+kind = "blog"
+
 [[brand.sites]]
 url = "github.com/metcalfc/popcorn"
 kind = "code"
-
-# Most companies have a few more, e.g.:
-# [[brand.sites]]
-# url = "docs.example.com"
-# kind = "docs"
-# owner = "docs team"
-#
-# [[brand.sites]]
-# url = "example.com/blog"
-# kind = "blog"
 
 # Every assistant that answers. Results and rankings key on `id`: never reuse an id for a
 # different model; add a new answerer instead. An answerer this machine can't call (no API key)
