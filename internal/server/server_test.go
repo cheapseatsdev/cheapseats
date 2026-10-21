@@ -367,3 +367,37 @@ func TestAssetsAreVersioned(t *testing.T) {
 		}
 	}
 }
+
+// Behind a proxy on the same machine, MCP requests arrive on loopback under the public host name:
+// served when that name is in POPCORN_HOSTS, refused under any other (DNS rebinding).
+func TestMCPBehindALocalProxy(t *testing.T) {
+	initialize := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"t","version":"0"}}}`
+	for _, c := range []struct {
+		hosts []string
+		host  string
+		code  int
+	}{
+		{nil, "popcorn.example.com", 403},
+		{nil, "localhost:3000", 200},
+		{[]string{"popcorn.example.com"}, "popcorn.example.com", 200},
+		{[]string{"popcorn.example.com"}, "POPCORN.example.com:443", 200},
+		{[]string{"popcorn.example.com"}, "attacker.example", 403},
+		{[]string{"popcorn.example.com"}, "127.0.0.1:3000", 200},
+	} {
+		s := &Server{App: &app.App{Cfg: &config.Config{Brand: config.Brand{Name: "Acme"}}}, hosts: c.hosts}
+		ts := httptest.NewServer(s.mcpHandler())
+		req, _ := http.NewRequest("POST", ts.URL, strings.NewReader(initialize))
+		req.Host = c.host
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json, text/event-stream")
+		resp, err := http.DefaultClient.Do(req)
+		ts.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != c.code {
+			t.Errorf("hosts %v, Host %q: %d, want %d", c.hosts, c.host, resp.StatusCode, c.code)
+		}
+	}
+}

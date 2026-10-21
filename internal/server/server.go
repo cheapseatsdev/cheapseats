@@ -54,6 +54,9 @@ type Server struct {
 	// (any, when empty). Only set this when nothing can reach Popcorn except through that proxy.
 	authHeader string
 	allowed    []string
+	// Host names a proxy on the same machine serves Popcorn as (POPCORN_HOSTS). MCP refuses a
+	// request that arrives on loopback under any other non-local name (DNS rebinding).
+	hosts []string
 	// The login cookie's name. Cookies ignore the port, so two deployments on one host need
 	// different names or each sign-in signs the other out.
 	cookie string
@@ -64,6 +67,11 @@ func New(a *app.App) (*Server, error) {
 	for _, t := range strings.Split(os.Getenv("POPCORN_TOKENS"), ",") {
 		if t = strings.TrimSpace(t); t != "" {
 			s.tokens = append(s.tokens, t)
+		}
+	}
+	for _, h := range strings.Split(os.Getenv("POPCORN_HOSTS"), ",") {
+		if h = strings.ToLower(strings.TrimSpace(h)); h != "" {
+			s.hosts = append(s.hosts, h)
 		}
 	}
 	for _, e := range strings.Split(os.Getenv("POPCORN_ALLOWED_EMAILS"), ",") {

@@ -109,6 +109,7 @@ popcorn version                        version and database schema
 - Unset `POPCORN_TOKENS`: listens on 127.0.0.1 only, open.
 - `POPCORN_TOKENS`: bearer tokens for the API and MCP; the UI asks for one once.
 - `POPCORN_AUTH_HEADER` (+ `POPCORN_ALLOWED_EMAILS`): trust a signing-in proxy's email header.
+- `POPCORN_HOSTS`: host names a proxy on the same machine serves Popcorn as; MCP needs them.
 
 ## Deploying
 

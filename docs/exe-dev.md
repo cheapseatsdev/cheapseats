@@ -17,12 +17,13 @@ which signs people in by email. Because it's a whole VM, its answerers can be th
 2. **Write its secrets** to `~/popcorn/popcorn.env` on the VM, readable only by its user. The proxy
    passes a signed-in person's email as `X-ExeDev-Email`, and nothing reaches the VM except
    through the proxy, so Popcorn trusts that header; `POPCORN_ALLOWED_EMAILS` narrows it further
-   (emails, or `@domain`). The token is for API and MCP clients, which can't sign in by email.
+   (emails, or `@domain`). `POPCORN_HOSTS` names the host the proxy serves it as, which MCP needs (see step 7).
 
    ```bash
    { printf 'ANTHROPIC_API_KEY=%s\n' "<key>"
      printf 'POPCORN_AUTH_HEADER=X-ExeDev-Email\n'
      printf 'POPCORN_ALLOWED_EMAILS=%s\n' "you@example.com,@yourcompany.com"
+     printf 'POPCORN_HOSTS=%s\n' "<vm>.exe.xyz"   # and a custom domain, comma-separated
      printf 'POPCORN_TOKENS=%s\n' "$(openssl rand -hex 32)"
    } | ssh <vm>.exe.xyz 'mkdir -p ~/popcorn && umask 077 && cat > ~/popcorn/popcorn.env'
    ```
@@ -54,6 +55,22 @@ which signs people in by email. Because it's a whole VM, its answerers can be th
    ```bash
    ssh exe.dev share add <vm> someone@example.com
    ```
+
+7. Connect Claude Code (or any MCP client). The proxy only lets in people who signed in by email,
+   so a client gets through with an exe.dev token scoped to the VM, sent as
+   `X-Exedev-Authorization`; the proxy then passes your email, and Popcorn signs you in as usual.
+
+   ```bash
+   tok=$(ssh exe.dev ssh-key generate-api-key --vm=<vm> --label=claude-code --exp=90d --json |
+     python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])')
+   claude mcp add -s user --transport http popcorn https://<vm>.exe.xyz/api/mcp \
+     --header "X-Exedev-Authorization: Bearer $tok"
+   unset tok
+   ```
+
+   Revoke it with `ssh exe.dev ssh-key remove claude-code`. Without `POPCORN_HOSTS`, MCP answers
+   `403 invalid Host header`: the proxy reaches Popcorn over loopback, and Popcorn refuses a
+   loopback request under a name it wasn't told about, against DNS rebinding.
 
 ## Every deploy
 

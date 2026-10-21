@@ -4,7 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
+	"slices"
+	"strings"
 
 	"github.com/metcalfc/popcorn/internal/analysis"
 	"github.com/metcalfc/popcorn/internal/app"
@@ -148,7 +151,40 @@ func (s *Server) mcpHandler() http.Handler {
 			return map[string]bool{"cancelled": s.App.Runs.Cancel(a.Run)}, nil
 		})
 
-	return mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return srv }, nil)
+	h := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return srv }, nil)
+	if len(s.hosts) == 0 {
+		return h // the SDK's own guard: loopback requests must name a loopback host
+	}
+	// A proxy on the same machine (exe.dev, a sidecar) delivers requests on loopback under the
+	// public host name, which the SDK's guard refuses. Do the same check here, also allowing the
+	// listed hosts, so a DNS-rebinding page under any other name is still refused.
+	h = mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return srv }, &mcp.StreamableHTTPOptions{DisableLocalhostProtection: true})
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if local, ok := r.Context().Value(http.LocalAddrContextKey).(net.Addr); ok && loopback(local.String()) &&
+			!loopback(r.Host) && !slices.Contains(s.hosts, hostOnly(r.Host)) {
+			http.Error(w, fmt.Sprintf("Forbidden: invalid Host header %q (add it to POPCORN_HOSTS if a proxy serves Popcorn under it)", r.Host), http.StatusForbidden)
+			return
+		}
+		h.ServeHTTP(w, r)
+	})
+}
+
+// hostOnly is a Host header without its port, lowercased.
+func hostOnly(hostport string) string {
+	if h, _, err := net.SplitHostPort(hostport); err == nil {
+		hostport = h
+	}
+	return strings.ToLower(strings.Trim(hostport, "[]"))
+}
+
+// loopback reports whether a host or host:port is a loopback address or localhost.
+func loopback(hostport string) bool {
+	h := hostOnly(hostport)
+	if h == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(h)
+	return ip != nil && ip.IsLoopback()
 }
 
 // addTool registers a tool whose input schema comes from In's json and jsonschema tags.
