@@ -180,3 +180,4 @@ input.wide{min-width:min(320px,100%)}input.full{width:100%}
 table.sets td:first-child{min-width:11rem}
 .nowrap{white-space:nowrap}
 main a[href^="http"]{overflow-wrap:anywhere}
+.filters .row{margin:4px 0;gap:6px}.filter-name{min-width:3.5rem}

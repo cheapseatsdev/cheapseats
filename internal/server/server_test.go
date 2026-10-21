@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -61,17 +62,21 @@ func TestPagesRenderWithData(t *testing.T) {
 	}
 	h := s.Handler()
 	for path, want := range map[string]string{
-		"/":                                  "Write a credential-gateway guide",
-		"/runs/" + r.ID:                      "<h2>Why Popcorn lost</h2>",
-		"/rankings":                          "#1",
-		"/quick-wins":                        "keys-off-the-box",
-		"/api/runs/" + r.ID:                  `"verdict": "mentioned"`,
-		"/api/rankings":                      `"rank": 1`,
-		"/api/quick-wins?gap=documentation":  "claude_prompt",
-		"/api/quick-wins?site=elsewhere":     "keys-off-the-box", // the fake fix targets a page off the brand's sites
-		"/api/quick-wins?site=code":          "[]",
-		"/api/citations?urlContains=DOCKER":  `"url": "https://docs.docker.com/ai/sandboxes/security"`,
-		"/api/citations?urlContains=nothing": `"answers_scanned": 30`,
+		"/":                                 "Write a credential-gateway guide",
+		"/runs/" + r.ID:                     "<h2>Why Popcorn lost</h2>",
+		"/rankings":                         "#1",
+		"/quick-wins":                       "keys-off-the-box",
+		"/api/runs/" + r.ID:                 `"verdict": "mentioned"`,
+		"/api/rankings":                     `"rank": 1`,
+		"/api/quick-wins?gap=documentation": "claude_prompt",
+		"/api/quick-wins?site=elsewhere":    "keys-off-the-box", // the fake fix targets a page off the brand's sites
+		"/api/quick-wins?site=code":         "[]",
+		"/api/citations?urlContains=DOCKER": `"url": "https://docs.docker.com/ai/sandboxes/security"`,
+		// One answerer, one sample on each of two tracks.
+		"/api/citations?urlContains=nothing": fmt.Sprintf(`"answers_scanned": %d`, 2*len(set.Prompts)),
+		"/quick-wins?gap=documentation":      `aria-current="true">documentation 1</a>`,
+		"/quick-wins?gap=product":            `aria-current="true">product 0</a>`,
+		"/sets/" + set.ID:                    `<td class="num">#1</td>`,
 		"/search":                            "Search probe",
 		"/runs/" + r.ID + "/export.csv":      "result_id,prompt_n,prompt",
 		"/runs/" + r.ID + "/export.json":     `"verdict": "mentioned"`,

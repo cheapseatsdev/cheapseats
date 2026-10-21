@@ -25,6 +25,7 @@ import (
 	"log/slog"
 	"math"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -557,6 +558,14 @@ func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 	s.render(w, "home", map[string]any{"Progress": progress, "Rows": rows, "QuickWins": qw, "Spend": s.spend(ctx)})
 }
 
+// RunRow is one run in a set's runs table, with its search-track scores when it finished.
+type RunRow struct {
+	run.Run
+	Scored             bool
+	Named, Recommended float64
+	Rank               int
+}
+
 // HomeRow is one set on the dashboard: its card, and its latest day on each track.
 type HomeRow struct {
 	SetCard
@@ -570,12 +579,32 @@ func (s *Server) setPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	runs, _ := s.App.Runs.List(r.Context(), st.ID, 30)
+	// Each finished run's search-track scores, as the dashboard shows them.
+	var rows []RunRow
+	for _, rn := range runs {
+		row := RunRow{Run: rn}
+		if rn.Status == "done" {
+			if res, err := s.App.Runs.Results(r.Context(), rn.ID); err == nil {
+				var search []run.Result
+				for _, x := range res {
+					if x.Track == "search" {
+						search = append(search, x)
+					}
+				}
+				if len(search) > 0 {
+					sum := report.Build(s.App.Cfg.Brand, search)
+					row.Scored, row.Named, row.Recommended, row.Rank = true, sum.Overall.Visible.P, sum.Overall.Recommended.P, sum.BrandRank()
+				}
+			}
+		}
+		rows = append(rows, row)
+	}
 	track := "search"
 	if r.URL.Query().Get("track") == "recall" {
 		track = "recall"
 	}
 	hist, _ := s.App.History(r.Context(), st, track, 30)
-	s.render(w, "set", map[string]any{"Set": st, "Runs": runs, "Spend": s.spend(r.Context()), "History": hist})
+	s.render(w, "set", map[string]any{"Set": st, "Runs": rows, "Spend": s.spend(r.Context()), "History": hist})
 }
 
 func (s *Server) startRunForm(w http.ResponseWriter, r *http.Request) {
@@ -626,24 +655,69 @@ func (s *Server) rankingsPage(w http.ResponseWriter, r *http.Request) {
 	s.render(w, "rankings", map[string]any{"Rankings": rk})
 }
 
+// filterRow is one row of filter links on the quick wins page.
+type filterRow struct {
+	Name    string
+	Options []filterOption
+}
+
+type filterOption struct {
+	Label string
+	N     int
+	On    bool
+	Href  string
+}
+
 func (s *Server) quickWinsPage(w http.ResponseWriter, r *http.Request) {
 	all, _ := s.App.QuickWins(r.Context())
-	site := r.URL.Query().Get("site")
-	// A filter link per site with fixes on it, and one for fixes elsewhere.
-	type link struct {
-		Value, Label string
-		N            int
-	}
-	var links []link
-	for _, st := range s.App.Cfg.Brand.AllSites() {
-		if n := len(s.App.FilterQuickWins(all, app.QuickWinFilter{Site: st.URL})); n > 0 {
-			links = append(links, link{st.URL, st.URL + " (" + st.Kind + ")", n})
+	q := r.URL.Query()
+	f := app.QuickWinFilter{Site: q.Get("site"), Gap: q.Get("gap"), Set: q.Get("set")}
+	// A row per dimension. Each count applies the other rows' choices, so a link never leads to
+	// an empty list; "all" clears just that row.
+	href := func(param, value string) string {
+		v := url.Values{}
+		for _, p := range []string{"site", "gap", "set"} {
+			if x := q.Get(p); x != "" && p != param {
+				v.Set(p, x)
+			}
 		}
+		if value != "" {
+			v.Set(param, value)
+		}
+		if len(v) == 0 {
+			return "/quick-wins"
+		}
+		return "/quick-wins?" + v.Encode()
 	}
-	if n := len(s.App.FilterQuickWins(all, app.QuickWinFilter{Site: "elsewhere"})); n > 0 {
-		links = append(links, link{"elsewhere", "elsewhere", n})
+	row := func(name, param, current string, values, labels []string, with func(string) app.QuickWinFilter) filterRow {
+		fr := filterRow{Name: name}
+		fr.Options = append(fr.Options, filterOption{"all", len(s.App.FilterQuickWins(all, with(""))), current == "", href(param, "")})
+		for i, v := range values {
+			if n := len(s.App.FilterQuickWins(all, with(v))); n > 0 || v == current {
+				fr.Options = append(fr.Options, filterOption{labels[i], n, v == current, href(param, v)})
+			}
+		}
+		return fr
 	}
-	s.render(w, "quickwins", map[string]any{"QuickWins": s.App.FilterQuickWins(all, app.QuickWinFilter{Site: site}), "Site": site, "Links": links, "Total": len(all)})
+	var siteV, siteL []string
+	for _, st := range s.App.Cfg.Brand.AllSites() {
+		siteV, siteL = append(siteV, st.URL), append(siteL, st.URL+" ("+st.Kind+")")
+	}
+	siteV, siteL = append(siteV, "elsewhere"), append(siteL, "elsewhere")
+	var gapV []string
+	for _, g := range []analysis.Gap{analysis.GapDocs, analysis.GapPositioning, analysis.GapThirdParty, analysis.GapProduct} {
+		gapV = append(gapV, string(g))
+	}
+	var setV, setL []string
+	for _, st := range s.App.Sets() {
+		setV, setL = append(setV, st.ID), append(setL, st.Name)
+	}
+	rows := []filterRow{
+		row("Site", "site", f.Site, siteV, siteL, func(v string) app.QuickWinFilter { x := f; x.Site = v; return x }),
+		row("Gap", "gap", f.Gap, gapV, gapV, func(v string) app.QuickWinFilter { x := f; x.Gap = v; return x }),
+		row("Set", "set", f.Set, setV, setL, func(v string) app.QuickWinFilter { x := f; x.Set = v; return x }),
+	}
+	s.render(w, "quickwins", map[string]any{"QuickWins": s.App.FilterQuickWins(all, f), "Rows": rows, "Total": len(all)})
 }
 
 // --- API ---
