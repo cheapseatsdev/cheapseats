@@ -34,6 +34,19 @@ Mounting a checkout at `/config` instead of building an image works too, as in t
   the next start; give it 30 seconds.
 - **Probes:** `GET /healthz` answers `ok` without a token.
 
+## Backups
+
+`popcorn backup <file>` takes a consistent copy of the live database (SQLite's `VACUUM INTO`); copying
+`popcorn.db` while Popcorn runs can miss recent writes still in its write-ahead log.
+
+- Docker: `docker compose exec popcorn /app/popcorn backup /data/backup.db`, then
+  `docker compose cp popcorn:/data/backup.db .`
+- Kubernetes: `kubectl exec deploy/popcorn -- /app/popcorn backup /data/backup.db`; the image has no
+  shell or `tar`, so copy it off the volume with a pod that mounts the claim.
+- exe.dev: `deploy/exe-dev-ops.sh` sets up nightly copies (see [exe-dev.md](exe-dev.md)).
+
+Popcorn also copies the database to `popcorn.db.bak-v<N>` before any schema change.
+
 ## Releasing (maintainers)
 
 Push a tag `vX.Y.Z` on `main`. The release workflow tests, builds the image for linux/amd64 and

@@ -3,8 +3,8 @@
 # with the config baked in, a Secret, a volume), then checks it serves, keeps its data across
 # restarts, and upgrades to a new config. Run from the repo root; CI runs it too.
 #
-#   deploy/kind-smoke.sh            # creates the cluster, and deletes it afterwards
-#   KEEP=1 deploy/kind-smoke.sh     # leaves it running to poke at
+#   deploy/kind-smoke.sh            # uses the cluster if it exists, else creates it and deletes it after
+#   KEEP=1 deploy/kind-smoke.sh     # leaves a cluster it created running to poke at
 #
 # Needs docker, kind, kubectl and helm. Makes no paid calls: no API keys are set.
 set -euo pipefail
@@ -15,11 +15,12 @@ TOKEN=smoke-token-$$
 NS=popcorn-smoke
 work=$(mktemp -d "${TMPDIR:-/tmp}/popcorn-smoke.XXXXXX")
 pf=""
+created="" # only a cluster this run created is deleted afterwards
 
 cleanup() {
 	if [ -n "$pf" ]; then kill "$pf" 2>/dev/null || true; fi
 	rm -rf "$work"
-	if [ "${KEEP:-}" = "" ]; then kind delete cluster --name "$CLUSTER" >/dev/null 2>&1 || true; fi
+	if [ -n "$created" ] && [ "${KEEP:-}" = "" ]; then kind delete cluster --name "$CLUSTER" >/dev/null 2>&1 || true; fi
 }
 trap cleanup EXIT
 
@@ -29,6 +30,7 @@ fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 say "cluster"
 if ! kind get clusters 2>/dev/null | grep -qx "$CLUSTER"; then
 	kind create cluster --name "$CLUSTER" --wait 120s
+	created=1
 fi
 kubectl config use-context "kind-$CLUSTER" >/dev/null
 kubectl create namespace "$NS" --dry-run=client -o yaml | kubectl apply -f - >/dev/null

@@ -34,6 +34,7 @@ const usage = `popcorn: how AI assistants answer your buyers' questions.
   popcorn serve [-addr 127.0.0.1:3000]   web UI, JSON API and the daily schedule
   popcorn sets                           list prompt sets
   popcorn version                        this build's version
+  popcorn backup <file>                  a consistent copy of the database, safe while serve runs
   popcorn check                          validate popcorn.toml and every prompt set
   popcorn plan <before> [<after>]        what a config change does to trends, for its pull request
   popcorn migrate-config [dir]           give every prompt an id (prompt sets from before ids)
@@ -108,6 +109,25 @@ func dispatch(ctx context.Context, cmd string, args []string) error {
 	switch cmd {
 	case "help", "-h", "--help":
 		fmt.Print(usage)
+		return nil
+	case "backup":
+		// A consistent copy of the live database (SQLite's VACUUM INTO), safe while serve runs.
+		// Copying popcorn.db itself can miss what's still in its write-ahead log.
+		if len(args) != 1 {
+			return errors.New("usage: popcorn backup <file>")
+		}
+		if _, err := os.Stat(args[0]); err == nil {
+			return fmt.Errorf("%s already exists", args[0])
+		}
+		db, err := store.Open(env("POPCORN_DATA_DIR", "data"))
+		if err != nil {
+			return err
+		}
+		defer db.Close()
+		if _, err := db.ExecContext(ctx, `VACUUM INTO ?`, args[0]); err != nil {
+			return err
+		}
+		fmt.Println("backed up to", args[0])
 		return nil
 	case "version":
 		fmt.Printf("popcorn %s (database schema %d)\n", version.String(), store.Schema())

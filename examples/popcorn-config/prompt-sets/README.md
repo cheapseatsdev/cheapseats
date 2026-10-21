@@ -31,8 +31,9 @@ aliases = ["Peec"]
 reworded prompts, new competitors and new answerer models, and each day says what changed since
 the day before. Comparisons with the day before only count the prompts both days asked, worded the
 same. Editing a set's name, description or tier changes nothing. A new trend starts only when how
-answers are asked or graded changes (the brand's names or domains, the grader, or a Popcorn
-release that changes its prompts).
+answers are asked or graded changes: the brand's name, aliases, about or audience, the grader, or a
+Popcorn release that changes its prompts. The full list:
+[what restarts a trend](https://popcorn.zone/docs/prompt-sets/#what-restarts-a-trend).
 
 **Ask the way a buyer would.** Only `head-to-heads` names the brand; in every other set it has to be
 named on its own merits (`popcorn check` enforces this, matching the brand name and aliases as whole
