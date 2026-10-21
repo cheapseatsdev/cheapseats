@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/metcalfc/popcorn/internal/llm"
 )
 
 func decode(t *testing.T, s string) map[string]any {
@@ -41,7 +43,7 @@ func TestParseAnthropic(t *testing.T) {
 	if len(a.Citations) != 1 {
 		t.Fatalf("citations should dedupe: %+v", a.Citations)
 	}
-	if a.Usage.Searches != 2 || a.Usage.Input != 100 || a.Usage.CacheWrite != 5 {
+	if a.Usage.Searches != 2 || a.Usage.Input != 100 || a.Usage.CacheWrite != 5 || a.Usage != llm.Usage(resp, false) {
 		t.Fatalf("usage = %+v", a.Usage)
 	}
 }
@@ -51,6 +53,7 @@ func TestParseOpenAI(t *testing.T) {
 	  "output": [
 	    {"type":"web_search_call","action":{"type":"search","query":"coder alternatives","sources":[{"url":"https://coder.com/"}]}},
 	    {"type":"web_search_call","action":{"type":"open_page","url":"https://ona.com/"}},
+	    {"type":"web_search_call","action":{"type":"find_in_page","url":"https://ona.com/","pattern":"pricing"}},
 	    {"type":"message","content":[{"type":"output_text","text":"Try Coder.","annotations":[
 	      {"type":"url_citation","url":"https://coder.com/?utm_source=openai","title":"Coder"}]}]}
 	  ],
@@ -63,8 +66,13 @@ func TestParseOpenAI(t *testing.T) {
 	if a.Citations[0].URL != "https://coder.com/" {
 		t.Fatalf("utm tag not stripped: %s", a.Citations[0].URL)
 	}
-	if a.Usage.Input != 150 || a.Usage.CacheRead != 50 {
+	// Only search actions are billed as tool calls, and the recorded cost agrees with what the
+	// budget was charged.
+	if a.Usage.Input != 150 || a.Usage.CacheRead != 50 || a.Usage.Searches != 1 {
 		t.Fatalf("usage = %+v", a.Usage)
+	}
+	if a.Usage != llm.Usage(resp, true) {
+		t.Fatalf("answer usage %+v differs from accounting %+v", a.Usage, llm.Usage(resp, true))
 	}
 }
 

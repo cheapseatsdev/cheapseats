@@ -234,8 +234,7 @@ Don't propose generic marketing, brand campaigns, or anything you can't point at
 	resp, err := llm.Structured(ctx, cfg.Analyst.Model, System, prompt, 16000, schema, &a)
 	cost := 0.0
 	if resp != nil {
-		u := llm.Map(resp["usage"])
-		cost = cfg.Cost(cfg.Analyst.Model, config.Usage{Input: llm.Int(u["input_tokens"]), Output: llm.Int(u["output_tokens"]), CacheRead: llm.Int(u["cache_read_input_tokens"]), CacheWrite: llm.Int(u["cache_creation_input_tokens"])})
+		cost = cfg.Cost(cfg.Analyst.Model, llm.Usage(resp, false))
 	}
 	if err != nil {
 		return Analysis{}, cost, err

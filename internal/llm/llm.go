@@ -79,7 +79,7 @@ func post(ctx context.Context, url string, headers map[string]string, body any) 
 				}
 				if meter != nil {
 					known := knownUsage(out, url == OpenAIURL)
-					if err := lease.Finish(meter.Cfg.Cost(model, usage(out, url == OpenAIURL)), known); err != nil {
+					if err := lease.Finish(meter.Cfg.Cost(model, Usage(out, url == OpenAIURL)), known); err != nil {
 						return out, err
 					}
 				}

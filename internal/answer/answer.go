@@ -160,14 +160,7 @@ func ParseAnthropic(resp map[string]any) Answer {
 	// Claude often narrates ("I'll search for that.") before the first search; the answer is what
 	// follows the last tool result.
 	a.Text = strings.TrimSpace(finalText(blocks, text.String()))
-	u := llm.Map(resp["usage"])
-	a.Usage = config.Usage{
-		Input:      llm.Int(u["input_tokens"]),
-		Output:     llm.Int(u["output_tokens"]),
-		CacheRead:  llm.Int(u["cache_read_input_tokens"]),
-		CacheWrite: llm.Int(u["cache_creation_input_tokens"]),
-		Searches:   llm.Int(llm.Map(u["server_tool_use"])["web_search_requests"]),
-	}
+	a.Usage = llm.Usage(resp, false)
 	return a
 }
 
@@ -262,14 +255,7 @@ func ParseOpenAI(resp map[string]any) Answer {
 		}
 	}
 	a.Text = strings.TrimSpace(text.String())
-	u := llm.Map(resp["usage"])
-	cached := llm.Int(llm.Map(u["input_tokens_details"])["cached_tokens"])
-	a.Usage = config.Usage{
-		Input:     llm.Int(u["input_tokens"]) - cached,
-		Output:    llm.Int(u["output_tokens"]),
-		CacheRead: cached,
-		Searches:  int64(len(a.Searches)),
-	}
+	a.Usage = llm.Usage(resp, true)
 	return a
 }
 
