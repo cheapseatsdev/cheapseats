@@ -229,6 +229,10 @@ func TestSourceRatesAndBuckets(t *testing.T) {
 		// No text kept: not part of the source rates.
 		graded(0, "p", grade.Grade{Verdict: grade.Absent}, nil),
 	}
+	// A recall answer has no tools: it can't reach a page, so it doesn't dilute the rates.
+	recall := graded(0, "p", grade.Grade{Verdict: grade.Absent}, &answer.Answer{Text: "from memory"})
+	recall.Track = answer.Recall
+	res = append(res, recall)
 	s := BuildWith(brand, res, opt)
 	if s.Answers != 5 {
 		t.Fatalf("answers = %d", s.Answers)

@@ -227,7 +227,7 @@ type Summary struct {
 	Sites    []SiteUse   `json:"sites"`
 	Prompts  []PromptRow `json:"prompts"`
 	Done     int         `json:"done"`
-	Answers  int         `json:"answers"` // graded answers with their text: what source rates are of
+	Answers  int         `json:"answers"` // answers that could reach a page (search track, or any search, fetch or citation): what source rates are of
 	Errors   int         `json:"errors"`
 	Pending  int         `json:"pending"`
 	CostUSD  float64     `json:"cost_usd"`
@@ -476,7 +476,11 @@ func BuildWith(brand config.Brand, results []run.Result, opt Options) Summary {
 		if r.Answer == nil {
 			continue
 		}
-		s.Answers++
+		// Source rates are of the answers that could reach a page: recall answers have no tools,
+		// so counting them would only dilute every page's rate.
+		if r.Track == answer.Search || len(r.Answer.Searches) > 0 || len(r.Answer.Fetches) > 0 || len(r.Answer.Citations) > 0 {
+			s.Answers++
+		}
 		s.Searches += len(r.Answer.Searches)
 		touch := func(u string) *Page {
 			u = NormalizeURL(u)

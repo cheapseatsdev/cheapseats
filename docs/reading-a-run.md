@@ -50,7 +50,7 @@ Every page an answer cited, or its searches returned, is sorted into a kind of s
 
 For each host and each page:
 
-- **Retrieved**: answers whose searches returned it, of the answers with text (`retrieved_rate`).
+- **Retrieved**: answers whose searches returned it, of the answers that could reach a page: the search track, plus any answer that searched, fetched or cited (`retrieved_rate`). Recall answers have no tools, so they are left out rather than diluting every rate.
 - **Cited**: answers that linked it, of the same (`cited_rate`).
 - **Share**: its citations, of all the run's citations: adds up to 100% (`citation_share`).
 - **Cited when retrieved**: of the answers that retrieved it, those that also linked it
