@@ -73,6 +73,49 @@ func TestAnAnswerThatNeverNamesTheBrandIsAbsent(t *testing.T) {
 	}
 }
 
+// Another product can share the brand's name: answers about trypopcorn.ai, Reclaim Protocol's
+// popcorn-oss and Bad Popcorn were graded "mentioned" for Popcorn (run r-20261022-043102-ebd82f,
+// results 671, 695, 699). The grader says so in other_product, and that makes the grade absent;
+// an answer that can't find the brand, without taking it for something else, still names it.
+func TestTheNameUsedForAnotherProductIsAbsent(t *testing.T) {
+	brand := config.Brand{Name: "Popcorn", Aliases: []string{"popcorn.zone"}, About: "an open-source, self-hosted AI visibility tracker"}
+	pos := 2
+	var reply Grade
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		for _, want := range []string{"About the brand: an open-source", "other_product", "share the brand's name"} {
+			if !strings.Contains(string(body), want) {
+				t.Errorf("grader request lacks %q", want)
+			}
+		}
+		text, _ := json.Marshal(reply)
+		json.NewEncoder(w).Encode(map[string]any{"content": []any{map[string]any{"type": "text", "text": string(text)}}})
+	}))
+	defer srv.Close()
+	old := llm.AnthropicURL
+	llm.AnthropicURL = srv.URL
+	defer func() { llm.AnthropicURL = old }()
+	t.Setenv("ANTHROPIC_API_KEY", "fake-key")
+	ask := func(answer string) Grade {
+		t.Helper()
+		g, _, err := Answer(context.Background(), &config.Config{Brand: brand}, sets.Set{}, "Popcorn vs Profound?", answer)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return g
+	}
+
+	reply = Grade{Verdict: Mentioned, Position: &pos, Named: []string{"Profound", "Popcorn AI"}, Objections: []string{"WhatsApp agents"}, OtherProduct: true}
+	if g := ask("I couldn't verify the Popcorn you mean; trypopcorn.ai sells WhatsApp sales agents. Pick Profound."); g.Verdict != Absent || g.Position != nil || len(g.Objections) > 0 || !g.OtherProduct {
+		t.Errorf("another product's name must be absent: %+v", g)
+	}
+
+	reply = Grade{Verdict: Mentioned, Position: &pos, Named: []string{"Profound", "Popcorn"}, Objections: []string{"could not verify"}}
+	if g := ask("I couldn't find a product called Popcorn, so pick Profound."); g.Verdict != Mentioned || g.Position == nil {
+		t.Errorf("not finding the brand still names it: %+v", g)
+	}
+}
+
 func TestAbsentBrandDoesNotGetInventedObjectionAndTiesStayUnpicked(t *testing.T) {
 	why := "Preferred another tool"
 	g := Grade{Verdict: Absent, WhyNotTop: &why, Objections: []string{"unsupported"}}
