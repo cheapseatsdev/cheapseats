@@ -23,8 +23,11 @@ var promptIDs string
 //go:embed 003_provenance.sql
 var provenance string
 
+//go:embed 004_fix_attempts.sql
+var fixAttempts string
+
 // Each entry is applied once, in order; append, never edit.
-var migrations = []string{schema, promptIDs, provenance}
+var migrations = []string{schema, promptIDs, provenance, fixAttempts}
 
 // Schema is the schema version this Popcorn brings a database to.
 func Schema() int { return len(migrations) }

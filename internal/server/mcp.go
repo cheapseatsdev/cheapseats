@@ -110,17 +110,45 @@ func (s *Server) mcpHandler() http.Handler {
 			}
 			return nil, fmt.Errorf("run %s has no result %d", a.Run, a.Result)
 		})
-	addTool(srv, "get_quick_wins", "The ranked fixes from the latest run of every prompt set, fastest ranking gain first, each with a ready-to-paste prompt for Claude Code.",
+	addTool(srv, "get_quick_wins", "The ranked fixes from the latest run of every prompt set, fastest ranking gain first, each with a ready-to-paste prompt for Claude Code, its status (open, proposed or accepted) and the work submitted for it or earlier for the same page.",
 		func(ctx context.Context, a struct {
-			Gap  string `json:"gap,omitempty" jsonschema:"documentation, positioning, third-party or product"`
-			Set  string `json:"set,omitempty" jsonschema:"only fixes from this prompt set"`
-			Site string `json:"site,omitempty" jsonschema:"only fixes on this site of the brand's, by url or kind (docs, blog, marketing...), or elsewhere for fixes off its sites"`
+			Gap      string `json:"gap,omitempty" jsonschema:"documentation, positioning, third-party or product"`
+			Set      string `json:"set,omitempty" jsonschema:"only fixes from this prompt set"`
+			Site     string `json:"site,omitempty" jsonschema:"only fixes on this site of the brand's, by url or kind (docs, blog, marketing...), or elsewhere for fixes off its sites"`
+			Status   string `json:"status,omitempty" jsonschema:"open (nothing submitted yet), proposed or accepted"`
+			Priority string `json:"priority,omitempty" jsonschema:"urgent, high, medium or low"`
 		}) (any, error) {
 			qw, err := s.App.QuickWins(ctx)
 			if err != nil {
 				return nil, err
 			}
-			return s.App.FilterQuickWins(qw, app.QuickWinFilter{Gap: a.Gap, Set: a.Set, Site: a.Site}), nil
+			return s.App.FilterQuickWins(qw, app.QuickWinFilter{Gap: a.Gap, Set: a.Set, Site: a.Site, Status: a.Status, Priority: a.Priority}), nil
+		})
+	addTool(srv, "mark_fix", "Record work submitted for a fix: the commit or pull request, as proposed (open PR) or accepted (merged). The fix then leaves the open quick wins; a later fix for the same page stays open and shows this attempt and its outcome.",
+		func(ctx context.Context, a struct {
+			Run   string `json:"run" jsonschema:"the run the fix is from (run_id on a quick win)"`
+			Rank  int    `json:"rank" jsonschema:"the fix's rank in that run"`
+			URL   string `json:"url" jsonschema:"the commit or pull request URL"`
+			State string `json:"state,omitempty" jsonschema:"proposed (default) or accepted"`
+			Note  string `json:"note,omitempty" jsonschema:"what was done, briefly"`
+		}) (any, error) {
+			return s.App.MarkFix(ctx, a.Run, a.Rank, a.URL, a.State, a.Note, "mcp")
+		})
+	addTool(srv, "set_attempt_state", "Move work submitted for a fix on: accepted when its pull request merges, withdrawn when it's closed (which reopens the fix).",
+		func(ctx context.Context, a struct {
+			ID    int64  `json:"id" jsonschema:"the attempt id, from mark_fix or list_attempts"`
+			State string `json:"state" jsonschema:"proposed, accepted or withdrawn"`
+		}) (any, error) {
+			if err := s.App.SetAttemptState(ctx, a.ID, a.State); err != nil {
+				return nil, err
+			}
+			return map[string]any{"id": a.ID, "state": a.State}, nil
+		})
+	addTool(srv, "list_attempts", "Work submitted for fixes, newest first, with each one's outcome: for the prompts the fix meant to flip, how often they were named and recommended in its run against the newest run since, and whether its target page turned up.",
+		func(ctx context.Context, a struct {
+			Set string `json:"set,omitempty" jsonschema:"only this prompt set"`
+		}) (any, error) {
+			return s.App.Attempts(ctx, a.Set)
 		})
 	addTool(srv, "get_citations", "Every URL linked from an answer across runs, most cited first, with the answers scanned as the denominator.",
 		func(ctx context.Context, a struct {
