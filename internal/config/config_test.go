@@ -77,3 +77,20 @@ func TestSharedCompetitors(t *testing.T) {
 		}
 	}
 }
+
+// The grader and analyst run through the API or the claude CLI. Through the API, a run records the
+// model alone, as it always has, so switching nothing changes no trend.
+func TestGraderProvider(t *testing.T) {
+	api, cli := Model{Model: "claude-haiku-5-5"}, Model{Model: "claude-haiku-5-5", Provider: ClaudeCode}
+	if api.Ref() != "claude-haiku-5-5" || api.Via() != Anthropic {
+		t.Errorf("API grader: %q via %s", api.Ref(), api.Via())
+	}
+	if cli.Ref() != "claude-code:claude-haiku-5-5" || ModelFromRef(cli.Ref()) != cli || ModelFromRef(api.Ref()) != api {
+		t.Errorf("round trip: %q", cli.Ref())
+	}
+	p := filepath.Join(t.TempDir(), "popcorn.toml")
+	os.WriteFile(p, []byte("[brand]\nname = \"X\"\n[grader]\nmodel = \"m\"\nprovider = \"codex\"\n"), 0o644)
+	if _, err := Load(p); err == nil || !strings.Contains(err.Error(), "[grader] provider") {
+		t.Errorf("want a provider error, got %v", err)
+	}
+}

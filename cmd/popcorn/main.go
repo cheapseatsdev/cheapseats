@@ -153,6 +153,14 @@ func dispatch(ctx context.Context, cmd string, args []string) error {
 				fmt.Printf("note: answerer %s needs %s at runtime\n", a.ID, config.KeyVar(a.Provider))
 			}
 		}
+		// The same for the grader and the analyst, which can run on the claude CLI too.
+		for name, m := range map[string]config.Model{"grader": cfg.Grader, "analyst": cfg.Analyst} {
+			if m.Via() == config.ClaudeCode && config.Missing(config.ClaudeCode) != "" {
+				errs = append(errs, fmt.Errorf("[%s] provider is claude-code, but claude is not installed here; use the anthropic provider in a container", name))
+			} else if config.Missing(m.Via()) != "" {
+				fmt.Printf("note: the %s needs %s (or %s) at runtime\n", name, config.KeyVar(config.Anthropic), config.AnthropicBaseURLVar)
+			}
+		}
 		if err := errors.Join(errs...); err != nil {
 			return err
 		}
