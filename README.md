@@ -98,11 +98,14 @@ is unset.
 - `[grader]`, `[analyst]`: Claude models, through the API (`ANTHROPIC_API_KEY`, or a proxy that
   adds it in `POPCORN_ANTHROPIC_BASE_URL`), or with `provider = "claude-code"` through the local
   `claude` CLI on your subscription. With subscription answerers too, a laptop needs no API key.
-  `[grader] themes = false` skips the theme pass (on by default).
-- `[sampling]`: `adaptive = true` and `max_extra = N` give a run up to N extra answers, decided before
-  it starts, for the prompts whose named rate has been least certain over the last 28 days, within
-  today's budget. Off by default; it never starts a trend over. Extras count in the run's rates like
-  any other answer, so those prompts weigh a little more in its totals.
+  The theme pass is one extra grader call per run (about $0.003 on Haiku, nothing on `claude-code`);
+  `[grader] themes = false` turns it off.
+- `[sampling]`: `adaptive = true` and `max_extra = N` let a run ask up to N extra answers, decided
+  before it starts: the prompts whose named rate has been least certain over the last 28 days are
+  asked twice over, every answerer and track alike, within today's budget. Off by default; it never
+  starts a trend over, and extras that fail are dropped rather than holding the run back. A prompt's
+  rate means the same with or without them; totals pooled over all of a run's answers weigh a
+  doubled prompt twice.
 - `[budget]`: a daily cap on API spend
 - `[schedule]`, `[tiers]`: when sets run (weekly is usually enough)
 - Prompt sets: one file per category of buyer question; every prompt has a permanent id

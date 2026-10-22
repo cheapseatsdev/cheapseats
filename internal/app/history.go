@@ -353,7 +353,8 @@ func newDay(r *run.Run, brand config.Brand, date string, results []run.Result) d
 			d.info[x.PromptID] = true
 		}
 		d.models[x.Answerer] = x.Model
-		if x.Sample+1 > d.samples[x.Answerer] {
+		// Planned samples only: adaptive extras vary run to run and aren't a change of samples.
+		if x.Sample+1 > d.samples[x.Answerer] && !r.Snapshot.Sampling.IsExtra(x.PromptID, x.Answerer, x.Track, x.Sample) {
 			d.samples[x.Answerer] = x.Sample + 1
 		}
 		if x.Status != "done" || x.Grade == nil {

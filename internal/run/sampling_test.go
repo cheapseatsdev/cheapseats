@@ -2,39 +2,47 @@ package run
 
 import (
 	"context"
+	"io"
+	"math"
+	"net/http"
+	"net/http/httptest"
+	"net/http/httputil"
+	"net/url"
+	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/metcalfc/popcorn/internal/answer"
+	"github.com/metcalfc/popcorn/internal/llm"
 	"github.com/metcalfc/popcorn/internal/sets"
 	"github.com/metcalfc/popcorn/internal/store"
 )
 
-// Extras go where the named rate is least certain: a cell with no history before one near 0.5,
-// that before one named every time, never more than doubling a cell, and only while they fit in
-// the money left.
+// Whole prompts are doubled, the one whose rate doubling makes most certain first: a prompt with
+// no history before one near 0.5, that before one named every time, while its answers fit in what's
+// left of the limit and its cost in the money.
 func TestAllocate(t *testing.T) {
-	cells := func() []Cell {
-		return []Cell{
-			{PromptID: "always", Base: 2, PriorN: 40, PriorNamed: 40},
-			{PromptID: "half", Base: 2, PriorN: 40, PriorNamed: 20},
-			{PromptID: "new", Base: 1},
-			{PromptID: "off", Base: 0},
+	prompts := []promptCells{
+		{id: "always", cells: []Cell{{Base: 2, PriorN: 40, PriorNamed: 40}}, cost: 0.2},
+		{id: "half", cells: []Cell{{Base: 2, PriorN: 40, PriorNamed: 20}, {Base: 1, PriorN: 20, PriorNamed: 10}}, cost: 0.3},
+		{id: "new", cells: []Cell{{Base: 1}}, cost: 0.5},
+		{id: "off"},
+	}
+	ids := func(ps []promptCells) string {
+		var out []string
+		for _, p := range ps {
+			out = append(out, p.id)
+		}
+		return strings.Join(out, ",")
+	}
+	free := math.Inf(1)
+	for limit, want := range map[int]string{4: "half,new", 3: "always,new", 1: "new", 0: "", 100: "always,half,new"} {
+		if got := ids(allocate(prompts, limit, free)); got != want {
+			t.Errorf("limit %d: %s, want %s", limit, got, want)
 		}
 	}
-	free := []float64{0, 0, 0, 0}
-	got := allocate(cells(), free, 3, 1)
-	if got[2].Extra != 1 || got[1].Extra != 2 || got[0].Extra != 0 || got[3].Extra != 0 {
-		t.Fatalf("%+v", got)
-	}
-	// Plenty to give: each uncertain cell at most doubles, and then the near-certain one gets the rest.
-	got = allocate(cells(), free, 10, 1)
-	if got[2].Extra != 1 || got[1].Extra != 2 || got[0].Extra != 2 || got[3].Extra != 0 {
-		t.Fatalf("%+v", got)
-	}
-	// Money for one paid extra: it goes to the most uncertain cell it can pay for.
-	got = allocate(cells(), []float64{0.1, 0.1, 0.5, 0.1}, 3, 0.15)
-	if got[2].Extra != 0 || got[1].Extra != 1 || got[0].Extra != 0 {
-		t.Fatalf("%+v", got)
+	if got := ids(allocate(prompts, 10, 0.4)); got != "half" {
+		t.Errorf("money for one: %s", got)
 	}
 	if _, lo, hi := wilson(0, 0); lo != 0 || hi != 1 {
 		t.Fatal("no history is the widest interval")
@@ -69,9 +77,9 @@ func TestAdaptiveSampling(t *testing.T) {
 	if sp == nil || sp.PriorRuns != 1 || sp.PriorAnswers != 6 {
 		t.Fatalf("%+v", sp)
 	}
-	// One recall sample says least, so each prompt's recall cell gets one more, the new prompt's
-	// (no history) first; search, with two samples already, gets none.
-	if sp.Extra("p3", "a", answer.Recall) != 1 || sp.Extra("p1", "a", answer.Recall) != 1 || sp.Extra("p2", "a", answer.Recall) != 1 || sp.Extra("p3", "a", answer.Search) != 0 {
+	// The new prompt has no history, so it's doubled: every one of its cells gets its planned
+	// samples again, and the three extras are spent.
+	if strings.Join(sp.Prompts, ",") != "p3" || sp.Extra("p3", "a", answer.Search) != 2 || sp.Extra("p3", "a", answer.Recall) != 1 || sp.Extra("p1", "a", answer.Recall) != 0 {
 		t.Fatalf("%+v", sp.Cells)
 	}
 	var n int
@@ -130,5 +138,49 @@ func TestThemePassAfterARun(t *testing.T) {
 	e.Execute(ctx, r.ID)
 	if th, err := e.Themes(ctx, r.ID); th != nil || err != nil {
 		t.Fatalf("%+v %v", th, err)
+	}
+}
+
+// Extras that fail once every planned answer is in are dropped, and the run is done, so it counts
+// in rankings and trends and gets its fix list.
+func TestFailedExtrasLeaveTheRunDone(t *testing.T) {
+	e, set, _ := setup(t, 0)
+	e.Cfg.Answerers = e.Cfg.Answerers[:1]
+	ctx := context.Background()
+	first, _ := e.Create(ctx, set, "manual")
+	if err := e.Execute(ctx, first.ID); err != nil {
+		t.Fatal(err)
+	}
+	// p3's first three answers (its planned ones: extras go last) work, the rest fail.
+	fake, _ := url.Parse(llm.AnthropicURL)
+	proxy := httputil.NewSingleHostReverseProxy(fake)
+	var p3 atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		r.Body = io.NopCloser(strings.NewReader(string(body)))
+		if !strings.Contains(string(body), "output_config") && strings.Contains(string(body), `"content":"p3"`) && p3.Add(1) > 3 {
+			w.WriteHeader(400)
+			w.Write([]byte(`{"error":{"message":"no"}}`))
+			return
+		}
+		proxy.ServeHTTP(w, r)
+	}))
+	defer srv.Close()
+	llm.AnthropicURL = srv.URL
+	e.Cfg.Budget.Concurrency = 1
+	e.Cfg.Sampling.Adaptive, e.Cfg.Sampling.MaxExtra = true, 3
+	grown := set
+	grown.Prompts = append(append([]sets.Prompt{}, set.Prompts...), sets.Prompt{ID: "p3", Text: "p3"})
+	r, err := e.Create(ctx, grown, "manual")
+	if err != nil || len(r.Snapshot.Sampling.Prompts) != 1 {
+		t.Fatalf("%+v %v", r, err)
+	}
+	if err := e.Execute(ctx, r.ID); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := e.Get(ctx, r.ID)
+	res, _ := e.Results(ctx, r.ID)
+	if got.Status != "done" || len(res) != 9 || p3.Load() < 6 {
+		t.Fatalf("status %s, %d results, %d p3 answers: %v", got.Status, len(res), p3.Load(), got.Error)
 	}
 }

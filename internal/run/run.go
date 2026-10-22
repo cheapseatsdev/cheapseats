@@ -303,21 +303,21 @@ func (e *Engine) execute(ctx context.Context, id string) error {
 	defer stop()
 	// pass answers every pending result.
 	pass := func() error {
-		rows, err := e.DB.QueryContext(ctx, `SELECT id, prompt, answerer, track, sample FROM results WHERE run_id=? AND status='pending' ORDER BY prompt_idx, answerer, track, sample`, id)
+		rows, err := e.DB.QueryContext(ctx, `SELECT id, prompt, prompt_id, answerer, track, sample FROM results WHERE run_id=? AND status='pending' ORDER BY prompt_idx, answerer, track, sample`, id)
 		if err != nil {
 			return err
 		}
 		var jobs []job
 		for rows.Next() {
 			var j job
-			var t string
+			var t, pid string
 			var sample int
-			if err := rows.Scan(&j.id, &j.prompt, &j.answerer, &t, &sample); err != nil {
+			if err := rows.Scan(&j.id, &j.prompt, &pid, &j.answerer, &t, &sample); err != nil {
 				rows.Close()
 				return err
 			}
 			j.track = answer.Track(t)
-			j.extra = r.Snapshot.Sampling != nil && sample >= e.samples(r.Snapshot.Set, answerers[j.answerer], j.track)
+			j.extra = r.Snapshot.Sampling.IsExtra(pid, j.answerer, j.track, sample)
 			jobs = append(jobs, j)
 		}
 		rows.Close()
@@ -376,6 +376,17 @@ func (e *Engine) execute(ctx context.Context, id string) error {
 	bg := context.Background()
 	if _, err := e.DB.ExecContext(bg, `UPDATE results SET status='skipped' WHERE run_id=? AND status IN ('pending','running')`, id); err != nil && stopReason == nil {
 		stopReason = stored(err)
+	}
+	// Extras are a bonus: once every planned answer is in, any extra not done (failed, or cut off by
+	// the budget) is dropped, so the run is done and counts in rankings, trends and the fix list.
+	if r.Snapshot.Sampling != nil && ctx.Err() == nil && (stopReason == nil || errors.Is(stopReason, errBudget)) {
+		complete, err := e.dropExtras(bg, id, r.Snapshot.Sampling)
+		switch {
+		case err != nil:
+			stopReason = stored(err)
+		case complete:
+			stopReason = nil
+		}
 	}
 	// If this count fails the run can't say it's done, so it's failed instead.
 	var unfinished int
@@ -742,4 +753,41 @@ func (e *Engine) Opinion(ctx context.Context, id string, results []Result) opini
 	}
 	rep.Themes = t
 	return rep
+}
+
+// dropExtras deletes the run's unfinished extra samples if every planned one is done, and reports
+// whether they all were.
+func (e *Engine) dropExtras(ctx context.Context, id string, sp *Sampling) (bool, error) {
+	rows, err := e.DB.QueryContext(ctx, `SELECT id, prompt_id, answerer, track, sample FROM results WHERE run_id=? AND (status!='done' OR grade IS NULL)`, id)
+	if err != nil {
+		return false, err
+	}
+	var drop []int64
+	for rows.Next() {
+		var rid int64
+		var pid, ans, t string
+		var sample int
+		if err := rows.Scan(&rid, &pid, &ans, &t, &sample); err != nil {
+			rows.Close()
+			return false, err
+		}
+		if !sp.IsExtra(pid, ans, answer.Track(t), sample) {
+			rows.Close()
+			return false, nil // a planned answer is unfinished: retry finishes the extras too
+		}
+		drop = append(drop, rid)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return false, err
+	}
+	for _, rid := range drop {
+		if _, err := e.DB.ExecContext(ctx, `DELETE FROM results WHERE id=?`, rid); err != nil {
+			return false, err
+		}
+	}
+	if len(drop) > 0 {
+		slog.Info("dropped unfinished extra samples", "run", id, "count", len(drop))
+	}
+	return true, nil
 }

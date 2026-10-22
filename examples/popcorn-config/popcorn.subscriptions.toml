@@ -136,9 +136,10 @@ daily_usd = 40.0
 reservation_usd = 0.60
 concurrency = 6
 
-# Adaptive sampling: before a core run, up to max_extra extra answers go to the prompts whose named
-# rate has been least certain over the last 28 days (same method), within today's budget. Off by
-# default; extras never change the method, so trends carry on.
+# Adaptive sampling: before a core run, the prompts whose named rate has been least certain over the
+# last 28 days (same method) are asked twice over, up to max_extra extra answers and within today's
+# budget. Set max_extra to at least one prompt's answers (answerers x samples). Off by default;
+# extras never change the method, so trends carry on.
 # [sampling]
 # adaptive = true
 # max_extra = 12
