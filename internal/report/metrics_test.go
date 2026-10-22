@@ -301,3 +301,29 @@ func TestSharedBucket(t *testing.T) {
 		t.Fatalf("%+v", h)
 	}
 }
+
+// Places are all on the list's scale: a grade position that disagrees with the list doesn't give
+// an answer two firsts. The position is used only when the list left the brand out.
+func TestPositionsShareOneScale(t *testing.T) {
+	brand := config.Brand{Name: "Acme", Aliases: []string{"acme.io"}}
+	res := []run.Result{
+		graded(0, "p", grade.Grade{Verdict: grade.Mentioned, Position: ptr(1), Named: []string{"X", "acme.io", "Y"}}, nil),
+		graded(0, "p", grade.Grade{Verdict: grade.Mentioned, Position: ptr(3), Named: []string{"X", "Y"}}, nil),
+	}
+	s := Build(brand, res)
+	a, x := voiceOf(s, "Acme"), voiceOf(s, "X")
+	if !near(a.AvgPosition, 2.5) || a.NamedFirst.Hits != 0 || a.Top3.Hits != 2 { // 2 from the list, 3 from the grade
+		t.Errorf("acme: %+v", a)
+	}
+	if x.NamedFirst.Hits != 2 {
+		t.Errorf("x: %+v", x)
+	}
+	for _, h := range s.HeadToHead {
+		if h.Name == "X" && (h.Both != 2 || h.CompetitorAhead != 2 || h.BrandAhead != 0) {
+			t.Errorf("head to head: %+v", h)
+		}
+		if h.Name == "Y" && (h.Both != 2 || h.BrandAhead != 1 || h.CompetitorAhead != 1) {
+			t.Errorf("head to head: %+v", h)
+		}
+	}
+}

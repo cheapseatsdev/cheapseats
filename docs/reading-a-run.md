@@ -20,7 +20,7 @@ called to build it. The same numbers are in the JSON export (`/runs/<id>/export.
 | --- | --- | --- |
 | Named | answers naming the product, of all answers: each product's own rate, so the column adds up to more than 100% | `named_rate` (formerly `share`, still written) |
 | Share of voice | the product's mentions, of all products' mentions, each product counted at most once per answer: the column adds up to 100% | `share_of_voice` |
-| Avg place | its mean position among the products an answer names, over the answers that name it. The brand's comes from its grade; others' from the order the grader listed them | `avg_position` |
+| Avg place | its mean position among the products an answer names, over the answers that name it, in the order the grader listed the products (for the brand, its grade's position only when the list left it out) | `avg_position` |
 | First, top 3 | answers naming it first, or in the first three, of the answers to prompts that ask for a choice (with 95% intervals in JSON) | `named_first`, `top3` |
 | Weighted | position-weighted visibility, as SE Ranking defines it: (N − place + 1) / N in an answer naming N products, 0 where it isn't named, averaged over every answer | `position_weighted` |
 

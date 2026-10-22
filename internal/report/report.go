@@ -68,8 +68,8 @@ type Voice struct {
 	TopPick      int     `json:"top_pick"`
 	IsBrand      bool    `json:"is_brand"`
 	// Its mean 1-based place among the products an answer names, over the answers that name it at
-	// a known place (0 if none). The brand's place is its grade's position; another product's is
-	// where it comes in the answer's list of names.
+	// a known place (0 if none): where it comes in the grader's list of names, or for the brand
+	// when the list left it out, its grade's position.
 	AvgPosition float64 `json:"avg_position"`
 	// Of the answers to prompts that ask for a choice: those naming it first, and in the first three.
 	NamedFirst Rate `json:"named_first"`
@@ -422,12 +422,11 @@ func BuildWith(brand config.Brand, results []run.Result, opt Options) Summary {
 			rec.names = append(rec.names, k)
 			rec.pos[k] = len(rec.names)
 		}
-		if named {
-			if _, ok := display[brandKey]; !ok {
-				display[brandKey] = brand.Name
-				rec.names = append(rec.names, brandKey)
-				delete(rec.pos, brandKey) // in the answer, but not in the grader's list: place unknown
-			}
+		// Every product's place is on one scale, the grader's list of names, so two can't both be
+		// first. The grade's position stands in only when that list left the brand out.
+		if _, ok := display[brandKey]; named && !ok {
+			display[brandKey] = brand.Name
+			rec.names = append(rec.names, brandKey)
 			if g.Position != nil && *g.Position > 0 {
 				rec.pos[brandKey] = *g.Position
 			}
