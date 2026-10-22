@@ -160,3 +160,18 @@ func TestPromptID(t *testing.T) {
 		t.Error(id)
 	}
 }
+
+func TestSuggestSplitsJoinedQueries(t *testing.T) {
+	in := Input{Brand: config.Brand{Name: "Acme"}, Set: sets.Set{ID: "s", File: "s.toml"}}
+	names := []Name{{Name: "Acme", Forms: []string{"Acme"}, IsBrand: true}}
+	rows := []QueryRow{{
+		Query:       `open source ai visibility tracker github | site:peec.ai pricing | "bring your own key" ai visibility | docker`,
+		Key:         "x",
+		Answers:     2,
+		Competitors: []Count{{Name: "Peec AI", N: 1}},
+	}}
+	got := suggest(in, names, rows)
+	if len(got) != 1 || got[0].Query != "open source ai visibility tracker github" {
+		t.Fatalf("want only the plain query of the four, got %+v", got)
+	}
+}

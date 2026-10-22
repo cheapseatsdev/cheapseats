@@ -194,7 +194,10 @@ func (s *Server) mcpHandler() http.Handler {
 				a.LastDays = 30
 			}
 			rk, err := s.App.Rankings(ctx, a.LastDays, a.Window, a.Set)
-			return rk, err
+			if err != nil {
+				return nil, err
+			}
+			return rankingsDigest(rk), nil
 		})
 	addTool(srv, "suggest_prompts", "Draft new buyer questions for a prompt set, across funnel stages, as a TOML snippet in the set file's format, with repeats of existing prompts dropped. Costs one analyst model call (nothing on the claude-code provider). Writes nothing: paste the snippet into the set's file by pull request.",
 		func(ctx context.Context, a struct {
@@ -411,10 +414,15 @@ func runDigest(d *RunData) any {
 	for _, p := range head(sum.Uncited, 10) {
 		uncited = append(uncited, p.URL)
 	}
-	fixes := d.Fixes
-	if fixes == nil {
-		fixes = []analysis.Fix{}
+	// Each fix's Claude prompt is most of a fix list's size: get_quick_wins has them.
+	fixes := []analysis.Fix{}
+	for _, f := range d.Fixes {
+		f.ClaudePrompt = ""
+		fixes = append(fixes, f)
 	}
+	// The snapshot is everything that shaped the run, which /api/runs/{id} has in full.
+	r := *d.Run
+	r.Snapshot = run.Snapshot{}
 	return struct {
 		Run     *run.Run       `json:"run"`
 		Overall report.Rates   `json:"overall"`
@@ -431,11 +439,11 @@ func runDigest(d *RunData) any {
 		Outreach       []report.Outreach   `json:"outreach"`
 		Uncited        []string            `json:"found_not_cited"`
 		Pages          []report.Page       `json:"top_pages"`
-		Fixes          []analysis.Fix      `json:"fixes"`
+		Fixes          []analysis.Fix      `json:"fixes"` // without claude_prompt: get_quick_wins has it
 		Insights       string              `json:"insights"`
 		Opinion        opinion.Report      `json:"opinion"`
 		Prompts        []prompt            `json:"prompts"`
-	}{d.Run, sum.Overall, sum.Slices, sum.Unbranded, sum.BrandedPrompts, sum.BrandRank(), voice, head(sum.HeadToHead, 10), head(sum.Objections, 10),
+	}{&r, sum.Overall, sum.Slices, sum.Unbranded, sum.BrandedPrompts, sum.BrandRank(), voice, head(sum.HeadToHead, 10), head(sum.Objections, 10),
 		sum.Classes, head(sum.Hosts, 10), head(sum.Outreach, 10), uncited, pages, fixes, d.Insights, d.Opinion, prompts}
 }
 
@@ -478,4 +486,46 @@ func auditDigest(r *audit.Result, info bool) any {
 		Sites    []site          `json:"sites"`
 		Findings []audit.Finding `json:"findings"`
 	}{r.At, r.Errors(), r.Warnings(), r.Infos(), sites, findings}
+}
+
+// boardSize is how many products of a day's share-of-voice board get_rankings keeps.
+const boardSize = 5
+
+// boardRow is a product on a day's board, in get_rankings.
+type boardRow struct {
+	Name         string  `json:"name"`
+	IsBrand      bool    `json:"is_brand,omitempty"`
+	NamedRate    float64 `json:"named_rate"`
+	ShareOfVoice float64 `json:"share_of_voice"`
+	AvgPosition  float64 `json:"avg_position,omitempty"`
+}
+
+// rankingDigest is a ranking with each day's board cut to its leaders and the brand, in a few
+// fields: every product with every measure, every day, runs to hundreds of kilobytes, more than an
+// MCP client takes. /api/rankings has it all.
+type rankingDigest struct {
+	app.Ranking
+	Days []dayDigest `json:"days"`
+}
+
+type dayDigest struct {
+	app.Day
+	Board []boardRow `json:"board"`
+}
+
+func rankingsDigest(rk []app.Ranking) []rankingDigest {
+	out := make([]rankingDigest, len(rk))
+	for i, r := range rk {
+		out[i] = rankingDigest{Ranking: r, Days: []dayDigest{}}
+		for _, d := range r.Days {
+			dd := dayDigest{Day: d, Board: []boardRow{}}
+			for k, v := range d.Board {
+				if k < boardSize || v.IsBrand {
+					dd.Board = append(dd.Board, boardRow{v.Name, v.IsBrand, v.NamedRate, v.ShareOfVoice, v.AvgPosition})
+				}
+			}
+			out[i].Days = append(out[i].Days, dd)
+		}
+	}
+	return out
 }
