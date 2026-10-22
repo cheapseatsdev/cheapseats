@@ -6,6 +6,7 @@ require (
 	github.com/BurntSushi/toml v1.5.0
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/yuin/goldmark v1.7.8
+	golang.org/x/net v0.50.0
 	modernc.org/sqlite v1.38.2
 )
 

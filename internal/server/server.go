@@ -158,7 +158,7 @@ func New(a *app.App) (*Server, error) {
 		},
 	}
 	s.pages = map[string]*template.Template{}
-	for _, p := range []string{"home", "set", "run", "rankings", "quickwins", "search", "login"} {
+	for _, p := range []string{"home", "set", "run", "rankings", "quickwins", "search", "login", "audit", "crawlers"} {
 		t, err := template.New(p).Funcs(funcs).ParseFS(assets, "templates/layout.html", "templates/"+p+".html")
 		if err != nil {
 			return nil, fmt.Errorf("template %s: %w", p, err)
@@ -239,6 +239,15 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /search", s.searchForm)
 	mux.HandleFunc("POST /api/search-probe", s.apiSearchProbe)
 	mux.HandleFunc("GET /api/citations", s.apiCitations)
+	mux.HandleFunc("GET /audit", s.auditPage)
+	mux.HandleFunc("POST /audit", s.auditForm)
+	mux.HandleFunc("POST /audit/citations", s.checkCitationsForm)
+	mux.HandleFunc("GET /crawlers", s.crawlersPage)
+	mux.HandleFunc("GET /api/audit", s.apiAudit)
+	mux.HandleFunc("POST /api/audit", s.apiRunAudit)
+	mux.HandleFunc("GET /api/runs/{id}/citation-check", s.apiCitationCheck)
+	mux.HandleFunc("POST /api/runs/{id}/citation-check", s.apiRunCitationCheck)
+	mux.HandleFunc("GET /api/crawlers", s.apiCrawlers)
 	mux.Handle("/api/mcp", s.mcpHandler())
 	return s.auth(logRequests(mux))
 }
