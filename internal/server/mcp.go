@@ -12,6 +12,7 @@ import (
 
 	"github.com/metcalfc/popcorn/internal/analysis"
 	"github.com/metcalfc/popcorn/internal/app"
+	"github.com/metcalfc/popcorn/internal/opinion"
 	"github.com/metcalfc/popcorn/internal/probe"
 	"github.com/metcalfc/popcorn/internal/report"
 	"github.com/metcalfc/popcorn/internal/run"
@@ -86,7 +87,7 @@ func (s *Server) mcpHandler() http.Handler {
 			}
 			return out, nil
 		})
-	addTool(srv, "get_run", "One run: rates per answerer and track, share of voice, top pages, the fix list, and one line per prompt. Use get_result for a full answer.",
+	addTool(srv, "get_run", "One run: rates per answerer and track, share of voice, top pages, the fix list, net sentiment with top praise and objections, the run's themes, and one line per prompt. Use get_result for a full answer.",
 		func(ctx context.Context, a runArg) (any, error) {
 			d, err := s.runData(ctx, a.Run)
 			if err != nil {
@@ -191,6 +192,16 @@ func (s *Server) mcpHandler() http.Handler {
 			}
 			rk, err := s.App.Rankings(ctx, a.LastDays, a.Set)
 			return rk, err
+		})
+	addTool(srv, "suggest_prompts", "Draft new buyer questions for a prompt set, across funnel stages, as a TOML snippet in the set file's format, with repeats of existing prompts dropped. Costs one analyst model call (nothing on the claude-code provider). Writes nothing: paste the snippet into the set's file by pull request.",
+		func(ctx context.Context, a struct {
+			Set string `json:"set" jsonschema:"prompt set id, from list_prompt_sets"`
+			N   int    `json:"n,omitempty" jsonschema:"how many prompts (default 10, max 50)"`
+		}) (any, error) {
+			if a.N <= 0 {
+				a.N = 10
+			}
+			return s.App.SuggestPrompts(ctx, a.Set, a.N)
 		})
 	addTool(srv, "cancel_run", "Stop an in-progress run. Finished answers are kept; retry from the web UI to finish it.",
 		func(ctx context.Context, a runArg) (any, error) {
@@ -327,6 +338,7 @@ func runDigest(d *RunData) any {
 		Pages    []report.Page  `json:"top_pages"`
 		Fixes    []analysis.Fix `json:"fixes"`
 		Insights string         `json:"insights"`
+		Opinion  opinion.Report `json:"opinion"`
 		Prompts  []prompt       `json:"prompts"`
-	}{d.Run, sum.Overall, sum.Slices, sum.BrandRank(), voice, pages, fixes, d.Insights, prompts}
+	}{d.Run, sum.Overall, sum.Slices, sum.BrandRank(), voice, pages, fixes, d.Insights, d.Opinion, prompts}
 }

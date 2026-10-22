@@ -21,7 +21,11 @@ take to whichever of those tools you move to. Site and docs: [popcorn.zone](http
   - `mentioned`: named, but as one option among many, in passing, or with reservations
   - `absent`: not named at all
 - Records your position, the top pick, every product named (share of voice), "why not #1", objections,
-  and every search result and citation.
+  the strengths it credits you with, its tone about you (positive, neutral, mixed or negative), and
+  every search result and citation.
+- Sums up what the answers say about you: **net sentiment** (the share of answers naming you that are
+  positive, minus the share negative), the praise and objections heard most, and a few named
+  **themes** with the competitor each one helps and a quote, from one cheap grader call a run.
 - Ends each run with **Fix these first**: the exact page to create or change, what it must say, the
   prompts it should flip, effort, priority, the site it belongs on and its owner, plus a prompt to
   hand Claude Code.
@@ -94,6 +98,11 @@ is unset.
 - `[grader]`, `[analyst]`: Claude models, through the API (`ANTHROPIC_API_KEY`, or a proxy that
   adds it in `POPCORN_ANTHROPIC_BASE_URL`), or with `provider = "claude-code"` through the local
   `claude` CLI on your subscription. With subscription answerers too, a laptop needs no API key.
+  `[grader] themes = false` skips the theme pass (on by default).
+- `[sampling]`: `adaptive = true` and `max_extra = N` give a run up to N extra answers, decided before
+  it starts, for the prompts whose named rate has been least certain over the last 28 days, within
+  today's budget. Off by default; it never starts a trend over. Extras count in the run's rates like
+  any other answer, so those prompts weigh a little more in its totals.
 - `[budget]`: a daily cap on API spend
 - `[schedule]`, `[tiers]`: when sets run (weekly is usually enough)
 - Prompt sets: one file per category of buyer question; every prompt has a permanent id
@@ -109,6 +118,8 @@ popcorn sets                           list prompt sets
 popcorn run <set-id>                   run one set (costs money)
 popcorn report <run-id> [-json]        rates, share of voice and top pages
 popcorn fixes <run-id> [-rebuild]      the fix list as markdown
+popcorn themes <run-id> [-rebuild]     net sentiment and the run's themes
+popcorn suggest-prompts <set-id> [-n 10]  new buyer questions as TOML to paste (one analyst call)
 popcorn check                          validate the config
 popcorn plan <before> [<after>]        what a config change does to trends
 popcorn migrate-config [dir]           give prompts ids (sets from before ids)
@@ -119,7 +130,8 @@ popcorn version                        version and database schema
 
 - JSON API under `/api/` (status, sets, runs, fixes, quick wins, fix attempts, rankings, citations, search probe):
   [reference](https://popcorn.zone/docs/reference/).
-- MCP server at `/api/mcp` (Streamable HTTP):
+- MCP server at `/api/mcp` (Streamable HTTP). `get_run` includes net sentiment and themes;
+  `suggest_prompts` drafts new prompts for a set (one analyst call):
 
   ```bash
   claude mcp add --transport http popcorn https://<host>/api/mcp --header "Authorization: Bearer <token>"

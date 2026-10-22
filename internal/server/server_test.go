@@ -28,7 +28,7 @@ func TestPagesRenderWithData(t *testing.T) {
 		case strings.Contains(s, "sharp growth lead"):
 			text = `{"insights":"## Why Popcorn lost\nDocker is GA.","fixes":[{"rank":1,"type":"new-page","title":"Write a credential-gateway guide","target":"docs.popcorn.example/guides/keys-off-the-box/","claim":"how","done_when":"page live","evidence":"Use Docker Sandboxes or Popcorn. (prompt 1)","prompts":[1],"effort":"S","displaces":"https://docs.docker.com/ai/sandboxes/security/"}]}`
 		case strings.Contains(s, "output_config"):
-			text = `{"verdict":"mentioned","position":2,"top_pick":"Docker Sandboxes","named":["Docker Sandboxes","Popcorn"],"reasoning":"r","why_not_top":"Docker is GA","objections":["private beta"]}`
+			text = `{"verdict":"mentioned","position":2,"top_pick":"Docker Sandboxes","named":["Docker Sandboxes","Popcorn"],"reasoning":"r","why_not_top":"Docker is GA","objections":["private beta"],"tone":"positive","praise":["open source"]}`
 		case strings.Contains(s, `"tools"`):
 			w.Write([]byte(`{"content":[{"type":"server_tool_use","id":"s1","name":"web_search","input":{"query":"q"}},{"type":"web_search_tool_result","tool_use_id":"s1","content":[{"type":"web_search_result","url":"https://docs.docker.com/ai/sandboxes/security/","title":"x"}]},{"type":"text","text":"Use Docker Sandboxes or Popcorn.","citations":[{"url":"https://docs.docker.com/ai/sandboxes/security/"}]}],"usage":{"input_tokens":10,"output_tokens":5}}`))
 			return
@@ -64,6 +64,7 @@ func TestPagesRenderWithData(t *testing.T) {
 	for path, want := range map[string]string{
 		"/":                                 "Write a credential-gateway guide",
 		"/runs/" + r.ID:                     "<h2>Why Popcorn lost</h2>",
+		"/runs/" + r.ID + "?opinion":        "&#43;100</b><small>net sentiment</small>",
 		"/rankings":                         "#1",
 		"/quick-wins":                       "keys-off-the-box",
 		"/api/runs/" + r.ID:                 `"verdict": "mentioned"`,
@@ -98,7 +99,7 @@ func TestPagesRenderWithData(t *testing.T) {
 	}
 	defer cs.Close()
 	tools, err := cs.ListTools(ctx, nil)
-	if err != nil || len(tools.Tools) != 14 {
+	if err != nil || len(tools.Tools) != 15 {
 		t.Fatalf("tools: %v %v", tools, err)
 	}
 	call := func(name string, args map[string]any) (string, bool) {
@@ -120,7 +121,7 @@ func TestPagesRenderWithData(t *testing.T) {
 		}
 		return text, res.IsError
 	}
-	if text, isErr := call("get_run", map[string]any{"run": r.ID}); isErr || !strings.Contains(text, "Write a credential-gateway guide") || !strings.Contains(text, `"share_of_voice_rank":1`) {
+	if text, isErr := call("get_run", map[string]any{"run": r.ID}); isErr || !strings.Contains(text, "Write a credential-gateway guide") || !strings.Contains(text, `"share_of_voice_rank":1`) || !strings.Contains(text, `"praise":[{"text":"open source","n":`) {
 		t.Errorf("get_run: %s", limit(text))
 	}
 	if text, isErr := call("get_citations", map[string]any{"url_contains": "docker"}); isErr || !strings.Contains(text, "docs.docker.com") {

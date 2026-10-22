@@ -32,6 +32,13 @@
 {{if eq .Run.Status "done"}}<form method="post" action="/runs/{{.Run.ID}}/fixes"><button class="ghost">{{icon "refresh-cw"}}Regenerate fix list and insights</button></form>{{end}}
 {{with .Insights}}<h2 id="insights">Insights</h2><div class="card insights">{{markdown .}}</div>{{end}}
 
+{{with .Opinion}}{{if or .Sentiment.Named .Themes}}<h2 id="opinion">What the answers say about {{brand}}</h2>
+<div class="card"><div class="kpis"><div class="kpi"><b>{{.Sentiment.NetText}}</b><small>net sentiment</small></div>{{range .Sentiment.Tones}}<div class="kpi"><b>{{.N}}</b><small>{{.Tone}}</small></div>{{end}}</div>
+<p class="muted small">Net sentiment is the share of answers naming {{brand}} that are positive about it minus the share negative, in points, over the {{.Sentiment.Toned}} with a tone{{if ne .Sentiment.Toned .Sentiment.Named}} ({{.Sentiment.Named}} name it; older grades have no tone){{end}}.</p>
+{{with .Sentiment.Praise}}<p><b>Praised for:</b> {{range .}}{{.Text}} ×{{.N}}; {{end}}</p>{{end}}{{with .Sentiment.Objections}}<p><b>Objections:</b> {{range .}}{{.Text}} ×{{.N}}; {{end}}</p>{{end}}</div>
+{{with .Themes}}{{if .Themes}}<div class="scroll"><table><thead><tr><th>Theme</th><th>Kind</th><th class="num">Answers</th><th>Helps</th><th>In their words</th></tr></thead>
+<tbody>{{range .Themes}}<tr><td>{{.Name}}</td><td>{{.Kind}}</td><td class="num">{{.Answers}}</td><td>{{.Beneficiary}}</td><td class="muted">“{{.Quote}}”</td></tr>{{end}}</tbody></table></div>{{else if .Error}}<p class="err">Theme pass failed: {{.Error}}</p>{{else if .Skipped}}<p class="muted small">No themes: {{.Skipped}}.</p>{{end}}{{end}}{{end}}{{end}}
+
 {{with .Summary.Sites}}<h2 id="sites">{{brand}}'s sites in these answers</h2>
 <div class="scroll"><table><thead><tr><th>Site</th><th>Kind</th><th class="num">Cited</th><th class="num">Surfaced</th><th class="num">Pages</th><th class="num">Prompts</th></tr></thead>
 <tbody>{{range .}}<tr><td class="mono">{{.URL}}</td><td>{{.Kind}}</td><td class="num">{{.Cited}}</td><td class="num">{{.Surfaced}}</td><td class="num">{{.Pages}}</td><td class="num">{{if .Prompts}}{{.Prompts}}{{else}}<span class="muted">never reached</span>{{end}}</td></tr>{{end}}</tbody></table></div>{{end}}

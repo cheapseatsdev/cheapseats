@@ -58,6 +58,17 @@ func TestPlanSaysWhatAChangeDoes(t *testing.T) {
 	if got := Markdown(before, before); !strings.Contains(got, "No change to what Popcorn asks") {
 		t.Errorf("no-op plan:\n%s", got)
 	}
+	// Adaptive sampling and the theme pass never start a trend over.
+	after = Config{Cfg: cfg("opus-1", "g"), Sets: before.Sets}
+	off := false
+	after.Cfg.Sampling = config.Sampling{Adaptive: true, MaxExtra: 6}
+	after.Cfg.Grader.Themes = &off
+	got = Markdown(before, after)
+	for _, want := range []string{"Adaptive sampling on: up to 6 extra answers", "adds up to 6 answers to each core run", "The theme pass is off"} {
+		if !strings.Contains(got, want) || strings.Contains(got, "starts over") {
+			t.Errorf("missing %q, or a trend restart, in:\n%s", want, got)
+		}
+	}
 }
 
 func TestPlanSaysWhenIntentChanges(t *testing.T) {

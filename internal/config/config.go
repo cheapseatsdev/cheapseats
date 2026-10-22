@@ -22,6 +22,7 @@ type Config struct {
 	Grader    Model              `toml:"grader"`
 	Analyst   Model              `toml:"analyst"`
 	Budget    Budget             `toml:"budget"`
+	Sampling  Sampling           `toml:"sampling"`
 	Schedule  Schedule           `toml:"schedule"`
 	Tiers     Tiers              `toml:"tiers"`
 	Owners    Owners             `toml:"owners"`
@@ -92,6 +93,20 @@ type Samples struct {
 type Model struct {
 	Model    string `toml:"model"`
 	Provider string `toml:"provider"`
+	// Grader only: after a run is graded, one more call groups its objections, praise and
+	// reasons for losing into a few themes. Unset means on.
+	Themes *bool `toml:"themes"`
+}
+
+// ThemesOn reports whether runs end with the theme pass ([grader] themes, on unless false).
+func (c *Config) ThemesOn() bool { return c.Grader.Themes == nil || *c.Grader.Themes }
+
+// Sampling is adaptive sampling: before a run, extra answers go to the cells (prompt, answerer,
+// track) whose recent named rate is least certain. Off unless adaptive is true.
+type Sampling struct {
+	Adaptive bool `toml:"adaptive"`
+	// The most extra answers one run may add, across every cell.
+	MaxExtra int `toml:"max_extra"`
 }
 
 // Via is the provider the model is called through: anthropic unless it's claude-code.
@@ -242,6 +257,15 @@ func Load(path string) (*Config, error) {
 		default:
 			return nil, fmt.Errorf("%s: [%s] provider must be anthropic or claude-code", path, name)
 		}
+	}
+	if c.Analyst.Themes != nil {
+		return nil, fmt.Errorf("%s: themes belongs in [grader], not [analyst]", path)
+	}
+	if c.Sampling.MaxExtra < 0 || c.Sampling.MaxExtra > 1000 {
+		return nil, fmt.Errorf("%s: [sampling] max_extra must be 0..1000", path)
+	}
+	if c.Sampling.Adaptive && c.Sampling.MaxExtra == 0 {
+		return nil, fmt.Errorf("%s: [sampling] adaptive needs max_extra, the most extra answers a run may add", path)
 	}
 	if c.Budget.DailyUSD < 0 || math.IsNaN(c.Budget.DailyUSD) || math.IsInf(c.Budget.DailyUSD, 0) {
 		return nil, fmt.Errorf("invalid daily admission budget")

@@ -122,6 +122,9 @@ aliases = ["Ahrefs"]
 [grader]
 model = "claude-haiku-5-5"
 provider = "claude-code"
+# After each run, one more grader call groups its objections, praise and reasons for losing into
+# a few named themes, shown on the run page. Under a cent a run at these prices; nothing on claude-code.
+# themes = true
 
 [analyst]
 model = "claude-opus-5-5"
@@ -132,6 +135,13 @@ provider = "claude-code"
 daily_usd = 40.0
 reservation_usd = 0.60
 concurrency = 6
+
+# Adaptive sampling: before a core run, up to max_extra extra answers go to the prompts whose named
+# rate has been least certain over the last 28 days (same method), within today's budget. Off by
+# default; extras never change the method, so trends carry on.
+# [sampling]
+# adaptive = true
+# max_extra = 12
 
 [schedule]
 # UTC hour for the daily runs. Leave unset on a dev machine so it doesn't spend money.
