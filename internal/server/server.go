@@ -140,6 +140,13 @@ func New(a *app.App) (*Server, error) {
 			}
 			return *p
 		},
+		// A 0–100 score, or a dash when there isn't one.
+		"score": func(p *float64) string {
+			if p == nil {
+				return "–"
+			}
+			return fmt.Sprintf("%.0f", *p)
+		},
 		"add":   func(a, b int) int { return a + b },
 		"day":   func(s string) string { return strings.Replace(strings.TrimSuffix(s, "Z"), "T", " ", 1) },
 		"brand": func() string { return a.Cfg.Brand.Name },
@@ -254,6 +261,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /quick-wins", s.quickWinsPage)
 	mux.HandleFunc("GET /api/sets", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, s.App.Sets()) })
 	mux.HandleFunc("GET /api/sets/{id}", s.apiSet)
+	mux.HandleFunc("GET /api/sets/{id}/citation-stability", s.apiCitationStability)
 	mux.HandleFunc("GET /api/runs", s.apiRuns)
 	mux.HandleFunc("POST /api/runs", s.apiStartRun)
 	mux.HandleFunc("GET /api/runs/{id}", s.apiRun)
@@ -694,8 +702,9 @@ func (s *Server) setPage(w http.ResponseWriter, r *http.Request) {
 	}
 	window := app.Window(atoi(r.URL.Query().Get("window")))
 	hist, _ := s.App.History(r.Context(), st, track, 30, window)
+	stab, _ := s.App.CitationStability(r.Context(), st, track, 30)
 	s.render(w, "set", map[string]any{"Set": st, "Runs": rows, "Spend": s.spend(r.Context()), "History": hist,
-		"Advice": s.App.SampleAdvice(r.Context(), st), "Windows": windowLinks(r, window), "Regrading": s.App.Regrading(st.ID)})
+		"Advice": s.App.SampleAdvice(r.Context(), st), "Windows": windowLinks(r, window), "Stability": stab, "Regrading": s.App.Regrading(st.ID)})
 }
 
 func (s *Server) startRunForm(w http.ResponseWriter, r *http.Request) {
@@ -965,6 +974,30 @@ func (s *Server) apiSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, st)
+}
+
+// apiCitationStability is a set's citation stability on a track (search unless ?track=recall)
+// over the last lastDays days (30 by default), with every transition in full.
+func (s *Server) apiCitationStability(w http.ResponseWriter, r *http.Request) {
+	st, ok := s.App.Set(r.PathValue("id"))
+	if !ok {
+		httpErr(w, errors.New("no such set"), 404)
+		return
+	}
+	days, _ := strconv.Atoi(r.URL.Query().Get("lastDays"))
+	if days <= 0 {
+		days = 30
+	}
+	track := "search"
+	if r.URL.Query().Get("track") == "recall" {
+		track = "recall"
+	}
+	cs, err := s.App.CitationStability(r.Context(), st, track, days)
+	if err != nil {
+		httpErr(w, err, 500)
+		return
+	}
+	writeJSON(w, cs)
 }
 
 func (s *Server) apiRuns(w http.ResponseWriter, r *http.Request) {

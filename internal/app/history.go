@@ -322,6 +322,7 @@ type dayData struct {
 	tallies map[string]map[string]*report.Tally // prompt id -> answerer -> tally
 	planned map[string]map[string]*report.Tally // the same, without adaptive sampling's extras
 	named   map[string]map[string]int           // prompt id -> product (lowercase) -> answers naming it
+	shares  map[string]float64                  // host -> its share of the day's citations
 }
 
 // series is each track's days for one set, newest first, with changes and comparisons filled in.
@@ -401,6 +402,12 @@ func newDay(r *run.Run, brand config.Brand, date string, results []run.Result) d
 	}
 	if len(sum.Voice) > 0 {
 		d.Leader = sum.Voice[0].Name
+	}
+	d.shares = map[string]float64{}
+	for _, h := range sum.Hosts {
+		if h.Cited > 0 {
+			d.shares[h.Host] = h.CitationShare
+		}
 	}
 	name := brand.Name
 	for _, x := range results {

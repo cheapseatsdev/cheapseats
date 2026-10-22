@@ -66,6 +66,10 @@
 <p class="sub">Where the pages answers drew on come from, by host and by kind of site. Retrieved: answers whose searches returned it, of the {{.Summary.Answers}} answers; cited: answers that linked it; share: of all citations, so the column adds up to 100%; cited when retrieved: of the answers that retrieved it, those that linked it.</p>
 <div class="scroll"><table><thead><tr><th>Kind</th><th class="num">Cited</th><th class="num">Retrieved</th><th class="num">Share of citations</th><th aria-hidden="true"></th><th class="num">Hosts</th><th class="num">Pages</th></tr></thead>
 <tbody>{{range .Summary.Classes}}<tr{{if eq .Class "own"}} class="us"{{end}}><td>{{.Class}}</td><td class="num">{{.Cited}}</td><td class="num">{{.Surfaced}}</td><td class="num">{{pct .CitationShare}}</td><td class="barcell" aria-hidden="true"><div class="bar"><i class="{{if eq .Class "own"}}us{{end}}" style="width:{{bar .CitationShare}}%"></i></div></td><td class="num">{{.Hosts}}</td><td class="num">{{.Pages}}</td></tr>{{end}}</tbody></table></div>
+<h3>Page types</h3>
+<p class="sub">What the pages are, from their URLs and titles, whoever's site they're on: listicles (best, top N, alternatives), comparisons (vs, compare), reviews, docs, forum threads, repositories, articles, product pages.</p>
+<div class="scroll"><table><thead><tr><th>Type</th><th class="num">Cited</th><th class="num">Retrieved</th><th class="num">Share of citations</th><th aria-hidden="true"></th><th class="num">Pages</th></tr></thead>
+<tbody>{{range .Summary.PageTypes}}{{if .Pages}}<tr><td>{{.Type}}</td><td class="num">{{.Cited}}</td><td class="num">{{.Surfaced}}</td><td class="num">{{pct .CitationShare}}</td><td class="barcell" aria-hidden="true"><div class="bar"><i style="width:{{bar .CitationShare}}%"></i></div></td><td class="num">{{.Pages}}</td></tr>{{end}}{{end}}</tbody></table></div>
 {{with .Outreach}}<h3>Cited without {{brand}}</h3>
 <p class="sub">Third-party hosts whose citing answers name competitors and never {{brand}}: places to get {{brand}} onto, by competitors named × answers citing it.</p>
 <div class="scroll"><table><thead><tr><th>Host</th><th>Kind</th><th class="num">Cited</th><th>Competitors named</th><th>Most cited page</th></tr></thead>
@@ -82,7 +86,7 @@
 
 <h2 id="pages">Pages referenced</h2>
 <div class="scroll"><table><thead><tr><th>Page</th><th class="num">Cited</th><th class="num">Surfaced</th><th class="num">Share</th><th class="num">Prompts</th></tr></thead>
-<tbody>{{range .Pages}}<tr><td class="mono"><a href="{{.URL}}">{{.URL}}</a>{{if .FirstParty}} <span class="chip">ours · {{.SiteKind}}</span>{{else}} <span class="chip">{{.Class}}</span>{{end}}</td><td class="num">{{.Cited}}</td><td class="num">{{.Surfaced}}</td><td class="num">{{pct .CitationShare}}</td><td class="num muted">{{len .Prompts}}</td></tr>{{end}}</tbody></table></div>
+<tbody>{{range .Pages}}<tr><td class="mono"><a href="{{.URL}}">{{.URL}}</a>{{if .FirstParty}} <span class="chip">ours · {{.SiteKind}}</span>{{else}} <span class="chip">{{.Class}}</span>{{end}} <span class="chip">{{.Type}}</span></td><td class="num">{{.Cited}}</td><td class="num">{{.Surfaced}}</td><td class="num">{{pct .CitationShare}}</td><td class="num muted">{{len .Prompts}}</td></tr>{{end}}</tbody></table></div>
 {{if .PagesMore}}<p class="muted small">Showing the 60 most cited; {{.PagesMore}} more in the JSON export.</p>{{end}}
 
 <h2 id="answers">Every answer</h2>

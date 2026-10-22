@@ -99,7 +99,7 @@ func TestPagesRenderWithData(t *testing.T) {
 			t.Errorf("run page: want %q", want)
 		}
 	}
-	for _, want := range []string{`<h2 id="h2h">Head to head</h2>`, "<td>private beta</td>", `<h2 id="sources">Sources</h2>`, `<td class="mono">docs.docker.com</td><td>reference</td>`, "Avg place"} {
+	for _, want := range []string{`<h2 id="h2h">Head to head</h2>`, "<td>private beta</td>", `<h2 id="sources">Sources</h2>`, `<td class="mono">docs.docker.com</td><td>reference</td>`, "Avg place", "<h3>Page types</h3>", "<tr><td>docs</td>"} {
 		if !strings.Contains(rec.Body.String(), want) {
 			t.Errorf("run page: want %q", want)
 		}
@@ -115,7 +115,7 @@ func TestPagesRenderWithData(t *testing.T) {
 	}
 	defer cs.Close()
 	tools, err := cs.ListTools(ctx, nil)
-	if err != nil || len(tools.Tools) != 20 {
+	if err != nil || len(tools.Tools) != 21 {
 		t.Fatalf("tools: %v %v", tools, err)
 	}
 	call := func(name string, args map[string]any) (string, bool) {
@@ -138,7 +138,7 @@ func TestPagesRenderWithData(t *testing.T) {
 		return text, res.IsError
 	}
 	if text, isErr := call("get_run", map[string]any{"run": r.ID}); isErr || !strings.Contains(text, "Write a credential-gateway guide") || !strings.Contains(text, `"share_of_voice_rank":1`) ||
-		!strings.Contains(text, `"source_classes"`) || !strings.Contains(text, `"objection":"private beta"`) || !strings.Contains(text, `"head_to_head"`) ||
+		!strings.Contains(text, `"source_classes"`) || !strings.Contains(text, `"page_type":"docs"`) || !strings.Contains(text, `"objection":"private beta"`) || !strings.Contains(text, `"head_to_head"`) ||
 		!strings.Contains(text, `"praise":[{"text":"open source","n":`) {
 		t.Errorf("get_run: %s", limit(text))
 	}

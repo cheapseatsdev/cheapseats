@@ -11,6 +11,7 @@ import (
 
 	"github.com/metcalfc/popcorn/internal/analysis"
 	"github.com/metcalfc/popcorn/internal/answer"
+	"github.com/metcalfc/popcorn/internal/report"
 	"github.com/metcalfc/popcorn/internal/run"
 	"github.com/metcalfc/popcorn/internal/store"
 )
@@ -68,6 +69,11 @@ type Outcome struct {
 	// after. Supporting evidence: a page turning up doesn't by itself mean answers changed.
 	TargetBefore bool `json:"target_seen_before"`
 	TargetAfter  bool `json:"target_seen_after"`
+	// The target's host, and whether any answer cited a page on it before and after: whether the
+	// host entered or left the set of hosts cited.
+	TargetHost      string `json:"target_host,omitempty"`
+	HostCitedBefore bool   `json:"host_cited_before"`
+	HostCitedAfter  bool   `json:"host_cited_after"`
 	// Runs pooled on each side, and days from the attempt to the newest run after it.
 	BeforeRuns int     `json:"before_runs,omitempty"`
 	AfterRuns  int     `json:"after_runs,omitempty"`
@@ -191,6 +197,17 @@ func (o Outcome) Summary() string {
 		target += " (newly surfaced)"
 	}
 	parts = append(parts, target)
+	if o.TargetHost != "" {
+		cited := map[bool]string{true: "cited", false: "not cited"}
+		host := fmt.Sprintf("host %s %s→%s", o.TargetHost, cited[o.HostCitedBefore], cited[o.HostCitedAfter])
+		switch {
+		case o.HostCitedAfter && !o.HostCitedBefore:
+			host += " (entered the cited set)"
+		case o.HostCitedBefore && !o.HostCitedAfter:
+			host += " (left the cited set)"
+		}
+		parts = append(parts, host)
+	}
 	return head + ": " + strings.Join(parts, "; ")
 }
 
@@ -466,7 +483,43 @@ func (a *App) outcome(ctx context.Context, at Attempt) Outcome {
 	}
 	key := TargetKey(at.Fix.Target)
 	o.TargetBefore, o.TargetAfter = a.surfacedIn(ctx, before, key), a.surfacedIn(ctx, after, key)
+	if host, _, _ := strings.Cut(key, "/"); strings.Contains(host, ".") {
+		o.TargetHost = host
+		o.HostCitedBefore, o.HostCitedAfter = a.hostCitedIn(ctx, before, host), a.hostCitedIn(ctx, after, host)
+	}
 	return o
+}
+
+// hostCitedIn reports whether any answer in runs cited a page on host or a subdomain of it. Only
+// answers whose JSON mentions the host are decoded.
+func (a *App) hostCitedIn(ctx context.Context, runs []string, host string) bool {
+	in, args := inRuns(runs)
+	rows, err := a.DB.QueryContext(ctx, `SELECT answer FROM results WHERE `+in+` AND status='done' AND answer LIKE ?`, append(args, "%"+host+"%")...)
+	if err != nil {
+		return false
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var js string
+		var ans answer.Answer
+		if rows.Scan(&js) != nil || json.Unmarshal([]byte(js), &ans) != nil {
+			continue
+		}
+		if citesHost(&ans, host) {
+			return true
+		}
+	}
+	return false
+}
+
+// citesHost reports whether the answer cited a page on host or a subdomain of it.
+func citesHost(ans *answer.Answer, host string) bool {
+	for _, l := range ans.Citations {
+		if h := strings.ToLower(report.Host(report.NormalizeURL(l.URL))); h == host || strings.HasSuffix(h, "."+host) {
+			return true
+		}
+	}
+	return false
 }
 
 // inRuns is "run_id IN (?,…)" for ids, with its arguments.

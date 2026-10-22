@@ -182,6 +182,15 @@ func TestOutcomeStatus(t *testing.T) {
 	if o.Status() != OutcomeNoChange || !strings.Contains(o.Summary(), "target not seen→seen (newly surfaced)") {
 		t.Errorf("target newly surfaced: %s", o.Summary())
 	}
+	// So is its host entering or leaving the hosts cited.
+	o.TargetHost, o.HostCitedBefore = "docs.acme.example", true
+	if o.Status() != OutcomeNoChange || !strings.Contains(o.Summary(), "host docs.acme.example cited→not cited (left the cited set)") {
+		t.Errorf("host left: %s", o.Summary())
+	}
+	o.HostCitedBefore, o.HostCitedAfter = false, true
+	if !strings.Contains(o.Summary(), "not cited→cited (entered the cited set)") {
+		t.Errorf("host entered: %s", o.Summary())
+	}
 	// Info prompts have no choice to count: recommended leaves them out.
 	o = outcomeOf([]Tally{{N: 6, Named: 0}, tl(6, 0, 0)}, []Tally{{N: 6, Named: 6}, tl(6, 0, 0)}, 10)
 	if _, rec := o.Changes(); rec.Prompts != 1 {
