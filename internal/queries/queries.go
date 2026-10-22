@@ -603,9 +603,20 @@ func suggest(in Input, names []Name, rows []QueryRow) []Suggest {
 		for _, c := range q.Competitors {
 			comp = append(comp, c.Name)
 		}
-		id := PromptID(q.Query, ids)
-		ids[id] = true
-		out = append(out, Suggest{Query: q.Query, Competitors: comp, Answers: q.Answers, File: in.Set.File, TOML: Snippet(sets.Prompt{ID: id, Text: q.Query})})
+		// One search can run several queries, joined with " | ": each is its own prompt. Ones
+		// with search operators (site:, quotes for an exact match) are a search engine's
+		// language, not a buyer's.
+		for _, part := range strings.Split(q.Query, " | ") {
+			part = strings.TrimSpace(part)
+			k := Normalize(part)
+			if len(out) == maxSuggest || k == "" || texts[k] || strings.Contains(part, "site:") || strings.Contains(part, "site.") || strings.Count(part, `"`) > 0 || len(strings.Fields(part)) < 3 {
+				continue
+			}
+			texts[k] = true
+			id := PromptID(part, ids)
+			ids[id] = true
+			out = append(out, Suggest{Query: part, Competitors: comp, Answers: q.Answers, File: in.Set.File, TOML: Snippet(sets.Prompt{ID: id, Text: part})})
+		}
 	}
 	return out
 }

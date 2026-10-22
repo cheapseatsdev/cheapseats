@@ -135,6 +135,13 @@ func TestPagesRenderWithData(t *testing.T) {
 		!strings.Contains(text, `"praise":[{"text":"open source","n":`) {
 		t.Errorf("get_run: %s", limit(text))
 	}
+	// Kept small for MCP clients: no Claude prompts (get_quick_wins has them), no snapshot.
+	if text, _ := call("get_run", map[string]any{"run": r.ID}); strings.Contains(text, `"claude_prompt":"`+"#") || strings.Contains(text, `"answerers":[{`) {
+		t.Errorf("get_run carries the Claude prompts or the snapshot: %s", limit(text))
+	}
+	if text, isErr := call("get_rankings", map[string]any{}); isErr || !strings.Contains(text, `"board":[{"name":`) || strings.Contains(text, `"named_first"`) {
+		t.Errorf("get_rankings: %s", limit(text))
+	}
 	if text, isErr := call("get_citations", map[string]any{"url_contains": "docker"}); isErr || !strings.Contains(text, "docs.docker.com") {
 		t.Errorf("get_citations: %s", limit(text))
 	}

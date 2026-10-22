@@ -2,7 +2,7 @@
 
 Everything on a run page is worked out from the answers and grades already stored: no model is
 called to build it. The same numbers are in the JSON export (`/runs/<id>/export.json`, under
-`Summary`), `popcorn report <run-id> -json`, and MCP `get_run` (cut to the top rows).
+`Summary`), `popcorn report <run-id> -json`, and MCP `get_run` (cut to the top rows, without the run's snapshot or the fixes' Claude prompts, which `get_quick_wins` has).
 
 ## Scores
 

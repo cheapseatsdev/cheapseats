@@ -40,6 +40,8 @@ rows.
 - **Add as prompt**: queries whose results named competitors and never reached the brand's sites,
   as a `[[prompts]]` entry to paste into the set's file in the config repo. Popcorn doesn't write
   it. Reword it as the question a buyer would ask before you merge it; a query naming the brand is
-  offered only in head-to-heads, the one set that may name it.
+  offered only in head-to-heads, the one set that may name it. A search that ran several queries
+  at once (shown joined with ` | `) offers each separately, leaving out ones with search operators
+  (`site:`, quoted phrases) and ones under three words.
 - **Prompt by prompt**: answers that searched, searches per answer (over every answer), distinct
   queries, both overlap scores, and each prompt's queries with how many answers ran them.
