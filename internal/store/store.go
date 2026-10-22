@@ -59,7 +59,10 @@ func open(dataDir string, n int) (*DB, error) {
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
 		return nil, err
 	}
-	dsn := "file:" + filepath.Join(dataDir, "popcorn.db") + "?_pragma=journal_mode(WAL)&_pragma=busy_timeout(10000)&_pragma=foreign_keys(1)"
+	// _txlock=immediate: every transaction here reads and then writes, and a deferred one that read
+	// before another committed can't take the write lock (SQLITE_BUSY, which busy_timeout doesn't
+	// wait out). Taking it at BEGIN makes concurrent writers queue on busy_timeout instead.
+	dsn := "file:" + filepath.Join(dataDir, "popcorn.db") + "?_pragma=journal_mode(WAL)&_pragma=busy_timeout(10000)&_pragma=foreign_keys(1)&_txlock=immediate"
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, err
