@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"sync"
 
+	"github.com/metcalfc/popcorn/internal/answer"
 	"github.com/metcalfc/popcorn/internal/config"
 	"github.com/metcalfc/popcorn/internal/grade"
 	"github.com/metcalfc/popcorn/internal/llm"
@@ -88,8 +89,11 @@ type RegradePlan struct {
 	Current        int `json:"current_runs"`
 	CurrentAnswers int `json:"current_answers"`
 	// Runs left alone because they aren't finished or are running.
-	Unfinished   int     `json:"unfinished_runs"`
-	EstimatedUSD float64 `json:"estimated_usd"`
+	Unfinished int `json:"unfinished_runs"`
+	// Runs whose answers were asked under another answer prompt or search policy: those are part of
+	// the method too, and a re-grade can't change them, so it couldn't join them to today's trend.
+	AskedDifferently int     `json:"asked_differently_runs"`
+	EstimatedUSD     float64 `json:"estimated_usd"`
 	// The API grader's model has no [pricing]: no estimate, and the budget refuses its calls.
 	Unpriced bool `json:"unpriced,omitempty"`
 }
@@ -115,6 +119,12 @@ type RegradeReport struct {
 	Stopped string            `json:"stopped,omitempty"`
 }
 
+// ErrRegradeConflict is a run that changed while it was being re-graded: nothing was written.
+var ErrRegradeConflict = errors.New("re-grade conflict")
+
+// beforeRegradeWrite, when set, is called between grading a run and writing it: a test's way in.
+var beforeRegradeWrite func(id string)
+
 // estGradeOutput is the output tokens a grade is estimated at: the JSON and the model's thinking.
 const estGradeOutput = 1500
 
@@ -123,13 +133,10 @@ type gradable struct {
 	id     int64
 	prompt string
 	answer string
-	old    sql.NullString
-	cost   float64
-	hist   sql.NullString
 }
 
 func (e *Engine) gradable(ctx context.Context, id string) ([]gradable, error) {
-	rows, err := e.DB.QueryContext(ctx, `SELECT id, prompt, answer, grade, grade_cost_usd, grade_history FROM results WHERE run_id=? AND status='done' AND answer IS NOT NULL ORDER BY id`, id)
+	rows, err := e.DB.QueryContext(ctx, `SELECT id, prompt, answer FROM results WHERE run_id=? AND status='done' AND answer IS NOT NULL ORDER BY id`, id)
 	if err != nil {
 		return nil, err
 	}
@@ -138,7 +145,7 @@ func (e *Engine) gradable(ctx context.Context, id string) ([]gradable, error) {
 	for rows.Next() {
 		var g gradable
 		var ans string
-		if err := rows.Scan(&g.id, &g.prompt, &ans, &g.old, &g.cost, &g.hist); err != nil {
+		if err := rows.Scan(&g.id, &g.prompt, &ans); err != nil {
 			return nil, err
 		}
 		var a struct {
@@ -160,6 +167,10 @@ func (e *Engine) PlanRegrade(ctx context.Context, runs []Run, set sets.Set) (Reg
 	for _, r := range runs {
 		if r.Status != "done" || e.IsActive(r.ID) {
 			p.Unfinished++
+			continue
+		}
+		if r.Snapshot.AnswerPrompt != answer.System(e.Cfg.Brand.Audience) || r.Snapshot.SearchPolicy != answer.SearchPolicy {
+			p.AskedDifferently++
 			continue
 		}
 		gs, err := e.gradable(ctx, r.ID)
@@ -298,6 +309,9 @@ func (e *Engine) regradeRun(ctx context.Context, r Run, set sets.Set) (int, floa
 		return 0, cost, err
 	}
 
+	if beforeRegradeWrite != nil {
+		beforeRegradeWrite(r.ID)
+	}
 	at := store.Now()
 	from, to := GradeInputs(r.Snapshot), GradeInputs(now)
 	tx, err := e.DB.BeginTx(context.Background(), nil)
@@ -305,24 +319,16 @@ func (e *Engine) regradeRun(ctx context.Context, r Run, set sets.Set) (int, floa
 		return 0, cost, stored(err)
 	}
 	defer tx.Rollback()
-	for i, g := range gs {
-		var hist []PastGrade
-		if g.hist.Valid {
-			json.Unmarshal([]byte(g.hist.String), &hist)
-		}
-		if g.old.Valid {
-			hist = append(hist, PastGrade{Grade: json.RawMessage(g.old.String), CostUSD: g.cost, Method: r.Method, Inputs: from, ReplacedAt: at})
-		}
-		hj, _ := json.Marshal(hist)
-		gj, _ := json.Marshal(grades[i])
-		if _, err := tx.Exec(`UPDATE results SET grade=?, verdict=?, top_pick=?, grade_cost_usd=grade_cost_usd+?, grade_history=? WHERE id=?`,
-			string(gj), string(grades[i].Verdict), grades[i].IsTopPick(now.Brand.Name), costs[i], string(hj), g.id); err != nil {
-			return 0, cost, stored(err)
-		}
-	}
+	// Another process (popcorn regrade beside popcorn serve, a retry) may have changed the run
+	// while it was being graded: write only over the run as it was read, else nothing.
+	var snapJS, method, status string
 	var prior sql.NullString
-	if err := tx.QueryRow(`SELECT regrades FROM runs WHERE id=?`, r.ID).Scan(&prior); err != nil {
+	if err := tx.QueryRow(`SELECT snapshot, method, status, regrades FROM runs WHERE id=?`, r.ID).Scan(&snapJS, &method, &status, &prior); err != nil {
 		return 0, cost, stored(err)
+	}
+	var cur Snapshot
+	if status != "done" || method != r.Method || json.Unmarshal([]byte(snapJS), &cur) != nil || GradeInputs(cur) != from {
+		return 0, cost, fmt.Errorf("%w: run %s changed while it was being re-graded (now %s); nothing written", ErrRegradeConflict, r.ID, status)
 	}
 	var regrades []Regrade
 	if prior.Valid {
@@ -332,8 +338,33 @@ func (e *Engine) regradeRun(ctx context.Context, r Run, set sets.Set) (int, floa
 		FromInputs: from, ToInputs: to, FromGrader: r.Snapshot.Grader, ToGrader: now.Grader})
 	sj, _ := json.Marshal(now)
 	rj, _ := json.Marshal(regrades)
-	if _, err := tx.Exec(`UPDATE runs SET snapshot=?, method=?, regrades=? WHERE id=?`, string(sj), Method(now), string(rj), r.ID); err != nil {
+	res, err := tx.Exec(`UPDATE runs SET snapshot=?, method=?, regrades=? WHERE id=? AND status='done' AND method=? AND snapshot=?`, string(sj), Method(now), string(rj), r.ID, method, snapJS)
+	if err != nil {
 		return 0, cost, stored(err)
+	}
+	if n, err := res.RowsAffected(); err != nil || n == 0 {
+		return 0, cost, fmt.Errorf("%w: run %s changed while it was being re-graded; nothing written", ErrRegradeConflict, r.ID)
+	}
+	for i, g := range gs {
+		// The grade and its history as they are now, not as they were when grading started.
+		var old, hist sql.NullString
+		var oldCost float64
+		if err := tx.QueryRow(`SELECT grade, grade_cost_usd, grade_history FROM results WHERE id=?`, g.id).Scan(&old, &oldCost, &hist); err != nil {
+			return 0, cost, stored(err)
+		}
+		var past []PastGrade
+		if hist.Valid {
+			json.Unmarshal([]byte(hist.String), &past)
+		}
+		if old.Valid {
+			past = append(past, PastGrade{Grade: json.RawMessage(old.String), CostUSD: oldCost, Method: r.Method, Inputs: from, ReplacedAt: at})
+		}
+		hj, _ := json.Marshal(past)
+		gj, _ := json.Marshal(grades[i])
+		if _, err := tx.Exec(`UPDATE results SET grade=?, verdict=?, top_pick=?, grade_cost_usd=grade_cost_usd+?, grade_history=? WHERE id=?`,
+			string(gj), string(grades[i].Verdict), grades[i].IsTopPick(now.Brand.Name), costs[i], string(hj), g.id); err != nil {
+			return 0, cost, stored(err)
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return 0, cost, stored(err)

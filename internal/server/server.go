@@ -711,12 +711,17 @@ func (s *Server) startRunForm(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/runs/"+started.ID, http.StatusSeeOther)
 }
 
-// regradeDays reads a re-grade's range of runs, in days: 28 unless given, 0 for all.
+// regradeDays reads a re-grade's range of runs, in days: 28 unless given, 0 for all. Anything
+// that isn't a number is -1, which the re-grade refuses.
 func regradeDays(v string) int {
 	if v == "" {
 		return 28
 	}
-	return max(0, atoi(v))
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return -1
+	}
+	return n
 }
 
 // regradePage is a re-grade's confirmation: what it would grade and cost, and the button.

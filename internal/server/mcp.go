@@ -219,6 +219,9 @@ func (s *Server) mcpHandler() http.Handler {
 			if a.SinceDays != nil {
 				since = *a.SinceDays
 			}
+			if since < 0 {
+				return nil, fmt.Errorf("since_days %d: want 0 (all) or more", since)
+			}
 			if a.DryRun == nil || *a.DryRun {
 				p, err := s.App.PlanRegrade(ctx, a.Target, since)
 				return regradeDigest(p, false), err

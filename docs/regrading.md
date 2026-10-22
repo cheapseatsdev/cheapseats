@@ -14,13 +14,17 @@ popcorn regrade <set-id|run-id> -since 90d -dry-run=false
   default 28 days), or the one run named. A run whose grading inputs already match today's is
   skipped: each run is fingerprinted by the grader prompt and model, the brand's name, aliases and
   about, and the competitors' names and aliases (`run.GradeInputs`). Unfinished and running runs
-  are left alone.
+  are left alone, and so are runs asked under another answer prompt or search policy: those are
+  part of the method too, and a re-grade can't change them, so it couldn't join them to today's
+  trend.
 - **Cost**: one grader call per answer. On `provider = "claude-code"` it's $0, on your
   subscription. Through the API the dry run estimates it from token counts (about four characters
   a token, plus the grader's thinking) and `[pricing]`; the real calls go through the same budget
   as runs, and a run the day's remaining budget can't cover isn't started.
 - **All or nothing per run**: every answer of a run is graded first, then the new grades are
-  written together. A run whose grading fails, or is cut off, is left exactly as it was.
+  written together, only over the run as it was read: if something else changed it meanwhile
+  (another `popcorn regrade`, a retry), nothing is written. A run whose grading fails, or is cut
+  off, is left exactly as it was.
 - **History stays honest**: the run's snapshot takes today's grading inputs (how its answers were
   asked stays as it was), so its method is recomputed from it like any run's and it trends with
   today's runs. Each replaced grade is kept with its answer (`results.grade_history`), and each
@@ -33,5 +37,5 @@ popcorn regrade <set-id|run-id> -since 90d -dry-run=false
 
 In the web UI, a set's page links to **Re-grade stored answers**, which shows the dry run (runs,
 answers, method change, estimated cost) and a button to start it in the background. Over MCP,
-`regrade` takes a set or run as `target`, `since_days` (default 28, 0 for all) and `dry_run`,
+`regrade` takes a set or run as `target`, `since_days` (default 28, 0 for all; negative is an error) and `dry_run`,
 which is true unless set to false.

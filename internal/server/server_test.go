@@ -166,6 +166,9 @@ func TestPagesRenderWithData(t *testing.T) {
 	if text, isErr := call("regrade", map[string]any{"target": set.ID}); isErr || !strings.Contains(text, `"current_runs":1`) || !strings.Contains(text, `"started":false`) {
 		t.Errorf("regrade: %s", limit(text))
 	}
+	if _, isErr := call("regrade", map[string]any{"target": set.ID, "since_days": -1}); !isErr {
+		t.Error("negative since_days should be a tool error")
+	}
 	if res, _ := a.Runs.Results(ctx, r.ID); len(res) > 0 {
 		if text, isErr := call("get_result", map[string]any{"run": r.ID, "result": res[0].ID}); isErr || !strings.Contains(text, `"evidence":"Docker Sandboxes or Popcorn"`) {
 			t.Errorf("get_result: %s", limit(text))

@@ -14,6 +14,9 @@ import (
 // set as it is today (whose competitors the grader folds onto). For a set, only runs from the last
 // sinceDays days, or all of them when it's 0; a run is taken whatever its age.
 func (a *App) regradeRuns(ctx context.Context, target string, sinceDays int) ([]run.Run, sets.Set, error) {
+	if sinceDays < 0 {
+		return nil, sets.Set{}, fmt.Errorf("since %d days: want 0 (all) or more", sinceDays)
+	}
 	if s, ok := a.Set(target); ok {
 		since := ""
 		if sinceDays > 0 {

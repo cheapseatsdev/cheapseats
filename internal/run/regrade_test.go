@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/metcalfc/popcorn/internal/config"
@@ -154,5 +155,58 @@ func TestRegrade(t *testing.T) {
 	}
 	if spent, _ := e.DB.SpentToday(ctx); spent <= 0 {
 		t.Fatal("re-grading isn't accounted")
+	}
+}
+
+// A run that changes between being graded and being written (popcorn regrade beside popcorn
+// serve, a retry from another process) is left as the other writer left it; in this process a
+// retry can't start while the re-grade holds the run.
+func TestRegradeWritesOnlyOverTheRunItRead(t *testing.T) {
+	e, set, _ := setup(t, 0)
+	e.Cfg.Answerers = e.Cfg.Answerers[:1]
+	ctx := context.Background()
+	r, _ := e.Create(ctx, set, "manual")
+	if err := e.Execute(ctx, r.ID); err != nil {
+		t.Fatal(err)
+	}
+	e.Cfg.Brand.About = "cloud workstations"
+	runs, _ := e.Since(ctx, set.ID, "")
+	beforeRegradeWrite = func(id string) {
+		if e.Start(id) || e.Execute(ctx, id) == nil {
+			t.Error("a retry started during the re-grade")
+		}
+		e.DB.Exec(`UPDATE runs SET method='changed elsewhere' WHERE id=?`, id)
+	}
+	defer func() { beforeRegradeWrite = nil }()
+	rep, err := e.Regrade(ctx, runs, set)
+	if err != nil || len(rep.Regraded) != 0 || !strings.Contains(rep.Failed[r.ID], "changed while it was being re-graded") {
+		t.Fatalf("%+v %v", rep, err)
+	}
+	got, _ := e.Get(ctx, r.ID)
+	var history int
+	e.DB.QueryRow(`SELECT COUNT(*) FROM results WHERE run_id=? AND grade_history IS NOT NULL`, r.ID).Scan(&history)
+	if got.Method != "changed elsewhere" || len(got.Regrades) != 0 || got.Snapshot.Brand.About != "" || history != 0 {
+		t.Fatalf("written over a changed run: %+v, %d histories", got, history)
+	}
+}
+
+// The answer prompt and search policy are part of the method, and a re-grade can't change them:
+// a run asked differently would land in a method of its own, so it's skipped, and said so.
+func TestRegradeSkipsRunsAskedDifferently(t *testing.T) {
+	e, set, _ := setup(t, 0)
+	e.Cfg.Answerers = e.Cfg.Answerers[:1]
+	ctx := context.Background()
+	r, _ := e.Create(ctx, set, "manual")
+	if err := e.Execute(ctx, r.ID); err != nil {
+		t.Fatal(err)
+	}
+	e.Cfg.Brand.About = "cloud workstations"
+	runs, _ := e.Since(ctx, set.ID, "")
+	if p, _ := e.PlanRegrade(ctx, runs, set); len(p.Runs) != 1 || p.AskedDifferently != 0 {
+		t.Fatalf("asked the same way: %+v", p)
+	}
+	e.Cfg.Brand.Audience = "an HR lead" // today's answer prompt differs from the run's
+	if p, _ := e.PlanRegrade(ctx, runs, set); len(p.Runs) != 0 || p.AskedDifferently != 1 || p.Answers != 0 {
+		t.Fatalf("asked differently: %+v", p)
 	}
 }

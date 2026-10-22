@@ -519,6 +519,9 @@ func printRegradePlan(p run.RegradePlan) {
 	if p.Unfinished > 0 {
 		fmt.Printf(" %d unfinished or running: left alone.", p.Unfinished)
 	}
+	if p.AskedDifferently > 0 {
+		fmt.Printf(" %d asked differently (another answer prompt or search policy): re-grading can't join them to today's trend, skipped.", p.AskedDifferently)
+	}
 	fmt.Println()
 	switch {
 	case p.Subscription:
