@@ -14,6 +14,7 @@ import (
 
 	"github.com/cheapseatsdev/cheapseats/internal/app"
 	"github.com/cheapseatsdev/cheapseats/internal/config"
+	"github.com/cheapseatsdev/cheapseats/internal/grade"
 	"github.com/cheapseatsdev/cheapseats/internal/llm"
 	"github.com/cheapseatsdev/cheapseats/internal/store"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -470,5 +471,26 @@ func TestMCPBehindALocalProxy(t *testing.T) {
 		if resp.StatusCode != c.code {
 			t.Errorf("hosts %v, Host %q: %d, want %d", c.hosts, c.host, resp.StatusCode, c.code)
 		}
+	}
+}
+
+// The seat meter shows a grade, top pick included; anything ungraded keeps its status icon.
+func TestSeatMeter(t *testing.T) {
+	top, other := "Acme", "Gauge"
+	for g, want := range map[*grade.Grade]string{
+		{Verdict: grade.Recommended, TopPick: &top}:   "top-pick",
+		{Verdict: grade.Recommended, TopPick: &other}: "recommended",
+		{Verdict: grade.Mentioned}:                    "mentioned",
+		{Verdict: grade.Absent}:                       "absent",
+	} {
+		if got := gradeKey(g, "acme"); got != want {
+			t.Errorf("gradeKey(%v) = %q, want %q", g.Verdict, got, want)
+		}
+		if !strings.Contains(string(seats(want)), `class="seat-meter"`) {
+			t.Errorf("no meter for %s", want)
+		}
+	}
+	if strings.Contains(string(seats("error")), "seat-meter") || !strings.Contains(string(seats("error")), "icon-circle-x") {
+		t.Error("an ungraded answer got a meter")
 	}
 }

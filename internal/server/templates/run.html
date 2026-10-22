@@ -19,9 +19,9 @@
 <p class="muted small">95% intervals in brackets.</p>
 
 <h2 id="grid">Prompt by prompt</h2>
-<p class="sub">One mark per answer: {{sicon "recommended"}}recommended, {{sicon "mentioned"}}named, {{sicon "absent"}}absent. Open a prompt for its answers.</p>
+<p class="sub">One meter per answer: {{seats "top-pick"}} top pick, {{seats "recommended"}} recommended, {{seats "mentioned"}} named, {{seats "absent"}} absent. Open a prompt for its answers.</p>
 <div class="scroll"><table class="grid-table"><thead><tr><th class="num">#</th><th>Prompt</th>{{range .Grid.Cols}}<th class="gcol">{{aname .Answerer}}<br><span class="muted">{{.Track}}</span></th>{{end}}</tr></thead>
-<tbody>{{range .Grid.Rows}}<tr><td class="num muted">{{.N}}</td><td><a href="#prompt-{{.N}}">{{.Prompt}}</a></td>{{range .Cells}}<td class="gcell">{{range .}}<span class="v-{{.}} s-{{.}}" title="{{.}}">{{sicon .}}<span class="sr">{{.}}</span></span>{{end}}</td>{{end}}</tr>{{end}}</tbody></table></div>
+<tbody>{{range .Grid.Rows}}<tr><td class="num muted">{{.N}}</td><td><a href="#prompt-{{.N}}">{{.Prompt}}</a></td>{{range .Cells}}<td class="gcell">{{range .}}<span class="v-{{.}} s-{{.}}" title="{{glabel .}}">{{seats .}}<span class="sr">{{glabel .}}</span></span>{{end}}</td>{{end}}</tr>{{end}}</tbody></table></div>
 
 <h2 id="fixes">Fix these first</h2>
 {{with .FixError}}<p class="err">Fix list failed: {{.}}</p>{{end}}
@@ -100,7 +100,7 @@
 <h2 id="answers">Every answer</h2>
 {{range .Summary.Prompts}}{{$p := .}}<details id="prompt-{{add .Idx 1}}"><summary><span class="muted">{{add .Idx 1}}.</span> {{.Prompt}} <span class="muted">— {{if .Info}}<span title="Asks for an explanation, not a choice, so it's scored on being named or cited">info</span>, named{{else}}recommended {{.Rates.Recommended.Hits}}/{{.Rates.Recommended.N}}, named{{end}} {{.Rates.Visible.Hits}}/{{.Rates.Visible.N}}{{if not .FirstHand}}, none of {{brand}}'s pages in search{{end}}{{if .Branded}}, <span title="Names {{brand}}, so it's left out of the headline rates">branded</span>{{end}}</span></summary>
 {{if .TopPicks}}<p class="muted">Top picks: {{range .TopPicks}}{{.Name}} ×{{.N}} {{end}}</p>{{end}}
-{{range $d.Results}}{{if eq .PromptIdx $p.Idx}}{{$x := .}}<details id="result-{{.ID}}"><summary><span class="chip">{{aname .Answerer}} · {{.Track}} · #{{.Sample}}</span> {{with .Grade}}<span class="v-{{.Verdict}}">{{sicon .Verdict}}{{.Verdict}}</span> {{with .TopPick}}· top: {{.}}{{end}}{{else}}<span class="s-{{.Status}}">{{sicon .Status}}{{.Status}}</span> {{deref .Error}}{{end}}</summary>
+{{range $d.Results}}{{if eq .PromptIdx $p.Idx}}{{$x := .}}<details id="result-{{.ID}}"><summary><span class="chip">{{aname .Answerer}} · {{.Track}} · #{{.Sample}}</span> {{with .Grade}}{{$k := gradekey .}}<span class="v-{{.Verdict}}">{{seats $k}} {{glabel $k}}</span> {{if ne $k "top-pick"}}{{with .TopPick}}· top: {{.}}{{end}}{{end}}{{else}}<span class="s-{{.Status}}">{{sicon .Status}}{{.Status}}</span> {{deref .Error}}{{end}}</summary>
 {{with .Grade}}<p>{{.Reasoning}}{{with .WhyNotTop}}<br><b>Why not {{brand}}:</b> {{.}}{{end}}{{if .Objections}}<br><b>Objections:</b> {{range .Objections}}{{.}}; {{end}}{{end}}</p>{{with .Evidence}}<blockquote class="evidence">{{.}}</blockquote>{{end}}{{end}}
 {{with .Answer}}{{$m := mark .Text (evidence $x)}}<pre>{{$m.Before}}{{with $m.Match}}<mark title="the grader's evidence">{{.}}</mark>{{end}}{{$m.After}}</pre>{{if .Searches}}<p class="muted">Searches: {{range .Searches}}“{{.Query}}” {{end}}</p>{{end}}{{if .Citations}}<p class="muted">Cited: {{range .Citations}}<a href="{{.URL}}">{{.URL}}</a> {{end}}</p>{{end}}{{end}}
 </details>{{end}}{{end}}</details>{{end}}

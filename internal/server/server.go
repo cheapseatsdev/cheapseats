@@ -94,8 +94,12 @@ func New(a *app.App) (*Server, error) {
 		"icon":  icon,
 		"logo":  logo,
 		"sicon": statusIcon,
+		"seats": seats,
 		"pct":   func(p float64) string { return fmt.Sprintf("%.0f%%", 100*p) },
 		"neg":   func(n int) int { return -n },
+		// An answer's grade key for the seat meter (see gradeKey), and its words.
+		"gradekey": func(g *grade.Grade) string { return gradeKey(g, a.Cfg.Brand.Name) },
+		"glabel":   func(k string) string { return strings.ReplaceAll(k, "-", " ") },
 		// A commit, abbreviated.
 		"short": func(rev string) string {
 			if len(rev) > 10 {
@@ -580,7 +584,7 @@ type GridCol struct{ Answerer, Track string }
 type GridRow struct {
 	N      int // 1-based, as fixes cite it
 	Prompt string
-	Cells  [][]string // per column, each sample's verdict, or its status if it has none
+	Cells  [][]string // per column, each sample's grade key (gradeKey), or its status if it has none
 }
 
 func (s *Server) runData(ctx context.Context, id string) (*RunData, error) {
@@ -633,7 +637,7 @@ func (s *Server) runData(ctx context.Context, id string) (*RunData, error) {
 		}
 		v := x.Status
 		if x.Grade != nil {
-			v = string(x.Grade.Verdict)
+			v = gradeKey(x.Grade, s.App.Cfg.Brand.Name)
 		}
 		d.Grid.Rows[i].Cells[j] = append(d.Grid.Rows[i].Cells[j], v)
 	}
