@@ -78,7 +78,8 @@ is unset.
   | `claude-code` | the local `claude` CLI | your Claude subscription |
   | `codex` | the local `codex` CLI | your ChatGPT subscription |
 
-- `[grader]`, `[analyst]`: Claude models. `ANTHROPIC_API_KEY` is always required.
+- `[grader]`, `[analyst]`: Claude models. `ANTHROPIC_API_KEY` is always required, unless
+  `POPCORN_ANTHROPIC_BASE_URL` points at a proxy that adds it (such as an exe.dev integration).
 - `[budget]`: a daily cap on API spend
 - `[schedule]`, `[tiers]`: when sets run (weekly is usually enough)
 - Prompt sets: one file per category of buyer question; every prompt has a permanent id

@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/metcalfc/popcorn/internal/config"
 	"github.com/metcalfc/popcorn/internal/redact"
 	"io"
 	"math/rand/v2"
@@ -120,13 +121,21 @@ func sleep(ctx context.Context, d time.Duration) error {
 
 var ErrNoKey = errors.New("API key not set")
 
-// Anthropic posts a Messages API request.
+// Anthropic posts a Messages API request, to config.AnthropicBaseURLVar when it's set. A proxy there
+// adds the key, so without ANTHROPIC_API_KEY the request goes without one.
 func Anthropic(ctx context.Context, body map[string]any) (map[string]any, error) {
+	url, headers := AnthropicURL, map[string]string{"anthropic-version": "2023-06-01"}
+	if base := config.AnthropicBaseURL(); base != "" {
+		url = base + "/v1/messages"
+	}
 	key := os.Getenv("ANTHROPIC_API_KEY")
-	if key == "" {
+	if key == "" && url == AnthropicURL {
 		return nil, fmt.Errorf("ANTHROPIC_API_KEY: %w", ErrNoKey)
 	}
-	return post(ctx, AnthropicURL, map[string]string{"x-api-key": key, "anthropic-version": "2023-06-01"}, body)
+	if key != "" {
+		headers["x-api-key"] = key
+	}
+	return post(ctx, url, headers, body)
 }
 
 // OpenAI posts a Responses API request.

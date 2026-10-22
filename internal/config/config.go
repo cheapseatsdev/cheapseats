@@ -262,10 +262,24 @@ func Missing(provider string) string {
 		}
 		return ""
 	}
+	if provider != OpenAI && AnthropicBaseURL() != "" {
+		return "" // a proxy that adds the key
+	}
 	if os.Getenv(KeyVar(provider)) == "" {
 		return KeyVar(provider) + " is not set"
 	}
 	return ""
+}
+
+// AnthropicBaseURLVar names a base URL for Popcorn's own Anthropic API calls, such as a proxy that
+// adds the key (exe.dev's integrations). With it set, ANTHROPIC_API_KEY is optional. It isn't
+// ANTHROPIC_BASE_URL because the claude CLI reads that, and subscription answers must not go through
+// a proxy that bills an API key.
+const AnthropicBaseURLVar = "POPCORN_ANTHROPIC_BASE_URL"
+
+// AnthropicBaseURL is AnthropicBaseURLVar without a trailing slash, or "".
+func AnthropicBaseURL() string {
+	return strings.TrimRight(strings.TrimSpace(os.Getenv(AnthropicBaseURLVar)), "/")
 }
 
 // AnswererName is what the UI calls an answerer: its name, or its id if it has none or is no
