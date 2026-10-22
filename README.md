@@ -24,7 +24,10 @@ started as a small, self-hosted take on [Gauge](https://withgauge.com).
 - Ends each run with **Fix these first**: the exact page to create or change, what it must say, the
   prompts it should flip, effort, priority, the site it belongs on and its owner, plus a prompt to
   hand Claude Code.
-- **Quick wins** ranks fixes across all sets by prompts flipped per day of work.
+- **Quick wins** ranks fixes across all sets by prompts flipped per day of work. Mark a fix with
+  the commit or PR you submitted (proposed, then accepted) and it leaves the open list; if it
+  wasn't enough, the next run's fix for the same page comes back open, with the attempt and what
+  changed for its prompts, and the fix list is written knowing what was tried.
 - **Rankings** trend each set week to week, through prompt and model changes.
 - Web UI, CLI, JSON API and MCP server.
 - Self-hosted, MIT licensed: Docker, Kubernetes (Helm chart) or an exe.dev VM. Your prompts live
@@ -103,7 +106,7 @@ popcorn version                        version and database schema
 
 ## API and MCP
 
-- JSON API under `/api/` (status, sets, runs, fixes, quick wins, rankings, citations, search probe):
+- JSON API under `/api/` (status, sets, runs, fixes, quick wins, fix attempts, rankings, citations, search probe):
   [reference](https://popcorn.zone/docs/reference/).
 - MCP server at `/api/mcp` (Streamable HTTP):
 

@@ -153,6 +153,9 @@ func New(a *app.App) (*Server, error) {
 			return template.HTML(b.String()) // goldmark escapes raw HTML unless told otherwise
 		},
 		"fixmd": func(set sets.Set, f []analysis.Fix) string { return analysis.Markdown(set, f) },
+		"work": func(runID string, rank int, status string, on, earlier []app.Attempt, back string) fixWork {
+			return fixWork{runID, rank, status, on, earlier, back}
+		},
 	}
 	s.pages = map[string]*template.Template{}
 	for _, p := range []string{"home", "set", "run", "rankings", "quickwins", "search", "login"} {
@@ -210,6 +213,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /sets/{id}/run", s.startRunForm)
 	mux.HandleFunc("GET /runs/{id}", s.runPage)
 	mux.HandleFunc("POST /runs/{id}/fixes", s.rebuildFixesForm)
+	mux.HandleFunc("POST /runs/{id}/fixes/{rank}/attempts", s.markFixForm)
+	mux.HandleFunc("POST /attempts/{aid}/state", s.attemptStateForm)
+	mux.HandleFunc("GET /api/attempts", s.apiAttempts)
+	mux.HandleFunc("POST /api/runs/{id}/fixes/{rank}/attempts", s.apiMarkFix)
+	mux.HandleFunc("POST /api/attempts/{aid}", s.apiAttemptState)
 	mux.HandleFunc("POST /runs/{id}/cancel", s.cancelForm)
 	mux.HandleFunc("POST /runs/{id}/retry", s.retryForm)
 	mux.HandleFunc("GET /runs/{id}/export.csv", s.exportCSV)
@@ -436,6 +444,10 @@ type RunData struct {
 	Fixes     []analysis.Fix
 	FixError  *string
 	Answerers []string
+	// The work submitted for this run's fixes, and for earlier fixes for the same pages, and when
+	// the fix list was built (FixAttempts.Status).
+	Attempts app.FixAttempts `json:"-"`
+	FixesAt  string          `json:"-"`
 
 	// Each track's rates on their own: search and recall answer different questions.
 	Tracks []TrackRates `json:"-"`
@@ -476,10 +488,10 @@ func (s *Server) runData(ctx context.Context, id string) (*RunData, error) {
 		return nil, err
 	}
 	fx, fe, _ := s.App.Fixes(ctx, id)
-	d := &RunData{Run: r, Active: s.App.Runs.IsActive(id), Summary: s.App.Summary(r, res), Results: res, Fixes: fx, FixError: fe}
-	var insights sql.NullString
-	s.App.DB.QueryRowContext(ctx, `SELECT insights FROM runs WHERE id=?`, id).Scan(&insights)
-	d.Insights = insights.String
+	d := &RunData{Run: r, Active: s.App.Runs.IsActive(id), Summary: s.App.Summary(r, res), Results: res, Fixes: fx, FixError: fe, Attempts: s.App.FixAttempts(ctx)}
+	var insights, fixesAt sql.NullString
+	s.App.DB.QueryRowContext(ctx, `SELECT insights, fixes_at FROM runs WHERE id=?`, id).Scan(&insights, &fixesAt)
+	d.Insights, d.FixesAt = insights.String, fixesAt.String
 	d.Progress = s.App.RunProgress(ctx, id)
 	for _, a := range r.Snapshot.Answerers {
 		d.Answerers = append(d.Answerers, a.ID)
@@ -648,6 +660,53 @@ func (s *Server) rebuildFixesForm(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/runs/"+id+"#fixes", http.StatusSeeOther)
 }
 
+// fixWork is a fix's submitted work for the "work" template: where it stands, the attempts on it,
+// those on earlier fixes for the same page, and the page to come back to after a form.
+type fixWork struct {
+	RunID       string
+	Rank        int
+	Status      string
+	On, Earlier []app.Attempt
+	Back        string
+}
+
+// who names the person marking a fix: the email a signing-in proxy passed, else how they came in.
+func (s *Server) who(r *http.Request, via string) string {
+	if s.authHeader != "" {
+		if e := strings.TrimSpace(r.Header.Get(s.authHeader)); e != "" {
+			return e
+		}
+	}
+	return via
+}
+
+// back is where a form returns to: a path on this Popcorn, never another site.
+func back(r *http.Request, fallback string) string {
+	if b := r.FormValue("back"); strings.HasPrefix(b, "/") && !strings.HasPrefix(b, "//") && !strings.HasPrefix(b, "/\\") {
+		return b
+	}
+	return fallback
+}
+
+func (s *Server) markFixForm(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	rank, _ := strconv.Atoi(r.PathValue("rank"))
+	if _, err := s.App.MarkFix(r.Context(), id, rank, r.FormValue("url"), r.FormValue("state"), r.FormValue("note"), s.who(r, "web")); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	http.Redirect(w, r, back(r, fmt.Sprintf("/runs/%s#fix-%d", id, rank)), http.StatusSeeOther)
+}
+
+func (s *Server) attemptStateForm(w http.ResponseWriter, r *http.Request) {
+	aid, _ := strconv.ParseInt(r.PathValue("aid"), 10, 64)
+	if err := s.App.SetAttemptState(r.Context(), aid, r.FormValue("state")); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	http.Redirect(w, r, back(r, "/quick-wins"), http.StatusSeeOther)
+}
+
 func (s *Server) cancelForm(w http.ResponseWriter, r *http.Request) {
 	s.App.Runs.Cancel(r.PathValue("id"))
 	http.Redirect(w, r, "/runs/"+r.PathValue("id"), http.StatusSeeOther)
@@ -679,12 +738,12 @@ type filterOption struct {
 func (s *Server) quickWinsPage(w http.ResponseWriter, r *http.Request) {
 	all, _ := s.App.QuickWins(r.Context())
 	q := r.URL.Query()
-	f := app.QuickWinFilter{Site: q.Get("site"), Gap: q.Get("gap"), Set: q.Get("set")}
+	f := app.QuickWinFilter{Site: q.Get("site"), Gap: q.Get("gap"), Set: q.Get("set"), Status: q.Get("status"), Priority: q.Get("priority")}
 	// A row per dimension. Each count applies the other rows' choices, so a link never leads to
 	// an empty list; "all" clears just that row.
 	href := func(param, value string) string {
 		v := url.Values{}
-		for _, p := range []string{"site", "gap", "set"} {
+		for _, p := range []string{"status", "priority", "site", "gap", "set"} {
 			if x := q.Get(p); x != "" && p != param {
 				v.Set(p, x)
 			}
@@ -720,12 +779,16 @@ func (s *Server) quickWinsPage(w http.ResponseWriter, r *http.Request) {
 	for _, st := range s.App.Sets() {
 		setV, setL = append(setV, st.ID), append(setL, st.Name)
 	}
+	status := []string{app.Open, app.Proposed, app.Accepted}
+	priority := []string{"urgent", "high", "medium", "low"}
 	rows := []filterRow{
+		row("Status", "status", f.Status, status, status, func(v string) app.QuickWinFilter { x := f; x.Status = v; return x }),
+		row("Priority", "priority", f.Priority, priority, priority, func(v string) app.QuickWinFilter { x := f; x.Priority = v; return x }),
 		row("Site", "site", f.Site, siteV, siteL, func(v string) app.QuickWinFilter { x := f; x.Site = v; return x }),
 		row("Gap", "gap", f.Gap, gapV, gapV, func(v string) app.QuickWinFilter { x := f; x.Gap = v; return x }),
 		row("Set", "set", f.Set, setV, setL, func(v string) app.QuickWinFilter { x := f; x.Set = v; return x }),
 	}
-	s.render(w, "quickwins", map[string]any{"QuickWins": s.App.FilterQuickWins(all, f), "Rows": rows, "Total": len(all)})
+	s.render(w, "quickwins", map[string]any{"QuickWins": s.App.FilterQuickWins(all, f), "Rows": rows, "Total": len(all), "Back": r.URL.RequestURI()})
 }
 
 // --- API ---
@@ -834,6 +897,44 @@ func (s *Server) apiRebuildFixes(w http.ResponseWriter, r *http.Request) {
 	s.apiFixes(w, r)
 }
 
+func (s *Server) apiAttempts(w http.ResponseWriter, r *http.Request) {
+	at, err := s.App.Attempts(r.Context(), r.URL.Query().Get("set"))
+	if err != nil {
+		httpErr(w, err, 500)
+		return
+	}
+	writeJSON(w, at)
+}
+
+func (s *Server) apiMarkFix(w http.ResponseWriter, r *http.Request) {
+	var in struct{ URL, State, Note string }
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		httpErr(w, err, 400)
+		return
+	}
+	rank, _ := strconv.Atoi(r.PathValue("rank"))
+	at, err := s.App.MarkFix(r.Context(), r.PathValue("id"), rank, in.URL, in.State, in.Note, s.who(r, "api"))
+	if err != nil {
+		httpErr(w, err, 400)
+		return
+	}
+	writeJSON(w, at)
+}
+
+func (s *Server) apiAttemptState(w http.ResponseWriter, r *http.Request) {
+	var in struct{ State string }
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		httpErr(w, err, 400)
+		return
+	}
+	aid, _ := strconv.ParseInt(r.PathValue("aid"), 10, 64)
+	if err := s.App.SetAttemptState(r.Context(), aid, in.State); err != nil {
+		httpErr(w, err, 400)
+		return
+	}
+	writeJSON(w, map[string]any{"id": aid, "state": in.State})
+}
+
 func (s *Server) apiCancel(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]bool{"cancelled": s.App.Runs.Cancel(r.PathValue("id"))})
 }
@@ -853,7 +954,7 @@ func (s *Server) apiQuickWins(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q := r.URL.Query()
-	writeJSON(w, s.App.FilterQuickWins(qw, app.QuickWinFilter{Gap: q.Get("gap"), Set: q.Get("set"), Site: q.Get("site")}))
+	writeJSON(w, s.App.FilterQuickWins(qw, app.QuickWinFilter{Gap: q.Get("gap"), Set: q.Get("set"), Site: q.Get("site"), Status: q.Get("status"), Priority: q.Get("priority")}))
 }
 
 func (s *Server) apiRankings(w http.ResponseWriter, r *http.Request) {

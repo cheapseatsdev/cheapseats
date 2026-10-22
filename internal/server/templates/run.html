@@ -23,10 +23,10 @@
 
 <h2 id="fixes">Fix these first</h2>
 {{with .FixError}}<p class="err">Fix list failed: {{.}}</p>{{end}}
-{{if .Fixes}}{{range $i, $f := .Fixes}}<details id="fix-{{$f.Rank}}" {{if eq $i 0}}open{{end}}><summary><b>{{add $i 1}}. {{$f.Title}}</b> <span class="chip p-{{$f.Priority}}">{{$f.Priority}}</span> <span class="chip">{{$f.Gap}}</span> <span class="chip">effort {{$f.Effort}}</span>{{with $f.Site}} <span class="chip mono">{{.}}</span>{{end}} <span class="chip">flips {{len $f.Prompts}}</span>{{if $f.Owner}} <span class="chip">{{$f.Owner}}</span>{{end}}</summary>
+{{if .Fixes}}{{range $i, $f := .Fixes}}{{$w := work $.Run.ID $f.Rank ($.Attempts.Status $.Run.ID $f $.FixesAt) ($.Attempts.On $.Run.ID $f.Rank) ($.Attempts.Earlier $.Run.ID $f) (printf "/runs/%s#fix-%d" $.Run.ID $f.Rank)}}<details id="fix-{{$f.Rank}}" {{if eq $i 0}}open{{end}}><summary><b>{{add $i 1}}. {{$f.Title}}</b>{{if ne $w.Status "open"}} <span class="chip st-{{$w.Status}}">{{$w.Status}}</span>{{else if $w.Earlier}} <span class="chip">retry</span>{{end}} <span class="chip p-{{$f.Priority}}">{{$f.Priority}}</span> <span class="chip">{{$f.Gap}}</span> <span class="chip">effort {{$f.Effort}}</span>{{with $f.Site}} <span class="chip mono">{{.}}</span>{{end}} <span class="chip">flips {{len $f.Prompts}}</span>{{if $f.Owner}} <span class="chip">{{$f.Owner}}</span>{{end}}</summary>
 <p><b>Where:</b> <span class="mono">{{$f.Target}}</span><br><b>Must say:</b> {{$f.Claim}}<br><b>Done when:</b> {{$f.DoneWhen}}{{with $f.Displaces}}<br><b>Displaces:</b> <a class="mono" href="{{.}}">{{.}}</a>{{end}}{{with $f.Evidence}}<br><b>Why:</b> {{.}}{{end}}</p>
 <p><b>Prompts it could flip:</b></p><ol>{{range $f.Prompts}}<li value="{{.}}"><a href="#prompt-{{.}}">{{prompt $set .}}</a></li>{{end}}</ol>
-<details><summary class="muted">Prompt for Claude Code</summary><pre>{{$f.ClaudePrompt}}</pre></details></details>{{end}}
+<details><summary class="muted">Prompt for Claude Code</summary><pre>{{$f.ClaudePrompt}}</pre></details>{{template "work" $w}}</details>{{end}}
 <details><summary class="muted">The whole list as markdown</summary><pre>{{fixmd $set .Fixes}}</pre></details>
 {{else}}<p class="muted">{{if eq .Run.Status "done"}}{{if not .FixError}}Building the fix list…{{end}}{{else}}Built when the run finishes.{{end}}</p>{{end}}
 {{if eq .Run.Status "done"}}<form method="post" action="/runs/{{.Run.ID}}/fixes"><button class="ghost">{{icon "refresh-cw"}}Regenerate fix list and insights</button></form>{{end}}

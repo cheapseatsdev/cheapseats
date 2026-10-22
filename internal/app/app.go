@@ -106,7 +106,7 @@ func (a *App) BuildFixes(ctx context.Context, id string) error {
 	cfg := *a.Cfg
 	cfg.Brand = r.Snapshot.Brand
 	cfg.Brand.Facts = a.Cfg.Brand.Facts
-	an, cost, err := analysis.Build(ctx, &cfg, r.Snapshot.Set, results)
+	an, cost, err := analysis.Build(ctx, &cfg, r.Snapshot.Set, results, a.triedFor(ctx, r.SetID))
 	if err != nil {
 		a.DB.ExecContext(ctx, `UPDATE runs SET fixes_error=?, analysis_cost_usd=analysis_cost_usd+? WHERE id=?`, err.Error(), cost, id)
 		return err
@@ -142,6 +142,12 @@ type QuickWin struct {
 	// Prompt ids reworded since the run, and how many of the fix's prompts the set no longer asks.
 	Reworded []string `json:"reworded,omitempty"`
 	Dropped  int      `json:"dropped,omitempty"`
+	// Open, proposed or accepted (FixAttempts.Status): from Attempts, the work submitted for this
+	// fix, or from work on the same page the fix list didn't know about. Earlier is what was tried
+	// for the same target before, so a retry shows what didn't work.
+	Status   string    `json:"status"`
+	Attempts []Attempt `json:"attempts,omitempty"`
+	Earlier  []Attempt `json:"earlier_attempts,omitempty"`
 }
 
 // QuickWins pulls the fix lists from the latest finished run of every set, core sets first, then
@@ -149,9 +155,11 @@ type QuickWin struct {
 // A fix none of whose prompts the set still asks is left out.
 func (a *App) QuickWins(ctx context.Context) ([]QuickWin, error) {
 	var out []QuickWin
+	tried := a.FixAttempts(ctx)
 	for _, s := range a.Sets() {
 		var id string
-		err := a.DB.QueryRowContext(ctx, `SELECT id FROM runs WHERE set_id=? AND fixes IS NOT NULL AND status='done' ORDER BY created_at DESC LIMIT 1`, s.ID).Scan(&id)
+		var fixesAt sql.NullString
+		err := a.DB.QueryRowContext(ctx, `SELECT id, fixes_at FROM runs WHERE set_id=? AND fixes IS NOT NULL AND status='done' ORDER BY created_at DESC LIMIT 1`, s.ID).Scan(&id, &fixesAt)
 		if err != nil {
 			continue
 		}
@@ -166,7 +174,8 @@ func (a *App) QuickWins(ctx context.Context) ([]QuickWin, error) {
 		}
 		fixes, _, _ := a.Fixes(ctx, id)
 		for _, f := range fixes {
-			q := QuickWin{SetID: s.ID, SetName: s.Name, Tier: string(s.Tier), RunID: id}
+			q := QuickWin{SetID: s.ID, SetName: s.Name, Tier: string(s.Tier), RunID: id, Attempts: tried.On(id, f.Rank), Earlier: tried.Earlier(id, f)}
+			q.Status = tried.Status(id, f, fixesAt.String)
 			var now []int
 			for _, n := range f.Prompts {
 				if n < 1 || n > len(then.Prompts) {
@@ -226,13 +235,15 @@ func (a *App) Summary(r *run.Run, results []run.Result) report.Summary {
 }
 
 // QuickWinFilter narrows quick wins; empty fields match everything. Site is one of the brand's
-// sites by url or kind ("docs"), or "elsewhere" for fixes off its sites (outreach, product).
-type QuickWinFilter struct{ Gap, Set, Site string }
+// sites by url or kind ("docs"), or "elsewhere" for fixes off its sites (outreach, product). Status
+// is open, proposed or accepted, and Priority urgent, high, medium or low.
+type QuickWinFilter struct{ Gap, Set, Site, Status, Priority string }
 
 func (a *App) FilterQuickWins(qw []QuickWin, f QuickWinFilter) []QuickWin {
 	out := []QuickWin{}
 	for _, q := range qw {
-		if f.Gap != "" && string(q.Gap) != f.Gap || f.Set != "" && q.SetID != f.Set {
+		if f.Gap != "" && string(q.Gap) != f.Gap || f.Set != "" && q.SetID != f.Set ||
+			f.Status != "" && q.Status != f.Status || f.Priority != "" && q.Priority != f.Priority {
 			continue
 		}
 		if f.Site != "" {

@@ -181,3 +181,7 @@ table.sets td:first-child{min-width:11rem}
 .nowrap{white-space:nowrap}
 main a[href^="http"]{overflow-wrap:anywhere}
 .filters .row{margin:4px 0;gap:6px}.filter-name{min-width:3.5rem}
+/* Work submitted for a fix: proposed (a pull request open), accepted (merged), withdrawn. */
+.st-proposed{background:var(--pc-warning-bg);color:var(--pc-warning);font-weight:600}.st-accepted{background:var(--pc-success-bg);color:var(--pc-success);font-weight:600}
+.attempt{margin:6px 0}
+form.mark{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:8px 0}form.mark input[type=url]{flex:1 1 260px}form.mark input[name=note]{flex:1 1 160px}
