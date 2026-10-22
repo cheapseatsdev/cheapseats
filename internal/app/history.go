@@ -975,7 +975,8 @@ func (a *App) SampleAdvice(ctx context.Context, s sets.Set) SampleAdvice {
 		}
 	}
 	out.VarianceSplit = SplitVariance(cells)
-	if out.Runs < adviceMinRuns || out.Cells < adviceMinCells {
+	// No variance at all (the brand always or never named) says nothing about samples either way.
+	if out.Runs < adviceMinRuns || out.Cells < adviceMinCells || out.Within+out.Between == 0 {
 		return out
 	}
 	w := out.Widening()
