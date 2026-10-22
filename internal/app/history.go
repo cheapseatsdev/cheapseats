@@ -4,12 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/metcalfc/popcorn/internal/analysis"
 	"github.com/metcalfc/popcorn/internal/config"
+	"github.com/metcalfc/popcorn/internal/grade"
 	"github.com/metcalfc/popcorn/internal/report"
 	"github.com/metcalfc/popcorn/internal/run"
 	"github.com/metcalfc/popcorn/internal/sets"
@@ -215,11 +216,19 @@ func (c *Change) empty() bool {
 
 // Compare is the day against the one before over only what both asked: the same prompts, worded
 // the same, of the same answerers. When nothing changed it covers every prompt.
+//
+// Each change is paired prompt by prompt (PairedDiff) and carries its 95% margin; a change whose
+// interval covers 0 is within noise: a day-to-day wobble of that size is what chance alone gives.
 type Compare struct {
 	Common      int     `json:"common"` // prompts in the comparison
 	Of          int     `json:"of"`     // prompts asked this day
 	Recommended float64 `json:"recommended"`
 	Visible     float64 `json:"visible"`
+	// 95% margins of the two changes, and whether each interval covers 0.
+	VisibleMargin          float64 `json:"visible_margin"`
+	RecommendedMargin      float64 `json:"recommended_margin"`
+	WithinNoise            bool    `json:"within_noise"` // the named change
+	RecommendedWithinNoise bool    `json:"recommended_within_noise"`
 }
 
 // Day is one set's standing on one UTC day, from its newest finished run that day.
@@ -235,20 +244,37 @@ type Day struct {
 	Leader    string       `json:"leader"`
 	Rates     report.Rates `json:"rates"` // over every answer, as on the run page
 	Mean      Mean         `json:"mean"`
-	Rolling   Mean         `json:"rolling"` // Mean averaged over this and earlier days within 7 days, same method
+	Rolling   Mean         `json:"rolling"` // Mean averaged over this and earlier days within WindowDays, same method
 	Window    int          `json:"window"`  // days in Rolling
+	// The rolling window asked for, in days: 7 (the default), 14 or 28.
+	WindowDays int `json:"window_days"`
 	// A 95% interval around Rolling.Visible, from how much prompts vary: answers to one prompt
-	// aren't independent, so prompts, not answers, are the units.
-	RollingLo float64        `json:"rolling_lo"`
-	RollingHi float64        `json:"rolling_hi"`
-	Answers   int            `json:"answers"`
-	Prompts   int            `json:"prompts"`
-	Board     []report.Voice `json:"board"`
+	// aren't independent, so prompts, not answers, are the units. Bands has it for each rate
+	// (Named is the same as these two).
+	RollingLo float64 `json:"rolling_lo"`
+	RollingHi float64 `json:"rolling_hi"`
+	Bands     Bands   `json:"bands"`
+	// 95% intervals around Mean taking this day's prompts as the whole set: only the noise of
+	// sampling answers, so narrower. Bands answers "questions like these"; Today, "this set, today".
+	Today   Bands          `json:"today"`
+	Answers int            `json:"answers"`
+	Prompts int            `json:"prompts"`
+	Board   []report.Voice `json:"board"`
 	// Places moved up since the day before; only when that day asked the same prompts of the
 	// same answerers, since otherwise a rank change says more about the questions than the brand.
-	DeltaRank int      `json:"delta_rank"`
-	Change    *Change  `json:"change,omitempty"`
-	Compare   *Compare `json:"compare,omitempty"`
+	DeltaRank int `json:"delta_rank"`
+	// The move could be chance: for every product that changed places with the brand, the
+	// paired change in the gap between them covers 0.
+	RankWithinNoise bool     `json:"rank_within_noise,omitempty"`
+	Change          *Change  `json:"change,omitempty"`
+	Compare         *Compare `json:"compare,omitempty"`
+}
+
+// Bands is a 95% interval for each of a day's rates.
+type Bands struct {
+	TopPick     Interval `json:"top_pick"`
+	Recommended Interval `json:"recommended"`
+	Visible     Interval `json:"visible"`
 }
 
 type Ranking struct {
@@ -257,6 +283,30 @@ type Ranking struct {
 	Tier    string `json:"tier"`
 	Track   string `json:"track"`
 	Days    []Day  `json:"days"` // newest first
+	// Work submitted for the set's fixes, for marking the trend: when each was proposed, and
+	// accepted.
+	Attempts []AttemptMark `json:"attempts,omitempty"`
+}
+
+// AttemptMark is a day an attempt was proposed or accepted.
+type AttemptMark struct {
+	Date  string `json:"date"`
+	State string `json:"state"` // proposed or accepted
+	Title string `json:"title"`
+	URL   string `json:"url"`
+}
+
+// Windows are the rolling windows trends offer, in days; the first is the default.
+var Windows = []int{7, 14, 28}
+
+// Window is days if it's one of Windows, else the default.
+func Window(days int) int {
+	for _, w := range Windows {
+		if w == days {
+			return w
+		}
+	}
+	return Windows[0]
 }
 
 // dayData is what a day's comparisons are worked out from.
@@ -270,10 +320,12 @@ type dayData struct {
 	models  map[string]string                   // answerer -> model
 	samples map[string]int                      // answerer -> samples per prompt
 	tallies map[string]map[string]*report.Tally // prompt id -> answerer -> tally
+	named   map[string]map[string]int           // prompt id -> product (lowercase) -> answers naming it
 }
 
 // series is each track's days for one set, newest first, with changes and comparisons filled in.
-func (a *App) series(ctx context.Context, s sets.Set, lastDays int) (map[string][]dayData, error) {
+// Rolling means and bands are over window days.
+func (a *App) series(ctx context.Context, s sets.Set, lastDays, window int) (map[string][]dayData, error) {
 	since := time.Now().UTC().AddDate(0, 0, -lastDays).Format("2006-01-02")
 	rows, err := a.DB.QueryContext(ctx, `SELECT id, substr(created_at,1,10) FROM runs WHERE set_id=? AND status='done' AND profile!='' AND created_at>=? ORDER BY created_at DESC`, s.ID, since)
 	if err != nil {
@@ -323,8 +375,16 @@ func (a *App) series(ctx context.Context, s sets.Set, lastDays int) (map[string]
 			}
 		}
 		for i := range days {
-			days[i].Rolling, days[i].Window = rolling(days, i)
-			days[i].RollingLo, days[i].RollingHi = band(days, i, days[i].Window, days[i].Rolling.Visible)
+			d := &days[i]
+			d.Rolling, d.Window = rolling(days, i, window)
+			d.WindowDays = window
+			d.Bands = Bands{
+				TopPick:     band(days, i, d.Window, d.Rolling.TopPick, topPick),
+				Recommended: band(days, i, d.Window, d.Rolling.Recommended, recommended),
+				Visible:     band(days, i, d.Window, d.Rolling.Visible, named),
+			}
+			d.RollingLo, d.RollingHi = d.Bands.Visible.Lo, d.Bands.Visible.Hi
+			d.Today = Bands{TopPick: FixedSet(d.cells(nil, nil, topPick)), Recommended: FixedSet(d.cells(nil, nil, recommended)), Visible: FixedSet(d.cells(nil, nil, named))}
 		}
 	}
 	return out, nil
@@ -336,7 +396,7 @@ func newDay(r *run.Run, brand config.Brand, date string, results []run.Result) d
 		Day:     Day{Date: date, RunID: r.ID, Method: r.Method, ConfigRev: r.ConfigRev, Rank: sum.BrandRank(), Rates: sum.Overall, Answers: sum.Done, Board: sum.Voice},
 		snap:    r.Snapshot,
 		prompts: map[string]string{}, texts: map[string]string{}, info: map[string]bool{}, models: map[string]string{}, samples: map[string]int{},
-		tallies: map[string]map[string]*report.Tally{},
+		tallies: map[string]map[string]*report.Tally{}, named: map[string]map[string]int{},
 	}
 	if len(sum.Voice) > 0 {
 		d.Leader = sum.Voice[0].Name
@@ -369,10 +429,39 @@ func newDay(r *run.Run, brand config.Brand, date string, results []run.Result) d
 			d.tallies[x.PromptID][x.Answerer] = t
 		}
 		t.Add(x.Grade, name, x.Info)
+		// Products named, counted as the share-of-voice board counts them: the brand by its
+		// verdict, everyone else by the grader's list.
+		if d.named[x.PromptID] == nil {
+			d.named[x.PromptID] = map[string]int{}
+		}
+		seen := map[string]bool{}
+		for _, n := range x.Grade.Named {
+			if k := strings.ToLower(n); !seen[k] && !isBrand(brand, n) {
+				seen[k] = true
+				d.named[x.PromptID][k]++
+			}
+		}
+		if x.Grade.Verdict != grade.Absent {
+			d.named[x.PromptID][strings.ToLower(name)]++
+		}
 	}
 	d.Prompts = len(d.prompts)
 	d.Mean = d.mean(nil, nil)
 	return d
+}
+
+// isBrand is whether a product the grader named is the brand, by its name or an alias, as the
+// share-of-voice board decides it.
+func isBrand(b config.Brand, n string) bool {
+	if strings.EqualFold(n, b.Name) {
+		return true
+	}
+	for _, a := range b.Aliases {
+		if strings.EqualFold(n, a) {
+			return true
+		}
+	}
+	return false
 }
 
 // mean is the per-prompt mean over the given prompts and answerers (nil: all of them). Info
@@ -410,6 +499,103 @@ func (d *dayData) mean(prompts, answerers map[string]bool) Mean {
 		m.TopPick, m.Recommended = m.TopPick/float64(sel), m.Recommended/float64(sel)
 	}
 	return m
+}
+
+// A metric is one rate's hits and denominator in a tally. Recommended and top pick are out of the
+// answers to prompts that ask for a choice.
+type metric func(report.Tally) Hits
+
+func named(t report.Tally) Hits       { return Hits{t.Vis, t.N} }
+func recommended(t report.Tally) Hits { return Hits{t.Rec, t.Sel} }
+func topPick(t report.Tally) Hits     { return Hits{t.Top, t.Sel} }
+
+// cells is m for each of the day's prompts in run order (nil prompts or answerers: all of them),
+// each over the given answerers' answers.
+func (d *dayData) cells(prompts, answerers map[string]bool, m metric) []Hits {
+	return cellsIn(d, d.order, prompts, answerers, m)
+}
+
+// tally is one prompt's answers over the given answerers (nil: all of them).
+func (d *dayData) tally(pid string, answerers map[string]bool) report.Tally {
+	var t report.Tally
+	for ans, x := range d.tallies[pid] {
+		if answerers == nil || answerers[ans] {
+			t = t.Plus(*x)
+		}
+	}
+	return t
+}
+
+// paired is the change in m from prev to d over the prompts in same, of the answerers in common.
+func paired(d, prev *dayData, same, common map[string]bool, m metric) Diff {
+	return PairedDiff(prev.cells(same, common, m), cellsIn(d, prev.order, same, common, m))
+}
+
+// cellsIn is d's cells in another day's prompt order, so they pair with that day's.
+func cellsIn(d *dayData, order []string, prompts, answerers map[string]bool, m metric) []Hits {
+	var out []Hits
+	for _, pid := range order {
+		if prompts == nil || prompts[pid] {
+			out = append(out, m(d.tally(pid, answerers)))
+		}
+	}
+	return out
+}
+
+// rankNoise is whether a rank move from prev to d could be chance. The rank is the brand's place
+// on the board, so it moves when another product crosses it; for each product that did, the gap
+// between them (brand share minus product share of a prompt's answers) is paired prompt by prompt
+// like any rate, its variance the sum of both shares' (their covariance is left out). The move is
+// within noise unless at least one crossing is significant in the direction it went.
+func rankNoise(d, prev *dayData) bool {
+	key := ""
+	count := func(b []report.Voice) (map[string]int, int) {
+		m, mine := map[string]int{}, 0
+		for _, v := range b {
+			m[strings.ToLower(v.Name)] = v.Answers
+			if v.IsBrand {
+				mine, key = v.Answers, strings.ToLower(v.Name)
+			}
+		}
+		return m, mine
+	}
+	now, mine := count(d.Board)
+	then, mineThen := count(prev.Board)
+	products := map[string]bool{}
+	for p := range now {
+		products[p] = true
+	}
+	for p := range then {
+		products[p] = true
+	}
+	for p := range products {
+		if p == key {
+			continue
+		}
+		above, aboveThen := now[p] > mine, then[p] > mineThen
+		if above == aboveThen {
+			continue
+		}
+		var ss []stratum
+		for _, pid := range prev.order {
+			n, np := d.tally(pid, nil).N, prev.tally(pid, nil).N
+			if n == 0 || np == 0 {
+				continue
+			}
+			us, them := Hits{d.named[pid][key], n}, Hits{d.named[pid][p], n}
+			usThen, themThen := Hits{prev.named[pid][key], np}, Hits{prev.named[pid][p], np}
+			ss = append(ss, stratum{(us.rate() - them.rate()) - (usThen.rate() - themThen.rate()),
+				us.variance() + them.variance() + usThen.variance() + themThen.variance()})
+		}
+		want := 1 // the brand passed p
+		if above {
+			want = -1
+		}
+		if combine(ss).Sign() == want {
+			return false
+		}
+	}
+	return true
 }
 
 // compare fills in d against prev, the day before it.
@@ -467,15 +653,17 @@ func compare(d, prev *dayData) {
 			same[id] = true
 		}
 	}
-	x, y := d.mean(same, common), prev.mean(same, common)
-	d.Compare = &Compare{Common: len(same), Of: len(d.prompts), Recommended: x.Recommended - y.Recommended, Visible: x.Visible - y.Visible}
+	vis, rec := paired(d, prev, same, common, named), paired(d, prev, same, common, recommended)
+	d.Compare = &Compare{Common: len(same), Of: len(d.prompts), Recommended: rec.D, Visible: vis.D,
+		VisibleMargin: vis.Margin, RecommendedMargin: rec.Margin, WithinNoise: vis.WithinNoise(), RecommendedWithinNoise: rec.WithinNoise()}
 	if !c.PromptsChanged() && len(c.AnswerersAdded)+len(c.AnswerersRemoved) == 0 && d.Rank > 0 && prev.Rank > 0 {
 		d.DeltaRank = prev.Rank - d.Rank
+		d.RankWithinNoise = d.DeltaRank != 0 && rankNoise(d, prev)
 	}
 }
 
-// rolling averages days[i] with the days before it within a week, up to a change of method.
-func rolling(days []dayData, i int) (Mean, int) {
+// rolling averages days[i] with the days before it within window days, up to a change of method.
+func rolling(days []dayData, i, window int) (Mean, int) {
 	end, err := time.Parse("2006-01-02", days[i].Date)
 	if err != nil {
 		return days[i].Mean, 1
@@ -484,7 +672,7 @@ func rolling(days []dayData, i int) (Mean, int) {
 	n := 0
 	for j := i; j < len(days); j++ {
 		t, _ := time.Parse("2006-01-02", days[j].Date)
-		if end.Sub(t) >= 7*24*time.Hour {
+		if end.Sub(t) >= time.Duration(window)*24*time.Hour {
 			break
 		}
 		m.TopPick += days[j].Mean.TopPick
@@ -498,35 +686,18 @@ func rolling(days []dayData, i int) (Mean, int) {
 	return Mean{m.TopPick / float64(n), m.Recommended / float64(n), m.Visible / float64(n)}, n
 }
 
-// band is a 95% interval for the visible rate over days[i] and the window-1 days before it: the
-// mean ± 1.96 standard errors over every prompt-day's rate.
-func band(days []dayData, i, window int, mean float64) (float64, float64) {
+// band is a 95% interval for rate m over days[i] and the n-1 days before it, from how much
+// prompt-days vary (AcrossPrompts).
+func band(days []dayData, i, n int, mean float64, m metric) Interval {
 	var xs []float64
-	for j := i; j < i+window && j < len(days); j++ {
-		for _, pid := range days[j].order { // in order, so the sums come out the same every time
-			byAnswerer := days[j].tallies[pid]
-			var vis, n int
-			for _, t := range byAnswerer {
-				vis, n = vis+t.Vis, n+t.N
-			}
-			if n > 0 {
-				xs = append(xs, float64(vis)/float64(n))
+	for j := i; j < i+n && j < len(days); j++ {
+		for _, c := range days[j].cells(nil, nil, m) { // in order, so the sums come out the same every time
+			if c.N > 0 {
+				xs = append(xs, c.rate())
 			}
 		}
 	}
-	if len(xs) < 2 {
-		return mean, mean
-	}
-	var m, ss float64
-	for _, x := range xs {
-		m += x
-	}
-	m /= float64(len(xs))
-	for _, x := range xs {
-		ss += (x - m) * (x - m)
-	}
-	se := math.Sqrt(ss/float64(len(xs)-1)) / math.Sqrt(float64(len(xs)))
-	return math.Max(0, mean-1.96*se), math.Min(1, mean+1.96*se)
+	return AcrossPrompts(xs, mean)
 }
 
 func competitors(s run.Snapshot) []string {
@@ -564,19 +735,22 @@ func diff(now, before []string) (added, removed []string) {
 
 // Rankings is each set's day-by-day series per track, across prompt changes: a day records what
 // changed since the one before and compares with it over what both asked. A change in how
-// answers are asked or graded starts over (NewMethod).
-func (a *App) Rankings(ctx context.Context, lastDays int, only string) ([]Ranking, error) {
+// answers are asked or graded starts over (NewMethod). Rolling means and bands are over window
+// days (Window).
+func (a *App) Rankings(ctx context.Context, lastDays, window int, only string) ([]Ranking, error) {
+	window = Window(window)
 	var out []Ranking
 	for _, s := range a.Sets() {
 		if only != "" && s.ID != only {
 			continue
 		}
-		byTrack, err := a.series(ctx, s, lastDays)
+		byTrack, err := a.series(ctx, s, lastDays, window)
 		if err != nil {
 			return nil, err
 		}
+		marks := a.attemptMarks(ctx, s.ID)
 		for _, track := range []string{"search", "recall"} {
-			rk := Ranking{SetID: s.ID, SetName: s.Name, Tier: string(s.Tier), Track: track, Days: []Day{}}
+			rk := Ranking{SetID: s.ID, SetName: s.Name, Tier: string(s.Tier), Track: track, Days: []Day{}, Attempts: marks}
 			for _, d := range byTrack[track] {
 				rk.Days = append(rk.Days, d.Day)
 			}
@@ -586,6 +760,31 @@ func (a *App) Rankings(ctx context.Context, lastDays int, only string) ([]Rankin
 		}
 	}
 	return out, nil
+}
+
+// attemptMarks is the set's attempts as days on its trend: the day each was proposed and, once
+// accepted, the day it was (its last update). Withdrawn ones are left out. Read straight from the
+// table: a chart doesn't need their outcomes.
+func (a *App) attemptMarks(ctx context.Context, setID string) []AttemptMark {
+	rows, err := a.DB.QueryContext(ctx, `SELECT fix, url, state, created_at, updated_at FROM fix_attempts WHERE set_id=? AND state<>? ORDER BY created_at, id`, setID, Withdrawn)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var out []AttemptMark
+	for rows.Next() {
+		var fix, link, state, created, updated string
+		if rows.Scan(&fix, &link, &state, &created, &updated) != nil {
+			continue
+		}
+		var f analysis.Fix
+		json.Unmarshal([]byte(fix), &f)
+		out = append(out, AttemptMark{Date: created[:min(10, len(created))], State: Proposed, Title: f.Title, URL: link})
+		if state == Accepted {
+			out = append(out, AttemptMark{Date: updated[:min(10, len(updated))], State: Accepted, Title: f.Title, URL: link})
+		}
+	}
+	return out
 }
 
 // Cell is one prompt on one day: how its answers went, and whether it was worded differently
@@ -611,19 +810,28 @@ type PromptLine struct {
 	Text    string `json:"text"`
 	Current bool   `json:"current"` // still in the set
 	Cells   []Cell `json:"cells"`   // one per day, newest first
+	// The prompt's answers pooled over the days in the window, back from the newest, as long as
+	// they were asked and graded the same way and the prompt worded as on the newest day it was
+	// asked; with Wilson 95% intervals. Recommended is empty for an info prompt.
+	Named       report.Rate `json:"named"`
+	Recommended report.Rate `json:"recommended"`
+	PooledDays  int         `json:"pooled_days"`
 }
 
 type PromptHistory struct {
 	Track string       `json:"track"`
 	Days  []HistoryDay `json:"days"`
 	Rows  []PromptLine `json:"rows"`
+	// The window Named and Recommended are pooled over, in days.
+	Window int `json:"window"`
 }
 
 // History is each prompt's results day by day on one track: the set's prompts today in order,
-// then prompts it has since dropped.
-func (a *App) History(ctx context.Context, s sets.Set, track string, lastDays int) (PromptHistory, error) {
-	h := PromptHistory{Track: track, Days: []HistoryDay{}, Rows: []PromptLine{}}
-	byTrack, err := a.series(ctx, s, lastDays)
+// then prompts it has since dropped. Each prompt's rates are pooled over window days (Window).
+func (a *App) History(ctx context.Context, s sets.Set, track string, lastDays, window int) (PromptHistory, error) {
+	window = Window(window)
+	h := PromptHistory{Track: track, Days: []HistoryDay{}, Rows: []PromptLine{}, Window: window}
+	byTrack, err := a.series(ctx, s, lastDays, window)
 	if err != nil {
 		return h, err
 	}
@@ -651,6 +859,7 @@ func (a *App) History(ctx context.Context, s sets.Set, track string, lastDays in
 			}
 			l.Cells = append(l.Cells, c)
 		}
+		l.Named, l.Recommended, l.PooledDays = pooled(days, id, window)
 		return l
 	}
 	current := map[string]bool{}
@@ -667,4 +876,117 @@ func (a *App) History(ctx context.Context, s sets.Set, track string, lastDays in
 		}
 	}
 	return h, nil
+}
+
+// pooled is prompt id's named and recommended rates over the days (newest first) within window
+// days of the newest one that asked it, stopping at a change of method or of the prompt's wording
+// or intent, and how many days that pooled.
+func pooled(days []dayData, id string, window int) (report.Rate, report.Rate, int) {
+	var t report.Tally
+	var end time.Time
+	sha, info, n := "", false, 0
+	for j := range days {
+		d := &days[j]
+		s, ok := d.prompts[id]
+		if !ok {
+			if d.NewMethod && n > 0 {
+				break
+			}
+			continue
+		}
+		at, _ := time.Parse("2006-01-02", d.Date)
+		if n == 0 {
+			end, sha, info = at, s, d.info[id]
+		} else if s != sha || d.info[id] != info || end.Sub(at) >= time.Duration(window)*24*time.Hour {
+			break
+		}
+		t = t.Plus(d.tally(id, nil))
+		n++
+		if d.NewMethod {
+			break // the day before this one was measured differently
+		}
+	}
+	r := t.Rates()
+	if info {
+		r.Recommended = report.Rate{}
+	}
+	return r.Visible, r.Recommended, n
+}
+
+// SampleAdvice says whether a set's extra samples per prompt are paying for themselves, from the
+// split of its per-prompt named rates' variance (SplitVariance) over recent runs.
+type SampleAdvice struct {
+	VarianceSplit
+	Samples int    `json:"samples"` // the most samples any answerer took per prompt
+	Text    string `json:"text,omitempty"`
+}
+
+// Advice thresholds: enough history to estimate the split, and the widening (VarianceSplit) below
+// which the extra samples are buying little.
+const (
+	adviceDays     = 28
+	adviceMinRuns  = 4
+	adviceMinCells = 6
+	adviceLittle   = 1.25
+)
+
+// SampleAdvice estimates, for a set that asks some answerer more than one sample per prompt, how
+// much of the run-to-run variance of each prompt's named rate is sampling within a run (which
+// more samples reduce) and how much drift between runs (which they don't), over the same-method
+// days of the last four weeks. Cells are prompt x answerer x track, each with the same samples on
+// every day it counts. Text is empty without enough history.
+func (a *App) SampleAdvice(ctx context.Context, s sets.Set) SampleAdvice {
+	var out SampleAdvice
+	byTrack, err := a.series(ctx, s, adviceDays, Windows[0])
+	if err != nil {
+		return out
+	}
+	var cells [][]Hits
+	for _, track := range []string{"search", "recall"} {
+		days := byTrack[track]
+		if len(days) == 0 {
+			continue
+		}
+		byCell := map[[3]string][]Hits{}
+		var order [][3]string
+		for j := range days {
+			d := &days[j]
+			for _, pid := range d.order {
+				for ans, t := range d.tallies[pid] {
+					if d.samples[ans] < 2 || t.N != d.samples[ans] {
+						continue // one sample, or not every sample graded
+					}
+					k := [3]string{pid, ans, d.prompts[pid]}
+					if xs := byCell[k]; len(xs) > 0 && xs[0].N != t.N {
+						continue
+					}
+					if byCell[k] == nil {
+						order = append(order, k)
+					}
+					byCell[k] = append(byCell[k], Hits{t.Vis, t.N})
+					out.Samples = max(out.Samples, t.N)
+				}
+			}
+			if d.NewMethod {
+				break
+			}
+		}
+		for _, k := range order {
+			cells = append(cells, byCell[k])
+		}
+	}
+	out.VarianceSplit = SplitVariance(cells)
+	// No variance at all (the brand always or never named) says nothing about samples either way.
+	if out.Runs < adviceMinRuns || out.Cells < adviceMinCells || out.Within+out.Between == 0 {
+		return out
+	}
+	w := out.Widening()
+	if w < adviceLittle {
+		out.Text = fmt.Sprintf("Extra samples are buying little precision: between-run drift dominates (%.0f%% of the variance at %d samples); samples=1 would give about the same band (%.2f× as wide).",
+			100*out.Between/(out.Within+out.Between), out.Samples, w)
+	} else {
+		out.Text = fmt.Sprintf("The samples are paying off: sampling within a run is %.0f%% of the variance at %d samples; samples=1 would make the band about %.1f× as wide.",
+			100*out.Within/(out.Within+out.Between), out.Samples, w)
+	}
+	return out
 }

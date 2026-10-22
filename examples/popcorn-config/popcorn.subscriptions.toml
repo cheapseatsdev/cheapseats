@@ -83,38 +83,55 @@ samples = { search = 2, recall = 1 }
 
 # Competitors the grader folds onto one canonical name in every prompt set, so share of voice counts
 # "Peec" and "peec.ai" as Peec AI. A set can add its own [[competitors]], and its entry for the same
-# name wins. Adding one is noted on the trend; it never restarts it.
+# name wins. Adding one is noted on the trend; it never restarts it. Domains are the competitor's
+# own sites: the run page counts pages on them as the competitor's, and changing them changes no
+# trend.
 [[competitors]]
 name = "Profound"
 aliases = ["tryprofound", "Profound AI"]
+domains = ["tryprofound.com"]
 
 [[competitors]]
 name = "Peec AI"
 aliases = ["Peec", "peec.ai"]
+domains = ["peec.ai"]
 
 [[competitors]]
 name = "Otterly.AI"
 aliases = ["Otterly", "OtterlyAI"]
+domains = ["otterly.ai"]
 
 [[competitors]]
 name = "Gauge"
 aliases = ["withgauge", "withgauge.com"]
+domains = ["withgauge.com"]
 
 [[competitors]]
 name = "Dageno AI"
 aliases = ["Dageno", "dageno.ai"]
+domains = ["dageno.ai"]
 
 [[competitors]]
 name = "AI Peekaboo"
 aliases = ["Peekaboo", "aipeekaboo"]
+domains = ["aipeekaboo.com"]
 
 [[competitors]]
 name = "Semrush AI Toolkit"
 aliases = ["Semrush"]
+domains = ["semrush.com"]
 
 [[competitors]]
 name = "Ahrefs Brand Radar"
 aliases = ["Ahrefs"]
+domains = ["ahrefs.com"]
+
+# How the run page sorts the hosts answers draw on: own (the brand's sites), competitor (their
+# domains), ugc, review, reference, institutional or editorial, from a built-in list. Put a host in
+# another class here; it wins over the list.
+# [sources]
+# ugc = ["community.example.com"]
+# editorial = ["medium.com"]
 
 # The grader and the analyst go through the API. With provider = "claude-code" they run on the local
 # claude CLI and your Claude subscription instead; with the subscription answerers above too, a

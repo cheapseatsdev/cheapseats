@@ -11,6 +11,7 @@ import (
 
 	"github.com/metcalfc/popcorn/internal/answer"
 	"github.com/metcalfc/popcorn/internal/config"
+	"github.com/metcalfc/popcorn/internal/grade"
 	"github.com/metcalfc/popcorn/internal/llm"
 	"github.com/metcalfc/popcorn/internal/run"
 	"github.com/metcalfc/popcorn/internal/sets"
@@ -193,7 +194,7 @@ func triedText(brand string, tried []Tried) string {
 	for _, t := range tried {
 		fmt.Fprintf(&b, "- %s | %s | %s | %s | %s\n", t.Title, t.Target, t.URL, t.State, t.Outcome)
 	}
-	b.WriteString("Don't propose one of these again unchanged. Where the prompts still lose, propose what would work instead and say in the claim why the attempt fell short (not crawled yet, wrong page, the claim missing). Where it's pending, give it time: propose it again only if the data shows a different gap.\n")
+	b.WriteString("Don't propose one of these again unchanged. Where the prompts still lose, propose what would work instead and say in the claim why the attempt fell short (not crawled yet, wrong page, the claim missing). Where it's pending or too early, give it time: propose it again only if the data shows a different gap. \"No detectable change\" means within the noise of the answers so far, not shown not to work.\n")
 	return b.String()
 }
 
@@ -228,6 +229,7 @@ Public facts you may rely on: %[4]s
 %[1]s's own sites: %[8]s
 
 Below are graded answers to %[5]d buyer questions in the category "%[6]s", from several AI assistants, with and without web search.
+Each prompt's first line counts its answers that named %[1]s and that recommended it; with this few answers a prompt's count is noisy (one answer more or less is a big swing), so trust a pattern across several prompts over any single prompt's count.
 Prompts marked (info) ask for an explanation or a how-to, not a choice: a good answer may recommend no product, so "not recommended" there is not a loss. What counts on them is whether %[1]s is named or its pages are cited while the topic is explained; the loss is a competitor or third-party page being the source instead. Don't count info prompts in "Why %[1]s lost"; their fixes are usually the guide or reference page that answers the question.
 
 1. insights: a concise markdown report for the %[1]s team, no preamble, with these sections:
@@ -254,6 +256,7 @@ Every field must be executable by someone who hasn't read the data:
 Don't propose generic marketing, brand campaigns, or anything you can't point at a prompt for.
 %[9]s
 %[7]s`, brand, domain, cfg.Brand.About, facts, len(set.Prompts), set.Name, body, sites, triedText(brand, tried))
+	prompt += siteFindingsText(ctx, brand)
 
 	var a Analysis
 	cost := 0.0
@@ -303,10 +306,19 @@ func results2text(brand config.Brand, set sets.Set, results []run.Result) string
 		if len(rs) == 0 {
 			continue
 		}
+		named, rec := 0, 0
+		for _, r := range rs {
+			if r.Grade.Verdict != grade.Absent {
+				named++
+			}
+			if r.Grade.Verdict == grade.Recommended {
+				rec++
+			}
+		}
 		if p.Info() {
-			fmt.Fprintf(&b, "### Prompt %d (info): %s\n", i+1, p.Text)
+			fmt.Fprintf(&b, "### Prompt %d (info): %s\nnamed %d/%d\n", i+1, p.Text, named, len(rs))
 		} else {
-			fmt.Fprintf(&b, "### Prompt %d: %s\n", i+1, p.Text)
+			fmt.Fprintf(&b, "### Prompt %d: %s\nnamed %d/%d, recommended %d/%d\n", i+1, p.Text, named, len(rs), rec, len(rs))
 		}
 		for _, r := range rs {
 			g := r.Grade
@@ -452,3 +464,26 @@ func Markdown(set sets.Set, fixes []Fix) string {
 }
 
 func Decode(s string) []Fix { var f []Fix; json.Unmarshal([]byte(s), &f); return f }
+
+type siteFindingsKey struct{}
+
+// WithSiteFindings gives Build the latest site audit's errors and warnings for the brand's sites
+// (audit.Finding.String, one per line), as more evidence beside the answers.
+func WithSiteFindings(ctx context.Context, findings []string) context.Context {
+	return context.WithValue(ctx, siteFindingsKey{}, findings)
+}
+
+// siteFindingsText lists the site audit's findings for the analyst, or "" when there are none.
+func siteFindingsText(ctx context.Context, brand string) string {
+	f, _ := ctx.Value(siteFindingsKey{}).([]string)
+	if len(f) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "\nThe latest audit of %s's own sites (plain HTTP, as a crawler that runs no JavaScript sees them) found these errors and warnings:\n", brand)
+	for _, x := range f {
+		fmt.Fprintf(&b, "- %s\n", x)
+	}
+	b.WriteString("Use them as evidence where one explains why a page of ours wasn't surfaced or cited for a prompt (blocked crawlers, a page empty without JavaScript, noindex), and name the check in the claim. Don't propose a fix for a finding no prompt points at.\n")
+	return b.String()
+}

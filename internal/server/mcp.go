@@ -12,6 +12,8 @@ import (
 
 	"github.com/metcalfc/popcorn/internal/analysis"
 	"github.com/metcalfc/popcorn/internal/app"
+	"github.com/metcalfc/popcorn/internal/audit"
+	"github.com/metcalfc/popcorn/internal/crawl"
 	"github.com/metcalfc/popcorn/internal/opinion"
 	"github.com/metcalfc/popcorn/internal/probe"
 	"github.com/metcalfc/popcorn/internal/report"
@@ -87,7 +89,7 @@ func (s *Server) mcpHandler() http.Handler {
 			}
 			return out, nil
 		})
-	addTool(srv, "get_run", "One run: rates per answerer and track, share of voice, top pages, the fix list, net sentiment with top praise and objections, the run's themes, and one line per prompt. Use get_result for a full answer.",
+	addTool(srv, "get_run", "One run: rates per answerer and track (and without branded prompts), share of voice with positions, head to head, objections, sources by kind and host, an outreach list of hosts cited without the brand, the brand's pages found but not cited, the fix list, net sentiment with top praise and objections, the run's themes, and one line per prompt. Use get_result for a full answer.",
 		func(ctx context.Context, a runArg) (any, error) {
 			d, err := s.runData(ctx, a.Run)
 			if err != nil {
@@ -182,15 +184,16 @@ func (s *Server) mcpHandler() http.Handler {
 			res, err := s.probe(ctx, a)
 			return res, err
 		})
-	addTool(srv, "get_rankings", "The brand's daily share-of-voice rank and rates in each prompt set, with day-over-day change.",
+	addTool(srv, "get_rankings", "The brand's daily share-of-voice rank and rates in each prompt set, with rolling averages and 95% bands, and day-over-day change with its margin (within_noise when it could be chance).",
 		func(ctx context.Context, a struct {
 			Set      string `json:"set,omitempty" jsonschema:"only this prompt set"`
 			LastDays int    `json:"last_days,omitempty" jsonschema:"default 30"`
+			Window   int    `json:"window,omitempty" jsonschema:"rolling window in days: 7 (default), 14 or 28"`
 		}) (any, error) {
 			if a.LastDays <= 0 {
 				a.LastDays = 30
 			}
-			rk, err := s.App.Rankings(ctx, a.LastDays, a.Set)
+			rk, err := s.App.Rankings(ctx, a.LastDays, a.Window, a.Set)
 			return rk, err
 		})
 	addTool(srv, "suggest_prompts", "Draft new buyer questions for a prompt set, across funnel stages, as a TOML snippet in the set file's format, with repeats of existing prompts dropped. Costs one analyst model call (nothing on the claude-code provider). Writes nothing: paste the snippet into the set's file by pull request.",
@@ -206,6 +209,90 @@ func (s *Server) mcpHandler() http.Handler {
 	addTool(srv, "cancel_run", "Stop an in-progress run. Finished answers are kept; retry from the web UI to finish it.",
 		func(ctx context.Context, a runArg) (any, error) {
 			return map[string]bool{"cancelled": s.App.Runs.Cancel(a.Run)}, nil
+		})
+	addTool(srv, "get_search_queries", "The web searches the assistants ran in a run's search-track answers: per prompt how many answers searched and with what queries, the top queries with whether their results reached the brand's sites or named competitors, names the assistants added to searches the prompt didn't have, the words they add, and queries worth adding as prompts (a TOML entry to paste). From stored answers; costs nothing.",
+		func(ctx context.Context, a struct {
+			Run   string `json:"run" jsonschema:"run id"`
+			Pool  bool   `json:"pool,omitempty" jsonschema:"also read the set's earlier finished runs asked and graded the same way (up to 7 runs)"`
+			Limit int    `json:"limit,omitempty" jsonschema:"rows per list (default 15)"`
+		}) (any, error) {
+			d, err := s.searchData(ctx, a.Run, a.Pool)
+			if err != nil {
+				return nil, err
+			}
+			return searchDigest(d, a.Limit), nil
+		})
+	addTool(srv, "audit_sites", "Audit the brand's sites for AI crawlers, free (plain HTTP, no model calls): robots.txt and firewall blocks per AI crawler, llms.txt, the sitemap, and each page's title, description, H1, lang, noindex, canonical, JSON-LD, Open Graph and whether it renders without JavaScript. Returns the errors and warnings with a fix for each.",
+		func(ctx context.Context, a struct {
+			Site   string `json:"site,omitempty" jsonschema:"audit only this one of the brand's sites (as listed in its config); default all of them"`
+			Cached bool   `json:"cached,omitempty" jsonschema:"return the latest kept audit instead of running one"`
+			Info   bool   `json:"info,omitempty" jsonschema:"include info findings (often a choice, like blocking training crawlers)"`
+		}) (any, error) {
+			var res *audit.Result
+			if a.Cached {
+				latest, err := s.App.LatestAudit(ctx)
+				if err != nil {
+					return nil, err
+				}
+				if latest == nil {
+					return nil, errors.New("no audit yet; call again without cached")
+				}
+				res = latest
+			} else {
+				var sites []string
+				if a.Site != "" {
+					// Only the brand's own sites: anything else is for the CLI, run by someone at
+					// the machine, not a request that can make this server fetch any address.
+					if !s.App.IsBrandSite(a.Site) {
+						return nil, fmt.Errorf("%q isn't one of the brand's sites (%s); audit other sites with popcorn audit on the command line", a.Site, strings.Join(s.App.AuditSites(), ", "))
+					}
+					sites = []string{a.Site}
+				}
+				r, err := s.App.Audit(ctx, sites, audit.Options{})
+				if err != nil {
+					return nil, err
+				}
+				res = &r
+			}
+			return auditDigest(res, a.Info), nil
+		})
+	addTool(srv, "check_citations", "For a run, fetch the third-party pages its answers cited most (free, plain HTTP; each page at most once a day) and say which name the brand and which competitors. Pages naming competitors but not the brand are outreach targets.",
+		func(ctx context.Context, a struct {
+			Run    string `json:"run" jsonschema:"run id, from list_runs"`
+			Limit  int    `json:"limit,omitempty" jsonschema:"how many of the most-cited pages (default 25)"`
+			Cached bool   `json:"cached,omitempty" jsonschema:"return the run's latest check instead of running one"`
+		}) (any, error) {
+			if a.Cached {
+				c, err := s.App.CitationCheck(ctx, a.Run)
+				if err == nil && c == nil {
+					err = fmt.Errorf("run %s hasn't been checked; call again without cached", a.Run)
+				}
+				return c, err
+			}
+			c, err := s.App.CheckCitations(ctx, a.Run, a.Limit, audit.CiteOptions{})
+			return c, err
+		})
+	addTool(srv, "get_crawlers", "AI crawler fetches and AI-referred visits per page of the brand's, from imported access logs (by user agent only, unverified), beside how often the latest runs cited and surfaced each page. Flags pages crawled but never cited, and cited but never fetched by an assistant or AI search crawler.",
+		func(ctx context.Context, a struct {
+			LastDays int    `json:"last_days,omitempty" jsonschema:"default 30"`
+			Flag     string `json:"flag,omitempty" jsonschema:"only pages flagged crawled-not-cited or cited-not-crawled"`
+			Limit    int    `json:"limit,omitempty" jsonschema:"at most this many pages (default 30)"`
+		}) (any, error) {
+			rep, err := s.App.Crawlers(ctx, a.LastDays)
+			if err != nil {
+				return nil, err
+			}
+			if a.Limit <= 0 {
+				a.Limit = 30
+			}
+			pages := []crawl.PageRow{}
+			for _, p := range rep.Pages {
+				if (a.Flag == "" || p.Flag == a.Flag) && len(pages) < a.Limit {
+					pages = append(pages, p)
+				}
+			}
+			rep.Pages = pages
+			return rep, nil
 		})
 
 	h := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return srv }, nil)
@@ -294,12 +381,13 @@ func runDigest(d *RunData) any {
 		Named       string         `json:"named"`
 		TopPicks    []report.Count `json:"top_picks"`
 		FirstParty  bool           `json:"first_party_page_surfaced"`
-		Results     []string       `json:"results"` // "id answerer/track: verdict"
+		Branded     bool           `json:"branded,omitempty"` // names the brand: left out of unbranded
+		Results     []string       `json:"results"`           // "id answerer/track: verdict"
 	}
 	sum := d.Summary
 	prompts := []prompt{}
 	for _, p := range sum.Prompts {
-		row := prompt{N: p.Idx + 1, Prompt: p.Prompt, TopPicks: p.TopPicks, FirstParty: p.FirstHand,
+		row := prompt{N: p.Idx + 1, Prompt: p.Prompt, TopPicks: p.TopPicks, FirstParty: p.FirstHand, Branded: p.Branded,
 			Named: fmt.Sprintf("%d/%d", p.Rates.Visible.Hits, p.Rates.Visible.N)}
 		if p.Info {
 			row.Intent = "info"
@@ -318,27 +406,76 @@ func runDigest(d *RunData) any {
 		}
 		prompts = append(prompts, row)
 	}
-	voice, pages := sum.Voice, sum.Pages
-	if len(voice) > 10 {
-		voice = voice[:10]
-	}
-	if len(pages) > 15 {
-		pages = pages[:15]
+	voice, pages := head(sum.Voice, 10), head(sum.Pages, 15)
+	uncited := []string{}
+	for _, p := range head(sum.Uncited, 10) {
+		uncited = append(uncited, p.URL)
 	}
 	fixes := d.Fixes
 	if fixes == nil {
 		fixes = []analysis.Fix{}
 	}
 	return struct {
-		Run      *run.Run       `json:"run"`
-		Overall  report.Rates   `json:"overall"`
-		Slices   []report.Slice `json:"slices"`
-		Rank     int            `json:"share_of_voice_rank"`
-		Voice    []report.Voice `json:"share_of_voice"`
-		Pages    []report.Page  `json:"top_pages"`
-		Fixes    []analysis.Fix `json:"fixes"`
-		Insights string         `json:"insights"`
-		Opinion  opinion.Report `json:"opinion"`
-		Prompts  []prompt       `json:"prompts"`
-	}{d.Run, sum.Overall, sum.Slices, sum.BrandRank(), voice, pages, fixes, d.Insights, d.Opinion, prompts}
+		Run     *run.Run       `json:"run"`
+		Overall report.Rates   `json:"overall"`
+		Slices  []report.Slice `json:"slices"`
+		// Overall without the prompts that name the brand: the headline.
+		Unbranded      report.Rates        `json:"unbranded"`
+		BrandedPrompts int                 `json:"branded_prompts"`
+		Rank           int                 `json:"share_of_voice_rank"`
+		Voice          []report.Voice      `json:"share_of_voice"`
+		HeadToHead     []report.HeadToHead `json:"head_to_head"`
+		Objections     []report.Objection  `json:"top_objections"`
+		Classes        []report.ClassUse   `json:"source_classes"`
+		Hosts          []report.HostUse    `json:"top_hosts"`
+		Outreach       []report.Outreach   `json:"outreach"`
+		Uncited        []string            `json:"found_not_cited"`
+		Pages          []report.Page       `json:"top_pages"`
+		Fixes          []analysis.Fix      `json:"fixes"`
+		Insights       string              `json:"insights"`
+		Opinion        opinion.Report      `json:"opinion"`
+		Prompts        []prompt            `json:"prompts"`
+	}{d.Run, sum.Overall, sum.Slices, sum.Unbranded, sum.BrandedPrompts, sum.BrandRank(), voice, head(sum.HeadToHead, 10), head(sum.Objections, 10),
+		sum.Classes, head(sum.Hosts, 10), head(sum.Outreach, 10), uncited, pages, fixes, d.Insights, d.Opinion, prompts}
+}
+
+// auditDigest is audit_sites' answer: each site in a line or two, and the findings without info
+// unless asked.
+func auditDigest(r *audit.Result, info bool) any {
+	type site struct {
+		Site        string   `json:"site"`
+		Robots      int      `json:"robots_status"`
+		LLMs        int      `json:"llms_status,omitempty"`
+		SitemapURLs int      `json:"sitemap_urls"`
+		Newest      string   `json:"sitemap_newest,omitempty"`
+		Pages       int      `json:"pages_checked"`
+		Blocked     []string `json:"blocked"` // "GPTBot (training): robots.txt"
+	}
+	sites := []site{}
+	for _, x := range r.Sites {
+		st := site{Site: x.Site, Robots: x.RobotsStatus, LLMs: x.LLMsStatus, SitemapURLs: x.SitemapURLs, Newest: x.Newest, Pages: len(x.Pages), Blocked: []string{}}
+		for _, b := range x.Bots {
+			if !b.Allowed {
+				st.Blocked = append(st.Blocked, fmt.Sprintf("%s (%s): robots.txt", b.Bot, b.Class))
+			}
+			if b.Blocked {
+				st.Blocked = append(st.Blocked, fmt.Sprintf("%s (%s): firewall %d", b.Bot, b.Class, b.Status))
+			}
+		}
+		sites = append(sites, st)
+	}
+	findings := []audit.Finding{}
+	for _, f := range r.Findings {
+		if info || f.Severity != audit.Info {
+			findings = append(findings, f)
+		}
+	}
+	return struct {
+		At       string          `json:"at"`
+		Errors   int             `json:"errors"`
+		Warnings int             `json:"warnings"`
+		Info     int             `json:"info"`
+		Sites    []site          `json:"sites"`
+		Findings []audit.Finding `json:"findings"`
+	}{r.At, r.Errors(), r.Warnings(), r.Infos(), sites, findings}
 }

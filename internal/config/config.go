@@ -30,6 +30,10 @@ type Config struct {
 	// Competitors every prompt set folds names onto, so a list shared by all sets is written
 	// once. A set's own [[competitors]] entry for the same name wins.
 	Competitors []sets.Competitor `toml:"competitors"`
+	// Overrides for the classes the run page sorts sources into, as class -> hosts or host/path
+	// prefixes: [sources] ugc = ["community.example.com"]. They win over the built-in lists; the
+	// brand's sites are always "own" and competitors' domains always "competitor".
+	Sources map[string][]string `toml:"sources"`
 	// The directory popcorn.toml was read from: prompt sets live beside it.
 	Dir string `toml:"-"`
 	// The config repo's commit, if known (see Revision).
@@ -70,6 +74,9 @@ type Site struct {
 }
 
 var SiteKinds = []string{"marketing", "docs", "blog", "community", "code", "other"}
+
+// SourceClasses are the classes [sources] may put a host in.
+var SourceClasses = []string{"ugc", "review", "reference", "institutional", "editorial"}
 
 type Answerer struct {
 	// Permanent: results and rankings key on it. A new model gets a new id.
@@ -235,6 +242,30 @@ func Load(path string) (*Config, error) {
 			return nil, fmt.Errorf("%s: competitor %q is listed twice or is the brand", path, comp.Name)
 		}
 		names[n] = true
+		if err := comp.CheckDomains(); err != nil {
+			return nil, fmt.Errorf("%s: %w", path, err)
+		}
+		for _, d := range comp.Domains {
+			if c.Brand.FirstParty(d) {
+				return nil, fmt.Errorf("%s: competitor %q: domain %s is one of the brand's sites", path, comp.Name, d)
+			}
+		}
+	}
+	placed := map[string]string{}
+	for class, hosts := range c.Sources {
+		if !slices.Contains(SourceClasses, class) {
+			return nil, fmt.Errorf("%s: sources.%s: class must be one of %s", path, class, strings.Join(SourceClasses, ", "))
+		}
+		for _, h := range hosts {
+			k := cleanSite(h)
+			if k == "" || strings.ContainsAny(k, " \t") {
+				return nil, fmt.Errorf("%s: sources.%s: %q is not a host or host/path", path, class, h)
+			}
+			if prev, dup := placed[k]; dup && prev != class {
+				return nil, fmt.Errorf("%s: sources: %s is in both %s and %s", path, h, prev, class)
+			}
+			placed[k] = class
+		}
 	}
 	seen := map[string]bool{}
 	for _, a := range c.Answerers {
@@ -402,27 +433,37 @@ func (b Brand) AllSites() []Site {
 // SiteOf is the brand's site a URL is on: the most specific match, so docs.example.com wins over
 // example.com for a docs page.
 func (b Brand) SiteOf(url string) (Site, bool) {
-	u := cleanSite(url)
 	best, bestLen := Site{}, -1
 	for _, s := range b.AllSites() {
-		d := cleanSite(s.URL)
-		if d == "" {
-			continue
-		}
-		match := u == d || strings.HasPrefix(u, d+"/") || strings.HasPrefix(u, d+"?") || strings.HasPrefix(u, d+"#")
-		// Subdomains of a bare host count too (docs.example.com under example.com).
-		if !match && !strings.Contains(d, "/") {
-			host := u
-			if i := strings.IndexAny(host, "/?#"); i >= 0 {
-				host = host[:i]
-			}
-			match = strings.HasSuffix(host, "."+d)
-		}
-		if match && len(d) > bestLen {
-			best, bestLen = s, len(d)
+		if n := MatchSite(s.URL, url); n > bestLen {
+			best, bestLen = s, n
 		}
 	}
 	return best, bestLen >= 0
+}
+
+// MatchSite reports how specifically a site (a host, which covers its subdomains, or a host/path
+// prefix) matches a URL: the length of the site as written without scheme or www., or -1 when the
+// URL isn't on it. The longest match is the most specific.
+func MatchSite(site, url string) int {
+	d := cleanSite(site)
+	if d == "" {
+		return -1
+	}
+	u := cleanSite(url)
+	match := u == d || strings.HasPrefix(u, d+"/") || strings.HasPrefix(u, d+"?") || strings.HasPrefix(u, d+"#")
+	// Subdomains of a bare host count too (docs.example.com under example.com).
+	if !match && !strings.Contains(d, "/") {
+		host := u
+		if i := strings.IndexAny(host, "/?#"); i >= 0 {
+			host = host[:i]
+		}
+		match = strings.HasSuffix(host, "."+d)
+	}
+	if !match {
+		return -1
+	}
+	return len(d)
 }
 
 // FirstParty reports whether a URL is on one of the brand's sites.

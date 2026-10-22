@@ -99,6 +99,8 @@ func New(a *app.App) (*Server, error) {
 			}
 			return fmt.Sprintf("%+.0f pts", 100*d)
 		},
+		// A change's 95% margin, in points.
+		"margin": func(m float64) string { return fmt.Sprintf("±%.0f pts", 100*m) },
 		// A history cell's shade: none, some or most of its answers named the brand.
 		"shade": func(c app.Cell) string {
 			switch {
@@ -113,7 +115,21 @@ func New(a *app.App) (*Server, error) {
 			}
 			return "h-3"
 		},
-		"rate":  fmtRate,
+		"rate": fmtRate,
+		// A rate's proportion alone, or a dash when nothing was counted.
+		"prate": func(r report.Rate) string {
+			if r.N == 0 {
+				return "–"
+			}
+			return fmt.Sprintf("%.0f%%", 100*r.P)
+		},
+		// An average place in a list of names, or a dash if never placed.
+		"place": func(p float64) string {
+			if p == 0 {
+				return "–"
+			}
+			return fmt.Sprintf("%.1f", p)
+		},
 		"money": func(v float64) string { return fmt.Sprintf("$%.2f", v) },
 		"json":  func(v any) string { b, _ := json.MarshalIndent(v, "", "  "); return string(b) },
 		"bar":   func(p float64) string { return fmt.Sprintf("%.1f", math.Max(1, 100*p)) },
@@ -159,7 +175,7 @@ func New(a *app.App) (*Server, error) {
 		},
 	}
 	s.pages = map[string]*template.Template{}
-	for _, p := range []string{"home", "set", "run", "rankings", "quickwins", "search", "login"} {
+	for _, p := range []string{"home", "set", "run", "rankings", "quickwins", "search", "login", "searches", "audit", "crawlers"} {
 		t, err := template.New(p).Funcs(funcs).ParseFS(assets, "templates/layout.html", "templates/"+p+".html")
 		if err != nil {
 			return nil, fmt.Errorf("template %s: %w", p, err)
@@ -240,6 +256,18 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /search", s.searchForm)
 	mux.HandleFunc("POST /api/search-probe", s.apiSearchProbe)
 	mux.HandleFunc("GET /api/citations", s.apiCitations)
+	mux.HandleFunc("GET /runs/{id}/searches", s.searchesPage)
+	mux.HandleFunc("GET /sets/{id}/searches", s.setSearchesPage)
+	mux.HandleFunc("GET /api/runs/{id}/searches", s.apiSearches)
+	mux.HandleFunc("GET /audit", s.auditPage)
+	mux.HandleFunc("POST /audit", s.auditForm)
+	mux.HandleFunc("POST /audit/citations", s.checkCitationsForm)
+	mux.HandleFunc("GET /crawlers", s.crawlersPage)
+	mux.HandleFunc("GET /api/audit", s.apiAudit)
+	mux.HandleFunc("POST /api/audit", s.apiRunAudit)
+	mux.HandleFunc("GET /api/runs/{id}/citation-check", s.apiCitationCheck)
+	mux.HandleFunc("POST /api/runs/{id}/citation-check", s.apiRunCitationCheck)
+	mux.HandleFunc("GET /api/crawlers", s.apiCrawlers)
 	mux.Handle("/api/mcp", s.mcpHandler())
 	return s.auth(logRequests(mux))
 }
@@ -461,11 +489,21 @@ type RunData struct {
 	VoiceMore int            `json:"-"`
 	Pages     []report.Page  `json:"-"`
 	PagesMore int            `json:"-"`
+	// The rest of the summary, cut the same way.
+	HeadToHead []report.HeadToHead `json:"-"`
+	Objections []report.Objection  `json:"-"`
+	Hosts      []report.HostUse    `json:"-"`
+	HostsMore  int                 `json:"-"`
+	Outreach   []report.Outreach   `json:"-"`
+	Uncited    []report.Page       `json:"-"`
 }
 
 type TrackRates struct {
 	Track string
 	report.Rates
+	// Without branded prompts, the headline; Branded says whether any prompt was.
+	Unbranded report.Rates
+	Branded   bool
 }
 
 type Grid struct {
@@ -508,7 +546,8 @@ func (s *Server) runData(ctx context.Context, id string) (*RunData, error) {
 			}
 		}
 		if len(slice) > 0 {
-			d.Tracks = append(d.Tracks, TrackRates{t, s.App.Summary(r, slice).Overall})
+			sum := s.App.Summary(r, slice)
+			d.Tracks = append(d.Tracks, TrackRates{t, sum.Overall, sum.Unbranded, sum.BrandedPrompts > 0})
 		}
 	}
 	col := map[GridCol]int{}
@@ -547,7 +586,22 @@ func (s *Server) runData(ctx context.Context, id string) (*RunData, error) {
 	if len(d.Pages) > pageRows {
 		d.Pages, d.PagesMore = d.Pages[:pageRows], len(d.Pages)-pageRows
 	}
+	const h2hRows, objectionRows, hostRows, outreachRows, uncitedRows = 10, 10, 30, 15, 20
+	d.HeadToHead = head(d.Summary.HeadToHead, h2hRows)
+	d.Objections = head(d.Summary.Objections, objectionRows)
+	d.Hosts = head(d.Summary.Hosts, hostRows)
+	d.HostsMore = len(d.Summary.Hosts) - len(d.Hosts)
+	d.Outreach = head(d.Summary.Outreach, outreachRows)
+	d.Uncited = head(d.Summary.Uncited, uncitedRows)
 	return d, nil
+}
+
+// head is the first n of xs.
+func head[T any](xs []T, n int) []T {
+	if len(xs) > n {
+		return xs[:n]
+	}
+	return xs
 }
 
 func (s *Server) spend(ctx context.Context) map[string]any {
@@ -568,7 +622,7 @@ func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 	progress, _ := s.App.Progress(ctx)
 	// Each set's latest day on each track, from the same series as the rankings, so the two
 	// pages always agree.
-	rk, _ := s.App.Rankings(ctx, 30, "")
+	rk, _ := s.App.Rankings(ctx, 30, 0, "")
 	latest := map[string]*app.Day{}
 	for i := range rk {
 		if len(rk[i].Days) > 0 {
@@ -627,8 +681,10 @@ func (s *Server) setPage(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("track") == "recall" {
 		track = "recall"
 	}
-	hist, _ := s.App.History(r.Context(), st, track, 30)
-	s.render(w, "set", map[string]any{"Set": st, "Runs": rows, "Spend": s.spend(r.Context()), "History": hist})
+	window := app.Window(atoi(r.URL.Query().Get("window")))
+	hist, _ := s.App.History(r.Context(), st, track, 30, window)
+	s.render(w, "set", map[string]any{"Set": st, "Runs": rows, "Spend": s.spend(r.Context()), "History": hist,
+		"Advice": s.App.SampleAdvice(r.Context(), st), "Windows": windowLinks(r, window)})
 }
 
 func (s *Server) startRunForm(w http.ResponseWriter, r *http.Request) {
@@ -722,9 +778,31 @@ func (s *Server) retryForm(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) rankingsPage(w http.ResponseWriter, r *http.Request) {
-	rk, _ := s.App.Rankings(r.Context(), 30, "")
-	s.render(w, "rankings", map[string]any{"Rankings": rk})
+	window := app.Window(atoi(r.URL.Query().Get("window")))
+	metric := trendMetric(r.URL.Query().Get("metric"))
+	rk, _ := s.App.Rankings(r.Context(), 30, window, "")
+	var metrics []filterOption
+	for _, m := range trendMetrics {
+		q := r.URL.Query()
+		q.Set("metric", m.key)
+		metrics = append(metrics, filterOption{Label: m.label, On: m.key == metric.key, Href: "?" + q.Encode()})
+	}
+	s.render(w, "rankings", map[string]any{"Rankings": rk, "Metric": metric.key, "MetricName": metric.label, "Window": window,
+		"Windows": windowLinks(r, window), "Metrics": metrics})
 }
+
+// windowLinks is a link to the page with each rolling window, the current one on.
+func windowLinks(r *http.Request, current int) []filterOption {
+	var out []filterOption
+	for _, w := range app.Windows {
+		q := r.URL.Query()
+		q.Set("window", strconv.Itoa(w))
+		out = append(out, filterOption{Label: fmt.Sprintf("%d days", w), On: w == current, Href: "?" + q.Encode()})
+	}
+	return out
+}
+
+func atoi(s string) int { n, _ := strconv.Atoi(s); return n }
 
 // filterRow is one row of filter links on the quick wins page.
 type filterRow struct {
@@ -966,7 +1044,7 @@ func (s *Server) apiRankings(w http.ResponseWriter, r *http.Request) {
 	if days <= 0 {
 		days = 30
 	}
-	rk, err := s.App.Rankings(r.Context(), days, r.URL.Query().Get("set"))
+	rk, err := s.App.Rankings(r.Context(), days, atoi(r.URL.Query().Get("window")), r.URL.Query().Get("set"))
 	if err != nil {
 		httpErr(w, err, 500)
 		return
@@ -1051,7 +1129,11 @@ func (s *Server) exportCSV(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("content-type", "text/csv; charset=utf-8")
 	w.Header().Set("content-disposition", `attachment; filename="`+s.App.Cfg.Brand.Slug()+"-"+d.Run.ID+`.csv"`)
 	cw := csv.NewWriter(w)
-	cw.Write([]string{"result_id", "prompt_n", "prompt", "answerer", "model", "track", "status", "verdict", "position", "top_pick", "named", "why_not_top", "objections", "searches", "cited", "cost_usd", "answer", "prompt_id", "config_rev", "app_version"})
+	cw.Write([]string{"result_id", "prompt_n", "prompt", "answerer", "model", "track", "status", "verdict", "position", "top_pick", "named", "why_not_top", "objections", "searches", "cited", "cost_usd", "answer", "prompt_id", "config_rev", "app_version", "prompt_branded"})
+	branded := map[int]bool{}
+	for _, p := range d.Summary.Prompts {
+		branded[p.Idx] = p.Branded
+	}
 	for _, x := range d.Results {
 		row := []string{strconv.FormatInt(x.ID, 10), strconv.Itoa(x.PromptIdx + 1), x.Prompt, x.Answerer, x.Model, string(x.Track), x.Status, "", "", "", "", "", "", "", "", fmt.Sprintf("%.4f", x.CostUSD), ""}
 		if g := x.Grade; g != nil {
@@ -1079,7 +1161,7 @@ func (s *Server) exportCSV(w http.ResponseWriter, r *http.Request) {
 			row[13], row[14], row[16] = strings.Join(qs, "; "), strings.Join(cs, " "), a.Text
 		}
 		// New columns go at the end, so scripts that read the export by position keep working.
-		row = append(row, x.PromptID, d.Run.ConfigRev, d.Run.AppVersion)
+		row = append(row, x.PromptID, d.Run.ConfigRev, d.Run.AppVersion, strconv.FormatBool(branded[x.PromptIdx]))
 		cw.Write(row)
 	}
 	cw.Flush()

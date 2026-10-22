@@ -92,7 +92,7 @@ text = "Which tools track AI answers today?"
 		t.Fatalf("%d methods across runs that were asked and graded the same way", methods)
 	}
 
-	rk, err := a.Rankings(ctx, 3650, "s")
+	rk, err := a.Rankings(ctx, 3650, 0, "s")
 	if err != nil || len(rk) == 0 {
 		t.Fatalf("rankings: %v %v", rk, err)
 	}
@@ -117,12 +117,15 @@ text = "Which tools track AI answers today?"
 	if err != nil || len(qw) != 1 {
 		t.Fatalf("quick wins: %+v %v", qw, err)
 	}
+	if qw[0].Gain <= 0 || qw[0].Gain > qw[0].Speed {
+		t.Errorf("expected gain %.2f should be some of speed %.2f", qw[0].Gain, qw[0].Speed)
+	}
 	if got := qw[0].Prompts; len(got) != 1 || got[0] != 3 {
 		t.Fatalf("the fix's prompt is \"tools\", now number 3; got %v", got)
 	}
 
 	s, _ := a.Set("s")
-	h, err := a.History(ctx, s, "search", 3650)
+	h, err := a.History(ctx, s, "search", 3650, 0)
 	if err != nil || len(h.Rows) != 4 || !h.Rows[1].Cells[0].Asked || !h.Rows[1].Cells[1].Asked {
 		t.Fatalf("history: %+v %v", h, err)
 	}

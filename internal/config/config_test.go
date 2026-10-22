@@ -124,6 +124,29 @@ func TestSubscriptionExampleMatchesTheAPIExample(t *testing.T) {
 	}
 }
 
+func TestSourcesAndCompetitorDomains(t *testing.T) {
+	load := func(body string) error {
+		p := filepath.Join(t.TempDir(), "popcorn.toml")
+		os.WriteFile(p, []byte("[brand]\nname = \"X\"\ndomains = [\"x.com\"]\n"+body), 0o644)
+		_, err := Load(p)
+		return err
+	}
+	if err := load("[[competitors]]\nname = \"Y\"\ndomains = [\"y.com\", \"github.com/y\"]\n[sources]\nugc = [\"forum.z.org\"]\nreview = [\"z.com/reviews\"]\n"); err != nil {
+		t.Fatal(err)
+	}
+	for body, want := range map[string]string{
+		"[sources]\nsocial = [\"z.com\"]\n":                                "class must be one of",
+		"[sources]\nugc = [\"\"]\n":                                        "not a host",
+		"[sources]\nugc = [\"z.com\"]\neditorial = [\"https://z.com/\"]\n": "in both",
+		"[[competitors]]\nname = \"Y\"\ndomains = [\" \"]\n":               "domains[0]",
+		"[[competitors]]\nname = \"Y\"\ndomains = [\"docs.x.com\"]\n":      "one of the brand's sites",
+	} {
+		if err := load(body); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%q: want %q, got %v", body, want, err)
+		}
+	}
+}
+
 func TestThemesAndSampling(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "popcorn.toml")
 	load := func(body string) (*Config, error) {

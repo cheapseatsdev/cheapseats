@@ -29,11 +29,19 @@ take to whichever of those tools you move to. Site and docs: [popcorn.zone](http
 - Ends each run with **Fix these first**: the exact page to create or change, what it must say, the
   prompts it should flip, effort, priority, the site it belongs on and its owner, plus a prompt to
   hand Claude Code.
-- **Quick wins** ranks fixes across all sets by prompts flipped per day of work. Mark a fix with
-  the commit or PR you submitted (proposed, then accepted) and it leaves the open list; if it
-  wasn't enough, the next run's fix for the same page comes back open, with the attempt and what
-  changed for its prompts, and the fix list is written knowing what was tried.
-- **Rankings** trend each set week to week, through prompt and model changes.
+- **Quick wins** ranks fixes across all sets by expected gain: prompts flipped per day of work,
+  each weighted by what it has left to win. Mark a fix with the commit or PR you submitted
+  (proposed, then accepted) and it leaves the open list. If it wasn't enough, the next run's fix
+  for the same page comes back open, with the attempt and what changed for its prompts (moved,
+  worse, or no detectable change, tested against the noise of a few answers a prompt), and the
+  fix list is written knowing what was tried.
+- **Rankings** trend each set week to week, through prompt and model changes: 7-, 14- or 28-day
+  averages with 95% bands, day-over-day changes greyed out when they're within noise, and fixes
+  marked on the chart. How it's worked out: [docs/statistics.md](docs/statistics.md).
+- Free checks beside the runs, no model calls ([docs](docs/audit.md)): a **site audit** of what AI
+  crawlers can read (robots.txt and firewall blocks per AI bot, llms.txt, sitemap, and pages that
+  are empty without JavaScript), a **citation check** of which pages the answers cite name you and
+  which name only competitors, and **AI crawler** counts from your access logs.
 - Web UI, CLI, JSON API and MCP server.
 - Self-hosted, MIT licensed: Docker, Kubernetes (Helm chart) or an exe.dev VM. Your prompts live
   in a git repo you own.
@@ -48,12 +56,19 @@ A run's scores per track, and every prompt against every assistant:
   <img alt="A run page: search and recall scores, per-answerer rates, and a prompt-by-answerer grid of verdicts" src="docs/images/run-light.webp">
 </picture>
 
+Below them: share of voice (named rate, true share, position), head to head against each
+competitor, the objections answers raise, and where the answers' sources come from, with the
+third-party hosts cited without you. [Reading a run](docs/reading-a-run.md) defines every number.
+
 Quick wins: every fix across your sets, filterable by site, gap and set:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/quickwins-dark.webp">
   <img alt="Quick wins: ranked fixes with priority, gap, effort and the site each belongs on" src="docs/images/quickwins-light.webp">
 </picture>
+
+[What the assistants searched](docs/searches.md): the queries behind each answer, the names they
+added that the prompt didn't have, and the searches where competitors show up and you don't.
 
 ## Quick start
 
@@ -100,6 +115,10 @@ is unset.
   `claude` CLI on your subscription. With subscription answerers too, a laptop needs no API key.
   The theme pass is one extra grader call per run (about $0.003 on Haiku, nothing on `claude-code`);
   `[grader] themes = false` turns it off.
+- `[[competitors]]`: names (and aliases) the grader folds onto one, shared by every set, and their
+  `domains`, so their pages count as theirs
+- `[sources]`: hosts to move between the kinds of source the run page sorts pages into
+  ([reading a run](docs/reading-a-run.md#configuring-it))
 - `[sampling]`: `adaptive = true` and `max_extra = N` let a run ask up to N extra answers, decided
   before it starts: the prompts whose named rate has been least certain over the last 28 days are
   asked twice over, every answerer and track alike, within today's budget. Off by default; it never
@@ -121,6 +140,10 @@ popcorn sets                           list prompt sets
 popcorn run <set-id>                   run one set (costs money)
 popcorn report <run-id> [-json]        rates, share of voice and top pages
 popcorn fixes <run-id> [-rebuild]      the fix list as markdown
+popcorn audit [site...]                what AI crawlers can read on your sites (free)
+popcorn check-citations <run-id>       which cited pages name you, and which competitors
+popcorn crawl import <logfile>...      AI crawler fetches and AI referrals from access logs
+popcorn crawl report [-days 30]        those counts per page, beside how often runs cite it
 popcorn themes <run-id> [-rebuild]     net sentiment and the run's themes
 popcorn suggest-prompts <set-id> [-n 10]  new buyer questions as TOML to paste (one analyst call)
 popcorn check                          validate the config
@@ -131,7 +154,7 @@ popcorn version                        version and database schema
 
 ## API and MCP
 
-- JSON API under `/api/` (status, sets, runs, fixes, quick wins, fix attempts, rankings, citations, search probe):
+- JSON API under `/api/` (status, sets, runs, fixes, quick wins, fix attempts, rankings, citations, searches, search probe, site audit, citation check, crawlers):
   [reference](https://popcorn.zone/docs/reference/).
 - MCP server at `/api/mcp` (Streamable HTTP). `get_run` includes net sentiment and themes;
   `suggest_prompts` drafts new prompts for a set (one analyst call):
