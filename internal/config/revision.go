@@ -4,14 +4,16 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/cheapseatsdev/cheapseats/internal/env"
 )
 
 // Revision is the commit of the config repo this config came from, so every run can say which
-// version of the prompts and settings produced it. In order: POPCORN_CONFIG_REV (set by a deploy),
-// a REVISION file beside popcorn.toml (written by a build), or the checkout's own .git, read
+// version of the prompts and settings produced it. In order: CHEAPSEATS_CONFIG_REV (set by a deploy),
+// a REVISION file beside cheapseats.toml (written by a build), or the checkout's own .git, read
 // directly since the image has no git. Empty when none of them says.
 func Revision(dir string) string {
-	if r := strings.TrimSpace(os.Getenv("POPCORN_CONFIG_REV")); r != "" {
+	if r := strings.TrimSpace(env.Get("CONFIG_REV")); r != "" {
 		return r
 	}
 	if b, err := os.ReadFile(filepath.Join(dir, "REVISION")); err == nil {

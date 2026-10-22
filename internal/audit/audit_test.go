@@ -58,21 +58,21 @@ Sitemap: https://example.com/sitemap.xml
 }
 
 func TestParseDoc(t *testing.T) {
-	body := `<!doctype html><html lang="en"><head><title> Popcorn:  AI visibility </title>
+	body := `<!doctype html><html lang="en"><head><title> Cheap Seats:  AI visibility </title>
 <meta name="description" content="Track how AI assistants answer your buyers.">
-<meta name="robots" content="index, follow"><link rel="canonical" href="https://popcorn.zone/">
-<meta property="og:title" content="Popcorn"><meta property="og:description" content="x">
+<meta name="robots" content="index, follow"><link rel="canonical" href="https://cheapseats.dev/">
+<meta property="og:title" content="Cheap Seats"><meta property="og:description" content="x">
 <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Organization"},{"@type":["WebSite","Thing"]}]}</script>
 <script type="application/ld+json">{not json</script><style>body{}</style></head>
-<body><h1>Popcorn</h1><svg><title>logo</title></svg><script>var hidden = "no";</script><p>Visible   text.</p></body></html>`
+<body><h1>Cheap Seats</h1><svg><title>logo</title></svg><script>var hidden = "no";</script><p>Visible   text.</p></body></html>`
 	d := ParseDoc([]byte(body))
-	if d.Title != "Popcorn: AI visibility" || d.Lang != "en" || d.H1 != 1 || d.Canonical != "https://popcorn.zone/" || d.Noindex || !d.OGTitle || !d.OGDesc {
+	if d.Title != "Cheap Seats: AI visibility" || d.Lang != "en" || d.H1 != 1 || d.Canonical != "https://cheapseats.dev/" || d.Noindex || !d.OGTitle || !d.OGDesc {
 		t.Errorf("%+v", d)
 	}
 	if strings.Join(d.JSONLD, ",") != "Organization,Thing,WebSite" || d.BadJSONLD != 1 {
 		t.Errorf("JSON-LD: %v, %d invalid", d.JSONLD, d.BadJSONLD)
 	}
-	if d.Text != "Popcorn Visible text." {
+	if d.Text != "Cheap Seats Visible text." {
 		t.Errorf("text: %q", d.Text)
 	}
 	spa := ParseDoc([]byte(`<html><head><meta name="robots" content="NOINDEX"></head><body><div id="root"></div><script src="/app.js"></script></body></html>`))
@@ -92,7 +92,7 @@ type site struct {
 func (s site) serve(t *testing.T) *httptest.Server {
 	var srv *httptest.Server
 	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !strings.Contains(r.UserAgent(), "Popcorn-Audit/") && !strings.Contains(r.UserAgent(), "compatible;") {
+		if !strings.Contains(r.UserAgent(), "CheapSeats-Audit/") && !strings.Contains(r.UserAgent(), "compatible;") {
 			t.Errorf("unexpected user agent %q", r.UserAgent())
 		}
 		for _, ua := range s.refuse {
@@ -126,11 +126,11 @@ func (s site) serve(t *testing.T) *httptest.Server {
 	return srv
 }
 
-const goodPage = `<!doctype html><html lang="en"><head><title>Popcorn: track AI answers</title>
-<meta name="description" content="Popcorn asks AI assistants your buyers' questions and grades whether they recommend you.">
-<link rel="canonical" href="BASE/"><meta property="og:title" content="Popcorn"><meta property="og:description" content="Track AI answers">
+const goodPage = `<!doctype html><html lang="en"><head><title>Cheap Seats: track AI answers</title>
+<meta name="description" content="Cheap Seats asks AI assistants your buyers' questions and grades whether they recommend you.">
+<link rel="canonical" href="BASE/"><meta property="og:title" content="Cheap Seats"><meta property="og:description" content="Track AI answers">
 <script type="application/ld+json">{"@type":"SoftwareApplication"}</script></head>
-<body><h1>Popcorn</h1><p>` + "Popcorn asks the questions your buyers ask, of every assistant, and grades the answers. " + "It runs on your laptop on the subscription you already have, and tells you which pages to write next to be recommended more often." + `</p></body></html>`
+<body><h1>Cheap Seats</h1><p>` + "Cheap Seats asks the questions your buyers ask, of every assistant, and grades the answers. " + "It runs on your laptop on the subscription you already have, and tells you which pages to write next to be recommended more often." + `</p></body></html>`
 
 func TestAudit(t *testing.T) {
 	defer AllowLoopbackForTests()()
@@ -138,7 +138,7 @@ func TestAudit(t *testing.T) {
 	good := map[string]string{
 		"/":            goodPage,
 		"/robots.txt":  "User-agent: *\nAllow: /\nSitemap: BASE/sitemap.xml\n",
-		"/llms.txt":    "# Popcorn\n> AI visibility\n\n- [Docs](BASE/docs): how it works\n",
+		"/llms.txt":    "# Cheap Seats\n> AI visibility\n\n- [Docs](BASE/docs): how it works\n",
 		"/sitemap.xml": `<?xml version="1.0"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>BASE/</loc><lastmod>2026-10-01</lastmod></url><url><loc>BASE/docs</loc><lastmod>2026-09-01T10:00:00Z</lastmod></url></urlset>`,
 		"/docs":        strings.Replace(goodPage, "BASE/", "BASE/docs", 1),
 	}
@@ -172,7 +172,7 @@ func TestAudit(t *testing.T) {
 			"/llms.txt":    "",
 			"/sitemap.xml": `<urlset><url><loc>BASE/docs</loc><lastmod>2025-01-01</lastmod></url></urlset>`,
 		})}, want: map[string]Severity{"llms.missing": Warning, "sitemap.stale": Warning}},
-		{name: "llms.txt served as HTML, no heading or links", site: site{files: with(map[string]string{"/llms.txt": "Popcorn tracks AI answers."}), types: map[string]string{"/llms.txt": "application/octet-stream"}},
+		{name: "llms.txt served as HTML, no heading or links", site: site{files: with(map[string]string{"/llms.txt": "Cheap Seats tracks AI answers."}), types: map[string]string{"/llms.txt": "application/octet-stream"}},
 			want: map[string]Severity{"llms.content-type": Warning, "llms.heading": Warning, "llms.no-links": Warning}},
 		{name: "catch-all route for llms.txt", site: site{files: with(map[string]string{"/llms.txt": goodPage}), types: map[string]string{"/llms.txt": "text/html"}},
 			want: map[string]Severity{"llms.missing": Warning}},
@@ -180,8 +180,8 @@ func TestAudit(t *testing.T) {
 			"/": `<!doctype html><html><head><title>App</title></head><body><div id="root"></div><script src="/app.js"></script></body></html>`,
 		})}, want: map[string]Severity{"page.needs-js": Error, "page.lang": Warning, "page.description-missing": Warning, "page.h1": Warning, "page.canonical": Warning, "page.jsonld-missing": Warning, "page.open-graph": Warning}},
 		{name: "noindex, long title, bad JSON-LD, short description", site: site{files: with(map[string]string{
-			"/docs": strings.NewReplacer(`<title>Popcorn: track AI answers</title>`, `<title>`+strings.Repeat("Popcorn ", 10)+`</title><meta name="robots" content="noindex">`,
-				`{"@type":"SoftwareApplication"}`, `{"@type":`, `content="Popcorn asks AI assistants your buyers' questions and grades whether they recommend you."`, `content="Short."`).Replace(good["/docs"]),
+			"/docs": strings.NewReplacer(`<title>Cheap Seats: track AI answers</title>`, `<title>`+strings.Repeat("Cheap Seats ", 10)+`</title><meta name="robots" content="noindex">`,
+				`{"@type":"SoftwareApplication"}`, `{"@type":`, `content="Cheap Seats asks AI assistants your buyers' questions and grades whether they recommend you."`, `content="Short."`).Replace(good["/docs"]),
 		})}, want: map[string]Severity{"page.noindex": Error, "page.title-long": Warning, "page.jsonld-invalid": Error, "page.description-length": Warning}},
 		{name: "sitemap page gone", site: site{files: with(map[string]string{"/docs": ""})}, want: map[string]Severity{"page.status": Error}},
 		{name: "sitemap doesn't parse", site: site{files: with(map[string]string{"/sitemap.xml": "<urlset><url>"})}, want: map[string]Severity{"sitemap.invalid": Error}},
@@ -233,5 +233,17 @@ func TestAuditSite(t *testing.T) {
 	// On a platform the brand doesn't control, its markup isn't checked.
 	if !checks["robots.blocks-ai-search"] || checks["llms.missing"] || checks["sitemap.missing"] || !checks["site.invalid"] || checks["page.jsonld-missing"] {
 		t.Errorf("%v", res.Findings)
+	}
+}
+
+// A robots.txt written for Popcorn-Audit, before the rename, still applies.
+func TestRobotsHonorsTheOldToken(t *testing.T) {
+	old := ParseRobots("User-agent: Popcorn-Audit\nDisallow: /private\n")
+	if allowsUs(old, "/private/x") || !allowsUs(old, "/public") {
+		t.Error("ignored a rule for Popcorn-Audit")
+	}
+	both := ParseRobots("User-agent: Popcorn-Audit\nDisallow: /\n\nUser-agent: CheapSeats-Audit\nAllow: /\n")
+	if !allowsUs(both, "/x") {
+		t.Error("a rule for CheapSeats-Audit should win over the old token's")
 	}
 }

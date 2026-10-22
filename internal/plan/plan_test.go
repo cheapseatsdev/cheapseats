@@ -4,13 +4,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/metcalfc/popcorn/internal/config"
-	"github.com/metcalfc/popcorn/internal/sets"
+	"github.com/cheapseatsdev/cheapseats/internal/config"
+	"github.com/cheapseatsdev/cheapseats/internal/sets"
 )
 
 func TestPlanSaysWhatAChangeDoes(t *testing.T) {
 	cfg := func(model, grader string) *config.Config {
-		c := &config.Config{Brand: config.Brand{Name: "Popcorn"}, Grader: config.Model{Model: grader},
+		c := &config.Config{Brand: config.Brand{Name: "Cheap Seats"}, Grader: config.Model{Model: grader},
 			Answerers: []config.Answerer{{ID: "claude", Provider: "anthropic", Model: model, Samples: config.Samples{Search: 2, Recall: 1}}}}
 		c.Tiers.PLG.MaxSamples = 1
 		return c
@@ -47,7 +47,7 @@ func TestPlanSaysWhatAChangeDoes(t *testing.T) {
 		t.Errorf("weekly cadence:\n%s", got)
 	}
 	after.Cfg.Tiers.Core.EveryDays = 0
-	after.Cfg.Brand.Sites = []config.Site{{URL: "docs.popcorn.example", Kind: "docs"}}
+	after.Cfg.Brand.Sites = []config.Site{{URL: "docs.cheapseats.example", Kind: "docs"}}
 	if got := Markdown(before, after); strings.Contains(got, "starts over") || !strings.Contains(got, "The brand's sites changed") {
 		t.Errorf("a site change notes where fixes go and keeps trends:\n%s", got)
 	}
@@ -55,7 +55,7 @@ func TestPlanSaysWhatAChangeDoes(t *testing.T) {
 	if got := Markdown(before, after); !strings.Contains(got, "Every set's trend starts over**, because the grader model changed") {
 		t.Errorf("a grader change should warn:\n%s", got)
 	}
-	if got := Markdown(before, before); !strings.Contains(got, "No change to what Popcorn asks") {
+	if got := Markdown(before, before); !strings.Contains(got, "No change to what Cheap Seats asks") {
 		t.Errorf("no-op plan:\n%s", got)
 	}
 	// Adaptive sampling and the theme pass never start a trend over.
@@ -72,7 +72,7 @@ func TestPlanSaysWhatAChangeDoes(t *testing.T) {
 }
 
 func TestPlanSaysWhenIntentChanges(t *testing.T) {
-	c := &config.Config{Brand: config.Brand{Name: "Popcorn"}}
+	c := &config.Config{Brand: config.Brand{Name: "Cheap Seats"}}
 	set := func(intent string) []sets.Set {
 		return []sets.Set{{ID: "a", Name: "A", Tier: sets.Core, Prompts: []sets.Prompt{{ID: "how", Text: "How do I measure it?", Intent: intent}}}}
 	}

@@ -10,9 +10,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/metcalfc/popcorn/internal/audit"
-	"github.com/metcalfc/popcorn/internal/crawl"
-	"github.com/metcalfc/popcorn/internal/report"
+	"github.com/cheapseatsdev/cheapseats/internal/audit"
+	"github.com/cheapseatsdev/cheapseats/internal/crawl"
+	"github.com/cheapseatsdev/cheapseats/internal/report"
 )
 
 // checking is the site audits and citation checks in progress, by App and kind, so the web UI can
@@ -54,7 +54,7 @@ func (a *App) Audit(ctx context.Context, sites []string, o audit.Options) (audit
 		sites = a.AuditSites()
 	}
 	if len(sites) == 0 {
-		return audit.Result{}, errors.New("no sites to audit: list the brand's sites in popcorn.toml ([[brand.sites]])")
+		return audit.Result{}, errors.New("no sites to audit: list the brand's sites in cheapseats.toml ([[brand.sites]])")
 	}
 	if _, busy := checking.LoadOrStore(a.checkKey("audit"), true); busy {
 		return audit.Result{}, errors.New("a site audit is already running")

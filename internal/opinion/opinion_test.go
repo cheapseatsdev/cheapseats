@@ -9,10 +9,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/metcalfc/popcorn/internal/config"
-	"github.com/metcalfc/popcorn/internal/grade"
-	"github.com/metcalfc/popcorn/internal/llm"
-	"github.com/metcalfc/popcorn/internal/sets"
+	"github.com/cheapseatsdev/cheapseats/internal/config"
+	"github.com/cheapseatsdev/cheapseats/internal/grade"
+	"github.com/cheapseatsdev/cheapseats/internal/llm"
+	"github.com/cheapseatsdev/cheapseats/internal/sets"
 )
 
 func TestSentiment(t *testing.T) {
@@ -50,8 +50,8 @@ func answers() []Answer {
 	why := "The answer preferred Profound for its enterprise reporting and SOC 2 report."
 	why2 := "Peec AI was picked as cheaper to start with."
 	return []Answer{
-		{1, &grade.Grade{Verdict: grade.Mentioned, Objections: []string{"no SOC 2"}, WhyNotTop: &why, Named: []string{"Profound", "Popcorn"}}},
-		{2, &grade.Grade{Verdict: grade.Mentioned, Objections: []string{"No SOC 2", "early stage"}, WhyNotTop: &why2, Named: []string{"Peec AI", "Popcorn"}}},
+		{1, &grade.Grade{Verdict: grade.Mentioned, Objections: []string{"no SOC 2"}, WhyNotTop: &why, Named: []string{"Profound", "Cheap Seats"}}},
+		{2, &grade.Grade{Verdict: grade.Mentioned, Objections: []string{"No SOC 2", "early stage"}, WhyNotTop: &why2, Named: []string{"Peec AI", "Cheap Seats"}}},
 		{3, &grade.Grade{Verdict: grade.Recommended, Praise: []string{"open source", "runs locally"}}},
 		{4, &grade.Grade{Verdict: grade.Absent}},
 	}
@@ -79,7 +79,7 @@ func TestThemesAreValidated(t *testing.T) {
 	llm.AnthropicURL = srv.URL
 	defer func() { llm.AnthropicURL = old }()
 	t.Setenv("ANTHROPIC_API_KEY", "fake-key")
-	cfg := &config.Config{Brand: config.Brand{Name: "Popcorn"}, Grader: config.Model{Model: "h"}, Pricing: map[string]config.Pricing{"h": {Input: 1, Output: 5}}}
+	cfg := &config.Config{Brand: config.Brand{Name: "Cheap Seats"}, Grader: config.Model{Model: "h"}, Pricing: map[string]config.Pricing{"h": {Input: 1, Output: 5}}}
 	set := sets.Set{Competitors: []sets.Competitor{{Name: "Profound", Aliases: []string{"tryprofound"}}}}
 	got, err := Group(context.Background(), cfg, set, answers())
 	if err != nil {
@@ -117,7 +117,7 @@ func TestThemesSkipAndCLI(t *testing.T) {
 		}
 		return json.Unmarshal([]byte(`{"themes":[{"name":"Open source","kind":"strength","items":[5],"beneficiary":null,"quote":"open source"}]}`), out)
 	}
-	cfg := &config.Config{Brand: config.Brand{Name: "Popcorn"}, Grader: config.Model{Model: "claude-haiku", Provider: config.ClaudeCode}}
+	cfg := &config.Config{Brand: config.Brand{Name: "Cheap Seats"}, Grader: config.Model{Model: "claude-haiku", Provider: config.ClaudeCode}}
 	few, err := Group(context.Background(), cfg, sets.Set{}, answers()[2:])
 	if err != nil || calls != 0 || few.Skipped == "" || few.Themes == nil {
 		t.Fatalf("%+v %v calls=%d", few, err, calls)

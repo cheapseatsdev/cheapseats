@@ -9,9 +9,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/metcalfc/popcorn/internal/config"
-	"github.com/metcalfc/popcorn/internal/sets"
-	"github.com/metcalfc/popcorn/internal/suggest"
+	"github.com/cheapseatsdev/cheapseats/internal/config"
+	"github.com/cheapseatsdev/cheapseats/internal/sets"
+	"github.com/cheapseatsdev/cheapseats/internal/suggest"
 )
 
 // File is one file of the config repo, its path relative to the repo's root.
@@ -311,9 +311,9 @@ func (p *Plan) Suggest(ctx context.Context, cfg *config.Config, n int) error {
 	return nil
 }
 
-// Files is the config repo: popcorn.toml and one file per starter set.
+// Files is the config repo: cheapseats.toml and one file per starter set.
 func (p Plan) Files() []File {
-	out := []File{{Path: "popcorn.toml", Body: p.config()}}
+	out := []File{{Path: "cheapseats.toml", Body: p.config()}}
 	for _, s := range p.Sets {
 		out = append(out, File{Path: filepath.Join("prompt-sets", s.ID+".toml"), Body: s.toml()})
 	}
@@ -332,7 +332,7 @@ func (s Starter) toml() string {
 	}
 	for i, x := range s.Prompts {
 		if s.Suggested > 0 && i == len(s.Prompts)-s.Suggested {
-			b.WriteString("\n# Suggested by the analyst (popcorn init -suggest). Check each is a question your buyers ask.\n")
+			b.WriteString("\n# Suggested by the analyst (cheapseats init -suggest). Check each is a question your buyers ask.\n")
 		}
 		fmt.Fprintf(&b, "\n[[prompts]]\nid = %s\ntext = %s\n", q(x.ID), q(x.Text))
 		if x.Intent != "" {
@@ -379,13 +379,13 @@ func q(s string) string {
 func (p Plan) config() string {
 	s := p.Site
 	var b strings.Builder
-	fmt.Fprintf(&b, `# popcorn configuration for %s, started by popcorn init from %s.
-# Review every TODO, then: popcorn check. Secrets (API keys, tokens) come from the environment or
+	fmt.Fprintf(&b, `# cheapseats configuration for %s, started by cheapseats init from %s.
+# Review every TODO, then: cheapseats check. Secrets (API keys, tokens) come from the environment or
 # .env, never from here. Prompt sets live in prompt-sets/ beside this file.
 #
 # Every model is called through the local claude CLI on your Claude subscription: no API key and
 # no API spend. To run in a container, switch the providers to anthropic (and openai) and add
-# [pricing]; see examples/popcorn-config/popcorn.toml in the popcorn repo.
+# [pricing]; see examples/cheapseats-config/cheapseats.toml in the cheapseats repo.
 
 [brand]
 name = %s
@@ -486,10 +486,10 @@ default = ""
 	return b.String()
 }
 
-// Check writes the files to a temporary directory and loads them as popcorn check would: the
+// Check writes the files to a temporary directory and loads them as cheapseats check would: the
 // config, every set, and the rule that only head-to-heads names the brand.
 func Check(files []File) (*config.Config, error) {
-	dir, err := os.MkdirTemp("", "popcorn-init-")
+	dir, err := os.MkdirTemp("", "cheapseats-init-")
 	if err != nil {
 		return nil, err
 	}
@@ -497,7 +497,7 @@ func Check(files []File) (*config.Config, error) {
 	if err := Write(dir, files); err != nil {
 		return nil, err
 	}
-	cfg, err := config.Load(filepath.Join(dir, "popcorn.toml"))
+	cfg, err := config.Load(filepath.Join(dir, "cheapseats.toml"))
 	if err != nil {
 		return nil, err
 	}

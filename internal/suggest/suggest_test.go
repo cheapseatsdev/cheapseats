@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/metcalfc/popcorn/internal/config"
-	"github.com/metcalfc/popcorn/internal/sets"
+	"github.com/cheapseatsdev/cheapseats/internal/config"
+	"github.com/cheapseatsdev/cheapseats/internal/sets"
 )
 
 // Suggestions that repeat a prompt in any set, repeat each other, or name the brand outside
@@ -25,12 +25,12 @@ func TestSuggestions(t *testing.T) {
 			{"stage":"pricing","text":"How much do AI visibility trackers cost per month?","intent":"choice"},
 			{"stage":"awareness","text":"What is   GEO, and should I care?","intent":"info"},
 			{"stage":"comparison","text":"Which AI visibility tool is best?!","intent":"choice"},
-			{"stage":"comparison","text":"Is Popcorn better than Profound?","intent":"choice"},
+			{"stage":"comparison","text":"Is Cheap Seats better than Profound?","intent":"choice"},
 			{"stage":"pricing","text":"how much do AI visibility trackers cost per month","intent":"choice"},
 			{"stage":"reputation","text":"Is Profound trustworthy?","intent":"choice"},
 			{"stage":"implementation","text":"How long does it take to set up an AI visibility tracker?","intent":"info"}]}`), out)
 	}
-	cfg := &config.Config{Brand: config.Brand{Name: "Popcorn", Aliases: []string{"popcorn.zone"}, About: "a tracker", Audience: "a marketer"},
+	cfg := &config.Config{Brand: config.Brand{Name: "Cheap Seats", Aliases: []string{"cheapseats.dev"}, About: "a tracker", Audience: "a marketer"},
 		Analyst: config.Model{Model: "opus", Provider: config.ClaudeCode}}
 	set := sets.Set{ID: "tools", Name: "Tools", Description: "Picking a tool", Prompts: []sets.Prompt{{ID: "best-tool", Text: "Which AI visibility tool is best?"}},
 		Competitors: []sets.Competitor{{Name: "Profound"}}}
@@ -39,7 +39,7 @@ func TestSuggestions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"Who asks: a marketer", "- Which AI visibility tool is best?", "Never name Popcorn", "Competitors: Profound;", "Write 6 new questions"} {
+	for _, want := range []string{"Who asks: a marketer", "- Which AI visibility tool is best?", "Never name Cheap Seats", "Competitors: Profound;", "Write 6 new questions"} {
 		if !strings.Contains(sent, want) {
 			t.Errorf("prompt lacks %q", want)
 		}

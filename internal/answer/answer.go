@@ -12,8 +12,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/metcalfc/popcorn/internal/config"
-	"github.com/metcalfc/popcorn/internal/llm"
+	"github.com/cheapseatsdev/cheapseats/internal/config"
+	"github.com/cheapseatsdev/cheapseats/internal/llm"
 )
 
 type Track string

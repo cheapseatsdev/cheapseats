@@ -9,7 +9,7 @@ import (
 )
 
 // Lucide icons (lucide-static 0.460.0, ISC: icons/LICENSE), copied in rather than loaded from a
-// CDN so the app works offline and behind POPCORN_TOKENS.
+// CDN so the app works offline and behind CHEAPSEATS_TOKENS.
 //
 //go:embed icons/*.svg icons/LICENSE
 var iconFiles embed.FS

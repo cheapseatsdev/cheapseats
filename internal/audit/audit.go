@@ -17,8 +17,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/metcalfc/popcorn/internal/bots"
-	"github.com/metcalfc/popcorn/internal/version"
+	"github.com/cheapseatsdev/cheapseats/internal/bots"
+	"github.com/cheapseatsdev/cheapseats/internal/version"
 )
 
 type Severity string
@@ -269,8 +269,8 @@ func challenge(r *Response) bool {
 	return false
 }
 
-// checkHome fetches the home page as Popcorn, then as each AI crawler that fetches pages: one
-// refused when Popcorn was let in is blocked by a firewall, whatever robots.txt says.
+// checkHome fetches the home page as Cheap Seats, then as each AI crawler that fetches pages: one
+// refused when Cheap Seats was let in is blocked by a firewall, whatever robots.txt says.
 func (a *siteAudit) checkHome(ctx context.Context) *Page {
 	r, err := a.o.Fetcher.Get(ctx, a.res.Home)
 	p := a.page(ctx, a.res.Home, &fetched{r, err})

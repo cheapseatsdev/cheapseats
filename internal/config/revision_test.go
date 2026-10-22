@@ -7,7 +7,7 @@ import (
 )
 
 func TestRevision(t *testing.T) {
-	t.Setenv("POPCORN_CONFIG_REV", "")
+	t.Setenv("CHEAPSEATS_CONFIG_REV", "")
 	write := func(p, s string) {
 		os.MkdirAll(filepath.Dir(p), 0o755)
 		if err := os.WriteFile(p, []byte(s), 0o644); err != nil {
@@ -41,11 +41,11 @@ func TestRevision(t *testing.T) {
 	if got := Revision(repo); got != "ddd444" {
 		t.Fatalf("REVISION: %q", got)
 	}
-	t.Setenv("POPCORN_CONFIG_REV", "eee555")
+	t.Setenv("CHEAPSEATS_CONFIG_REV", "eee555")
 	if got := Revision(repo); got != "eee555" {
 		t.Fatalf("env: %q", got)
 	}
-	t.Setenv("POPCORN_CONFIG_REV", "")
+	t.Setenv("CHEAPSEATS_CONFIG_REV", "")
 	if got := Revision(t.TempDir()); got != "" {
 		t.Fatalf("no git: %q", got)
 	}

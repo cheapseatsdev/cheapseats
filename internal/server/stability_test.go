@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/metcalfc/popcorn/internal/app"
-	"github.com/metcalfc/popcorn/internal/llm"
-	"github.com/metcalfc/popcorn/internal/store"
+	"github.com/cheapseatsdev/cheapseats/internal/app"
+	"github.com/cheapseatsdev/cheapseats/internal/llm"
+	"github.com/cheapseatsdev/cheapseats/internal/store"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -31,16 +31,16 @@ func TestCitationStability(t *testing.T) {
 		case strings.Contains(s, "sharp growth lead"):
 			text = `{"insights":"x","fixes":[]}`
 		case strings.Contains(s, "output_config"):
-			text = `{"verdict":"mentioned","position":2,"top_pick":"Docker Sandboxes","named":["Docker Sandboxes","Popcorn"],"reasoning":"r","why_not_top":"w","objections":[]}`
+			text = `{"verdict":"mentioned","position":2,"top_pick":"Docker Sandboxes","named":["Docker Sandboxes","Cheap Seats"],"reasoning":"r","why_not_top":"w","objections":[]}`
 		case strings.Contains(s, `"tools"`):
 			cites := `{"url":"https://docs.docker.com/ai/sandboxes/security/"}`
 			if extra.Load() {
 				cites += `,{"url":"https://www.reddit.com/r/devops/comments/x/sandboxes/"}`
 			}
-			w.Write([]byte(`{"content":[{"type":"server_tool_use","id":"s1","name":"web_search","input":{"query":"q"}},{"type":"web_search_tool_result","tool_use_id":"s1","content":[{"type":"web_search_result","url":"https://docs.docker.com/ai/sandboxes/security/","title":"x"}]},{"type":"text","text":"Use Docker Sandboxes or Popcorn.","citations":[` + cites + `]}],"usage":{"input_tokens":10,"output_tokens":5}}`))
+			w.Write([]byte(`{"content":[{"type":"server_tool_use","id":"s1","name":"web_search","input":{"query":"q"}},{"type":"web_search_tool_result","tool_use_id":"s1","content":[{"type":"web_search_result","url":"https://docs.docker.com/ai/sandboxes/security/","title":"x"}]},{"type":"text","text":"Use Docker Sandboxes or Cheap Seats.","citations":[` + cites + `]}],"usage":{"input_tokens":10,"output_tokens":5}}`))
 			return
 		default:
-			w.Write([]byte(`{"content":[{"type":"text","text":"Use Docker Sandboxes or Popcorn."}],"usage":{"input_tokens":10,"output_tokens":5}}`))
+			w.Write([]byte(`{"content":[{"type":"text","text":"Use Docker Sandboxes or Cheap Seats."}],"usage":{"input_tokens":10,"output_tokens":5}}`))
 			return
 		}
 		json.NewEncoder(w).Encode(map[string]any{"content": []any{map[string]any{"type": "text", "text": text}}, "stop_reason": "end_turn", "usage": map[string]any{"input_tokens": 1, "output_tokens": 1}})
@@ -51,7 +51,7 @@ func TestCitationStability(t *testing.T) {
 	defer func() { llm.AnthropicURL = old }()
 	t.Setenv("ANTHROPIC_API_KEY", "fake-key")
 	t.Setenv("OPENAI_API_KEY", "")
-	os.Unsetenv("POPCORN_TOKENS")
+	os.Unsetenv("CHEAPSEATS_TOKENS")
 
 	db, _ := store.Open(t.TempDir())
 	defer db.Close()

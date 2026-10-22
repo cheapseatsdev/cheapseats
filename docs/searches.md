@@ -19,7 +19,7 @@ rows.
   count as one.
 - **Top queries**, most answers first, with the prompts that ran each and, for each query:
   - **Brand's sites**: of its runs, those whose results included a page on one of the brand's
-    sites (`[brand].sites` and `domains`, matched as the rest of Popcorn matches them).
+    sites (`[brand].sites` and `domains`, matched as the rest of Cheap Seats matches them).
   - **Competitors in results**: the set's competitors (and the shared ones) named in a result's
     title, or whose own site a result is on (the name or an alias squeezed to letters and digits
     equals the host's, so `Peec AI` matches `peec.ai`), by how many runs.
@@ -38,7 +38,7 @@ rows.
     assistants search with (years, "best", "alternatives", "reddit"). Names count under names
     added, not here. **Dropped**: prompt words the searches left out.
 - **Add as prompt**: queries whose results named competitors and never reached the brand's sites,
-  as a `[[prompts]]` entry to paste into the set's file in the config repo. Popcorn doesn't write
+  as a `[[prompts]]` entry to paste into the set's file in the config repo. Cheap Seats doesn't write
   it. Reword it as the question a buyer would ask before you merge it; a query naming the brand is
   offered only in head-to-heads, the one set that may name it. A search that ran several queries
   at once (shown joined with ` | `) offers each separately, leaving out ones with search operators

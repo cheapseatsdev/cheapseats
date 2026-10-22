@@ -13,10 +13,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/metcalfc/popcorn/internal/audit"
-	"github.com/metcalfc/popcorn/internal/config"
-	"github.com/metcalfc/popcorn/internal/llm"
-	"github.com/metcalfc/popcorn/internal/store"
+	"github.com/cheapseatsdev/cheapseats/internal/audit"
+	"github.com/cheapseatsdev/cheapseats/internal/config"
+	"github.com/cheapseatsdev/cheapseats/internal/llm"
+	"github.com/cheapseatsdev/cheapseats/internal/store"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -30,7 +30,7 @@ func TestSiteChecks(t *testing.T) {
 			http.NotFound(w, r)
 			return
 		}
-		fmt.Fprint(w, `<!doctype html><html lang="en"><head><title>Popcorn</title></head><body><div id="root"></div></body></html>`)
+		fmt.Fprint(w, `<!doctype html><html lang="en"><head><title>Cheap Seats</title></head><body><div id="root"></div></body></html>`)
 	}))
 	defer brandSite.Close()
 	// A third-party roundup the answers cite, naming a competitor but not the brand.
@@ -54,7 +54,7 @@ func TestSiteChecks(t *testing.T) {
 			mu.Lock()
 			analystPrompt = s
 			mu.Unlock()
-			text = `{"insights":"## Why Popcorn lost\nx","fixes":[]}`
+			text = `{"insights":"## Why Cheap Seats lost\nx","fixes":[]}`
 		case strings.Contains(s, "output_config"):
 			text = `{"verdict":"absent","position":null,"top_pick":null,"named":[],"reasoning":"r","why_not_top":"w","objections":[]}`
 		case strings.Contains(s, `"tools"`):
@@ -70,7 +70,7 @@ func TestSiteChecks(t *testing.T) {
 	llm.AnthropicURL = api.URL
 	t.Setenv("ANTHROPIC_API_KEY", "fake-review-provider-key-123456")
 	t.Setenv("OPENAI_API_KEY", "")
-	os.Unsetenv("POPCORN_TOKENS")
+	os.Unsetenv("CHEAPSEATS_TOKENS")
 
 	cfg := testConfig(t)
 	cfg.Brand.Sites = []config.Site{{URL: brandSite.URL, Kind: "marketing"}}
@@ -109,7 +109,7 @@ func TestSiteChecks(t *testing.T) {
 		t.Fatal(err)
 	}
 	mu.Lock()
-	if !strings.Contains(analystPrompt, "page.needs-js") || !strings.Contains(analystPrompt, "audit of Popcorn") {
+	if !strings.Contains(analystPrompt, "page.needs-js") || !strings.Contains(analystPrompt, "audit of Cheap Seats") {
 		t.Errorf("the analyst didn't get the audit's findings: %s", limit(analystPrompt))
 	}
 	mu.Unlock()

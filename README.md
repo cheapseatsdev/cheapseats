@@ -1,13 +1,17 @@
-# Popcorn
+# Cheap Seats
 
-Popcorn is an open-source (MIT) AI visibility tracker I wrote to make my own product better. It
+Cheap Seats is an open-source (MIT) AI visibility tracker I wrote to make my own product better. It
 asks your buyers' questions of AI assistants, grades whether they recommend you, and builds a ranked
 list of fixes, running on the Claude subscription you already have (ChatGPT optional).
 
 It draws on a lot of inspiration, [Gauge](https://withgauge.com) first among them, along with
 Profound and Peec AI. It's free, and always will be: no hosted tier, no upsell. I hope you find it
 useful. If you outgrow it, do whatever suits you; I'd suggest Gauge, that team is great. Your prompts
-are plain text in your own repo, so they come with you. Site and docs: [popcorn.zone](https://popcorn.zone/docs/).
+are plain text in your own repo, so they come with you. Site and docs: [cheapseats.dev](https://cheapseats.dev/docs/).
+
+Cheap Seats was called Popcorn until October 2026, renamed so it isn't confused with an unrelated
+paid product. Upgrading from Popcorn needs no changes: see
+[Upgrading from Popcorn](docs/deploying.md#upgrading-from-popcorn).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/dashboard-dark.webp">
@@ -84,37 +88,37 @@ On your subscriptions, with the `claude` and `codex` CLIs installed and logged i
 API spend.
 
 ```bash
-POPCORN_CONFIG=examples/popcorn-config/popcorn.subscriptions.toml go run ./cmd/popcorn serve
+CHEAPSEATS_CONFIG=examples/cheapseats-config/cheapseats.subscriptions.toml go run ./cmd/cheapseats serve
 ```
 
 Or through the APIs:
 
 ```bash
 cp .env.example .env          # set ANTHROPIC_API_KEY
-go run ./cmd/popcorn serve    # the example config, at http://127.0.0.1:3000
+go run ./cmd/cheapseats serve    # the example config, at http://127.0.0.1:3000
 ```
 
 To measure your own brand, start a config repo from its website:
 
 ```bash
-go run ./cmd/popcorn init https://yoursite.com     # -dry-run to see it first
+go run ./cmd/cheapseats init https://yoursite.com     # -dry-run to see it first
 ```
 
 That reads the home page, `/llms.txt` and the sitemap for the brand's name, description, docs,
-blog and GitHub, and writes `./<brand>-popcorn-config` with popcorn.toml (on your Claude
+blog and GitHub, and writes `./<brand>-cheapseats-config` with cheapseats.toml (on your Claude
 subscription) and starter prompt sets, marking with TODOs what you must decide
 ([details](docs/init.md)). Or start from the
-[template](https://github.com/metcalfc/popcorn-config-template). Then:
+[template](https://github.com/cheapseatsdev/cheapseats-config-template). Then:
 
 ```bash
-POPCORN_CONFIG=../your-config/popcorn.toml go run ./cmd/popcorn check
-POPCORN_CONFIG=../your-config/popcorn.toml go run ./cmd/popcorn serve
+CHEAPSEATS_CONFIG=../your-config/cheapseats.toml go run ./cmd/cheapseats check
+CHEAPSEATS_CONFIG=../your-config/cheapseats.toml go run ./cmd/cheapseats serve
 ```
 
 ## Configuration
 
-A config repo holds `popcorn.toml` and `prompt-sets/*.toml`.
-[`examples/popcorn-config`](examples/popcorn-config) is a complete one, used when `POPCORN_CONFIG`
+A config repo holds `cheapseats.toml` and `prompt-sets/*.toml`.
+[`examples/cheapseats-config`](examples/cheapseats-config) is a complete one, used when `CHEAPSEATS_CONFIG`
 is unset.
 
 - `[brand]`: name, aliases, `about`, `audience`, public `facts`, and `[[brand.sites]]` (url, kind, owner)
@@ -128,7 +132,7 @@ is unset.
   | `codex` | the local `codex` CLI | your ChatGPT subscription |
 
 - `[grader]`, `[analyst]`: Claude models, through the API (`ANTHROPIC_API_KEY`, or a proxy that
-  adds it in `POPCORN_ANTHROPIC_BASE_URL`), or with `provider = "claude-code"` through the local
+  adds it in `CHEAPSEATS_ANTHROPIC_BASE_URL`), or with `provider = "claude-code"` through the local
   `claude` CLI on your subscription. With subscription answerers too, a laptop needs no API key.
   The theme pass is one extra grader call per run (about $0.003 on Haiku, nothing on `claude-code`);
   `[grader] themes = false` turns it off.
@@ -145,46 +149,46 @@ is unset.
 - `[budget]`: a daily cap on API spend
 - `[schedule]`, `[tiers]`: when sets run (weekly is usually enough)
 - Prompt sets: one file per category of buyer question; every prompt has a permanent id
-  ([format](examples/popcorn-config/prompt-sets/README.md))
+  ([format](examples/cheapseats-config/prompt-sets/README.md))
 
-Check a change with `popcorn check`, and see what it does to trends with `popcorn plan`.
+Check a change with `cheapseats check`, and see what it does to trends with `cheapseats plan`.
 
 ## CLI
 
 ```
-popcorn init <url> [dir]               a new config repo from the brand's website (free;
+cheapseats init <url> [dir]               a new config repo from the brand's website (free;
                                        -dry-run, -name, -competitors a,b, -suggest)
-popcorn serve [-addr 127.0.0.1:3000]   web UI, JSON API, MCP and the schedule
-popcorn sets                           list prompt sets
-popcorn run <set-id>                   run one set (costs money)
-popcorn report <run-id> [-json]        rates, share of voice and top pages
-popcorn fixes <run-id> [-rebuild]      the fix list as markdown
-popcorn audit [site...]                what AI crawlers can read on your sites (free)
-popcorn check-citations <run-id>       which cited pages name you, and which competitors
-popcorn crawl import <logfile>...      AI crawler fetches and AI referrals from access logs
-popcorn crawl report [-days 30]        those counts per page, beside how often runs cite it
-popcorn themes <run-id> [-rebuild]     net sentiment and the run's themes
-popcorn suggest-prompts <set-id> [-n 10]  new buyer questions as TOML to paste (one analyst call)
-popcorn regrade <set-id|run-id> [-since 28d] [-dry-run=false]
+cheapseats serve [-addr 127.0.0.1:3000]   web UI, JSON API, MCP and the schedule
+cheapseats sets                           list prompt sets
+cheapseats run <set-id>                   run one set (costs money)
+cheapseats report <run-id> [-json]        rates, share of voice and top pages
+cheapseats fixes <run-id> [-rebuild]      the fix list as markdown
+cheapseats audit [site...]                what AI crawlers can read on your sites (free)
+cheapseats check-citations <run-id>       which cited pages name you, and which competitors
+cheapseats crawl import <logfile>...      AI crawler fetches and AI referrals from access logs
+cheapseats crawl report [-days 30]        those counts per page, beside how often runs cite it
+cheapseats themes <run-id> [-rebuild]     net sentiment and the run's themes
+cheapseats suggest-prompts <set-id> [-n 10]  new buyer questions as TOML to paste (one analyst call)
+cheapseats regrade <set-id|run-id> [-since 28d] [-dry-run=false]
                                        grade stored answers again with today's grader, brand and
                                        competitors; a dry run with its cost unless -dry-run=false
-popcorn check                          validate the config
-popcorn plan <before> [<after>]        what a config change does to trends
-popcorn migrate-config [dir]           give prompts ids (sets from before ids)
-popcorn version                        version and database schema
+cheapseats check                          validate the config
+cheapseats plan <before> [<after>]        what a config change does to trends
+cheapseats migrate-config [dir]           give prompts ids (sets from before ids)
+cheapseats version                        version and database schema
 ```
 
 ## API and MCP
 
 - JSON API under `/api/` (status, sets, runs, fixes, quick wins, fix attempts, rankings, citations, searches, search probe, site audit, citation check, crawlers):
-  [reference](https://popcorn.zone/docs/reference/).
+  [reference](https://cheapseats.dev/docs/reference/).
 - MCP server at `/api/mcp` (Streamable HTTP). `get_run` includes net sentiment, themes and page
   types; `get_result` the grade's evidence quote; `get_citation_stability` has a set's run-to-run
   citation stability; `suggest_prompts` drafts new prompts for a set (one analyst call); `regrade`
   re-grades stored answers ([re-grading](docs/regrading.md)), a dry run unless `dry_run` is false:
 
   ```bash
-  claude mcp add --transport http popcorn https://<host>/api/mcp --header "Authorization: Bearer <token>"
+  claude mcp add --transport http cheapseats https://<host>/api/mcp --header "Authorization: Bearer <token>"
   ```
 
   - `get_started` first: the brand and its sites, each set's last run and status, today's spend
@@ -201,18 +205,18 @@ popcorn version                        version and database schema
 
 ## Access
 
-- Unset `POPCORN_TOKENS`: listens on 127.0.0.1 only, open.
-- `POPCORN_TOKENS`: bearer tokens for the API and MCP; the UI asks for one once.
-- `POPCORN_AUTH_HEADER` (+ `POPCORN_ALLOWED_EMAILS`): trust a signing-in proxy's email header.
-- `POPCORN_HOSTS`: host names a proxy on the same machine serves Popcorn as; MCP needs them.
-- `POPCORN_PUBLIC_URL`: the address share links use (`https://popcorn.example.com`). Unset, they
-  use the first of `POPCORN_HOSTS` over https, else the host the request came in on
+- Unset `CHEAPSEATS_TOKENS`: listens on 127.0.0.1 only, open.
+- `CHEAPSEATS_TOKENS`: bearer tokens for the API and MCP; the UI asks for one once.
+- `CHEAPSEATS_AUTH_HEADER` (+ `CHEAPSEATS_ALLOWED_EMAILS`): trust a signing-in proxy's email header.
+- `CHEAPSEATS_HOSTS`: host names a proxy on the same machine serves Cheap Seats as; MCP needs them.
+- `CHEAPSEATS_PUBLIC_URL`: the address share links use (`https://cheapseats.example.com`). Unset, they
+  use the first of `CHEAPSEATS_HOSTS` over https, else the host the request came in on
   (`X-Forwarded-Host` first).
 - `/share/<token>` is open without a sign-in; it serves only that link's run ([docs](docs/sharing.md)).
 
 ## Deploying
 
-- [docs/deploying.md](docs/deploying.md): Docker, Kubernetes ([Helm chart](charts/popcorn)), releases
+- [docs/deploying.md](docs/deploying.md): Docker, Kubernetes ([Helm chart](charts/cheapseats)), releases
 - [docs/exe-dev.md](docs/exe-dev.md): an exe.dev VM behind its email sign-in
 - One always-on instance per database. Runs resume after a restart.
 - Upgrades back up the database first and keep your history.
@@ -230,7 +234,7 @@ Tests use fake providers and never make a paid call. Data outlives releases, so:
 - Migrations are append-only; `internal/app/upgrade_test.go` upgrades the oldest schema.
 - Stored JSON decodes leniently; old shapes keep working.
 - `run.Method` changes only when grading changes; other changes are annotated, not new trends.
-  `popcorn regrade` brings older runs onto a new method without asking again ([how](docs/regrading.md)).
+  `cheapseats regrade` brings older runs onto a new method without asking again ([how](docs/regrading.md)).
 - Unknown config keys are errors; format changes ship with `migrate-config`.
 
 Icons: [Lucide](https://lucide.dev) (ISC). License: [MIT](LICENSE).

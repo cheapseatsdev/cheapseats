@@ -9,9 +9,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/metcalfc/popcorn/internal/config"
-	"github.com/metcalfc/popcorn/internal/run"
-	"github.com/metcalfc/popcorn/internal/sets"
+	"github.com/cheapseatsdev/cheapseats/internal/config"
+	"github.com/cheapseatsdev/cheapseats/internal/run"
+	"github.com/cheapseatsdev/cheapseats/internal/sets"
 )
 
 type Config struct {
@@ -22,7 +22,7 @@ type Config struct {
 // Markdown compares before with after and writes the plan for a pull request comment.
 func Markdown(before, after Config) string {
 	var b strings.Builder
-	b.WriteString("## Popcorn plan\n\n")
+	b.WriteString("## Cheap Seats plan\n\n")
 	var warn []string
 
 	// How answers are asked and graded: a change starts every trend over.
@@ -178,7 +178,7 @@ func Markdown(before, after Config) string {
 		b.WriteString("\n")
 	}
 	if len(sections)+len(ans) == 0 && len(warn) == 0 {
-		b.WriteString("No change to what Popcorn asks or how it's measured.\n\n")
+		b.WriteString("No change to what Cheap Seats asks or how it's measured.\n\n")
 	}
 	for _, s := range sections {
 		b.WriteString(s + "\n\n")

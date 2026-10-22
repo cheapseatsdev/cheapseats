@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/metcalfc/popcorn/internal/answer"
+	"github.com/cheapseatsdev/cheapseats/internal/answer"
 )
 
 func TestCitesHost(t *testing.T) {

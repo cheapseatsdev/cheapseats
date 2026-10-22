@@ -13,10 +13,10 @@ import (
 	"testing"
 
 	"github.com/BurntSushi/toml"
-	"github.com/metcalfc/popcorn/internal/audit"
-	"github.com/metcalfc/popcorn/internal/config"
-	"github.com/metcalfc/popcorn/internal/sets"
-	"github.com/metcalfc/popcorn/internal/suggest"
+	"github.com/cheapseatsdev/cheapseats/internal/audit"
+	"github.com/cheapseatsdev/cheapseats/internal/config"
+	"github.com/cheapseatsdev/cheapseats/internal/sets"
+	"github.com/cheapseatsdev/cheapseats/internal/suggest"
 )
 
 // serve answers each path with its body, SRV in it replaced with the server's URL; anything else
@@ -170,7 +170,7 @@ func TestDiscoverReadsSitemapAndLLMs(t *testing.T) {
 func TestCategory(t *testing.T) {
 	for _, c := range []struct{ about, want string }{
 		{"Acme is a project management app for remote teams.", "project management app"},
-		{"Popcorn is an open-source, self-hosted tool that asks AI assistants questions.", "self-hosted tool"},
+		{"Cheap Seats is an open-source, self-hosted tool that asks AI assistants questions.", "self-hosted tool"},
 		{"Build production-grade applications with a Postgres database, and more.", "Postgres database"},
 		{"Application performance monitoring for developers.", "application performance monitoring"},
 		{"Plausible is a lightweight and open-source Google Analytics alternative.", "open-source Google Analytics alternative"},
@@ -196,7 +196,7 @@ func site() Site {
 		Aliases: Aliases("Acme Cloud", "acme.com")}
 }
 
-// The config init writes passes popcorn check as it is, with and without competitors, and only
+// The config init writes passes cheapseats check as it is, with and without competitors, and only
 // head-to-heads names the brand.
 func TestGeneratedConfigChecks(t *testing.T) {
 	for _, comps := range [][]string{nil, {"Asana", "Trello", "Monday.com"}} {
@@ -299,8 +299,8 @@ func TestWriteRefusesToOverwrite(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "pricing.toml") {
 		t.Fatalf("err %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "popcorn.toml")); err == nil {
-		t.Error("wrote popcorn.toml beside a file it refused to overwrite")
+	if _, err := os.Stat(filepath.Join(dir, "cheapseats.toml")); err == nil {
+		t.Error("wrote cheapseats.toml beside a file it refused to overwrite")
 	}
 	if b, _ := os.ReadFile(filepath.Join(dir, "prompt-sets", "pricing.toml")); string(b) != "mine" {
 		t.Error("overwrote pricing.toml")
@@ -332,7 +332,7 @@ func TestSiteTextCantInjectTOML(t *testing.T) {
 			t.Fatal(err)
 		}
 		var got map[string]any
-		if _, err := toml.DecodeFile(filepath.Join(dir, "popcorn.toml"), &got); err != nil {
+		if _, err := toml.DecodeFile(filepath.Join(dir, "cheapseats.toml"), &got); err != nil {
 			t.Fatal(err)
 		}
 		var keys []string

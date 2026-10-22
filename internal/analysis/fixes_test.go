@@ -9,12 +9,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/metcalfc/popcorn/internal/answer"
-	"github.com/metcalfc/popcorn/internal/config"
-	"github.com/metcalfc/popcorn/internal/grade"
-	"github.com/metcalfc/popcorn/internal/llm"
-	"github.com/metcalfc/popcorn/internal/run"
-	"github.com/metcalfc/popcorn/internal/sets"
+	"github.com/cheapseatsdev/cheapseats/internal/answer"
+	"github.com/cheapseatsdev/cheapseats/internal/config"
+	"github.com/cheapseatsdev/cheapseats/internal/grade"
+	"github.com/cheapseatsdev/cheapseats/internal/llm"
+	"github.com/cheapseatsdev/cheapseats/internal/run"
+	"github.com/cheapseatsdev/cheapseats/internal/sets"
 )
 
 func TestPriorityWeighsReachAgainstEffort(t *testing.T) {
@@ -44,9 +44,9 @@ func TestBuildTriagesTheAnalystsList(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
 		sent = string(body)
-		out := `{"insights":"## Why Popcorn lost\nCoder is GA.","fixes":[` +
+		out := `{"insights":"## Why Cheap Seats lost\nCoder is GA.","fixes":[` +
 			`{"rank":2,"type":"outreach","title":"Get into the roundup","target":"https://example.com/roundup","claim":"c","done_when":"d","evidence":"e","prompts":[2,2,9],"effort":"S","displaces":""},` +
-			`{"rank":1,"type":"new-page","title":"Publish the devcontainer page","target":"popcorn.example/docs/devcontainers","claim":"c","done_when":"d","evidence":"e","prompts":[1,2],"effort":"M","displaces":"https://coder.com/docs"},` +
+			`{"rank":1,"type":"new-page","title":"Publish the devcontainer page","target":"cheapseats.example/docs/devcontainers","claim":"c","done_when":"d","evidence":"e","prompts":[1,2],"effort":"M","displaces":"https://coder.com/docs"},` +
 			`{"rank":3,"type":"product","title":"Nothing real","target":"x","claim":"c","done_when":"d","evidence":"e","prompts":[7],"effort":"L","displaces":null}]}`
 		json.NewEncoder(w).Encode(map[string]any{"content": []any{map[string]any{"type": "text", "text": out}}, "usage": map[string]any{"input_tokens": 10, "output_tokens": 10}})
 	}))
@@ -57,7 +57,7 @@ func TestBuildTriagesTheAnalystsList(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "fake-key")
 
 	cfg := &config.Config{
-		Brand:   config.Brand{Name: "Popcorn", Domains: []string{"popcorn.example"}, Facts: []string{"PUBLIC-FACT"}},
+		Brand:   config.Brand{Name: "Cheap Seats", Domains: []string{"cheapseats.example"}, Facts: []string{"PUBLIC-FACT"}},
 		Analyst: config.Model{Model: "fake"},
 		Owners:  config.Owners{Default: "growth", ByGap: map[string]string{"documentation": "docs"}},
 	}
@@ -70,7 +70,7 @@ func TestBuildTriagesTheAnalystsList(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"PUBLIC-FACT", "Prompt 1: first question", "preferred Coder", "Popcorn pages seen: NONE", "https://coder.com/docs", "named 0/1, recommended 0/1", "a prompt's count is noisy"} {
+	for _, want := range []string{"PUBLIC-FACT", "Prompt 1: first question", "preferred Coder", "Cheap Seats pages seen: NONE", "https://coder.com/docs", "named 0/1, recommended 0/1", "a prompt's count is noisy"} {
 		if !strings.Contains(sent, want) {
 			t.Errorf("analyst input lacks %q", want)
 		}

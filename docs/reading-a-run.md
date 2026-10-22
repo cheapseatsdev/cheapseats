@@ -2,7 +2,7 @@
 
 Everything on a run page is worked out from the answers and grades already stored: no model is
 called to build it. The same numbers are in the JSON export (`/runs/<id>/export.json`, under
-`Summary`), `popcorn report <run-id> -json`, and MCP `get_run` (cut to the top rows, without the run's snapshot or the fixes' Claude prompts, which `get_quick_wins` has).
+`Summary`), `cheapseats report <run-id> -json`, and MCP `get_run` (cut to the top rows, without the run's snapshot or the fixes' Claude prompts, which `get_quick_wins` has).
 
 ## Scores
 
@@ -15,7 +15,7 @@ called to build it. The same numbers are in the JSON export (`/runs/<id>/export.
   each branded prompt. Rankings and trends still use the overall rates.
 
 Each grade carries **evidence**: the sentence of the answer that most supports its verdict. The
-grader is asked to copy it; Popcorn then looks for it in the answer, ignoring case, spacing,
+grader is asked to copy it; Cheap Seats then looks for it in the answer, ignoring case, spacing,
 markdown emphasis and curly quotes, and keeps the answer's own span of text, or nothing if it isn't
 there, so a quote shown is always one the answer contains. The run page highlights it in the
 answer; it's `evidence` in the grade (JSON, CSV export, MCP `get_result`). Absent answers have
@@ -53,7 +53,7 @@ Every page an answer cited, or its searches returned, is sorted into a kind of s
 | `institutional` | .gov, .edu, .mil, .int and their country forms (gov.uk, ac.uk) |
 | `editorial` | everything else |
 
-`[sources]` in popcorn.toml moves hosts between the last five (see below).
+`[sources]` in cheapseats.toml moves hosts between the last five (see below).
 
 For each host and each page:
 
@@ -98,7 +98,7 @@ carries `page_types` and each top page's `page_type`.
 
 ## Configuring it
 
-Competitors' sites, in `[[competitors]]` in popcorn.toml or a prompt set:
+Competitors' sites, in `[[competitors]]` in cheapseats.toml or a prompt set:
 
 ```toml
 [[competitors]]

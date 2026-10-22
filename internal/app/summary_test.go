@@ -3,10 +3,10 @@ package app
 import (
 	"testing"
 
-	"github.com/metcalfc/popcorn/internal/answer"
-	"github.com/metcalfc/popcorn/internal/config"
-	"github.com/metcalfc/popcorn/internal/grade"
-	"github.com/metcalfc/popcorn/internal/run"
+	"github.com/cheapseatsdev/cheapseats/internal/answer"
+	"github.com/cheapseatsdev/cheapseats/internal/config"
+	"github.com/cheapseatsdev/cheapseats/internal/grade"
+	"github.com/cheapseatsdev/cheapseats/internal/run"
 )
 
 // A past run is summarized with the brand as it saw it (who the brand is shaped its grading) and

@@ -18,15 +18,15 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/metcalfc/popcorn/internal/answer"
-	"github.com/metcalfc/popcorn/internal/budget"
-	"github.com/metcalfc/popcorn/internal/config"
-	"github.com/metcalfc/popcorn/internal/grade"
-	"github.com/metcalfc/popcorn/internal/llm"
-	"github.com/metcalfc/popcorn/internal/opinion"
-	"github.com/metcalfc/popcorn/internal/sets"
-	"github.com/metcalfc/popcorn/internal/store"
-	"github.com/metcalfc/popcorn/internal/version"
+	"github.com/cheapseatsdev/cheapseats/internal/answer"
+	"github.com/cheapseatsdev/cheapseats/internal/budget"
+	"github.com/cheapseatsdev/cheapseats/internal/config"
+	"github.com/cheapseatsdev/cheapseats/internal/grade"
+	"github.com/cheapseatsdev/cheapseats/internal/llm"
+	"github.com/cheapseatsdev/cheapseats/internal/opinion"
+	"github.com/cheapseatsdev/cheapseats/internal/sets"
+	"github.com/cheapseatsdev/cheapseats/internal/store"
+	"github.com/cheapseatsdev/cheapseats/internal/version"
 )
 
 // Snapshot is everything that shaped a run, frozen when it was created.
@@ -50,7 +50,7 @@ type Run struct {
 	Design  string `json:"design"`
 	// How answers were asked and graded; runs only trend together within one method.
 	Method string `json:"method"`
-	// The config repo commit and Popcorn version that produced it; empty for older runs.
+	// The config repo commit and Cheap Seats version that produced it; empty for older runs.
 	ConfigRev  string   `json:"config_rev"`
 	AppVersion string   `json:"app_version"`
 	ID         string   `json:"id"`
@@ -136,7 +136,7 @@ func (e *BusyError) Error() string { return "this set already has a run in progr
 // Create records a queued run over the set with the answerers whose keys are present.
 func (e *Engine) Create(ctx context.Context, set sets.Set, trigger string) (*Run, error) {
 	if e.stopping.Load() {
-		return nil, errors.New("popcorn is shutting down; start the run after it restarts")
+		return nil, errors.New("cheapseats is shutting down; start the run after it restarts")
 	}
 	snap := NewSnapshot(e.Cfg, set)
 	if e.Cfg.Sampling.Adaptive && set.Tier != sets.PLG {

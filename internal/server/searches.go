@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/metcalfc/popcorn/internal/queries"
-	"github.com/metcalfc/popcorn/internal/run"
+	"github.com/cheapseatsdev/cheapseats/internal/queries"
+	"github.com/cheapseatsdev/cheapseats/internal/run"
 )
 
 // poolRuns is how many of a set's runs, this one included, the searches page pools when asked.

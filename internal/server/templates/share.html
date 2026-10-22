@@ -1,7 +1,7 @@
 {{define "share"}}<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex, nofollow"><meta name="referrer" content="no-referrer">
 <title>{{.Brand}} in AI answers · {{.Set}}</title>
-<link rel="icon" type="image/svg+xml" href="{{asset "favicon.svg"}}"><link rel="stylesheet" href="{{asset "popcorn.css"}}"></head><body>
-<header><span class="brand">{{icon "popcorn" 22}}<span>Popcorn</span></span><span class="brand-name">{{.Brand}}</span></header>
+<link rel="icon" type="image/svg+xml" href="{{asset "favicon.svg"}}"><link rel="stylesheet" href="{{asset "cheapseats.css"}}"></head><body>
+<header><span class="brand">{{icon "popcorn" 22}}<span>Cheap Seats</span></span><span class="brand-name">{{.Brand}}</span></header>
 <main>
 <h1>{{.Brand}} in AI answers: {{.Set}}</h1>
 <p class="sub">{{.Run}}{{with .Finished}} · finished {{day .}}{{end}} · {{.Answers}} answers graded{{with .Answerers}} from {{range $i, $a := .}}{{if $i}}, {{end}}{{$a}}{{end}}{{end}}</p>
@@ -28,7 +28,7 @@
 {{with .Fixes}}<h2>What to fix first</h2>
 <ol>{{range .}}<li>{{.Title}}{{with .Target}} <span class="muted mono small">{{.}}</span>{{end}}</li>{{end}}</ol>{{end}}
 
-<p class="muted small gap-top">A read-only report shared from Popcorn, an open-source AI visibility tracker. This link stops working {{day .Expires}} UTC, or sooner if it's revoked.</p>
+<p class="muted small gap-top">A read-only report shared from Cheap Seats, an open-source AI visibility tracker. This link stops working {{day .Expires}} UTC, or sooner if it's revoked.</p>
 </main></body></html>{{end}}
 {{define "share-prompt"}}<div class="card"><p><b>{{.Prompt}}</b></p>
 <p class="small">Recommended {{.Recommended.Hits}}/{{.Recommended.N}}, named {{.Named.Hits}}/{{.Named.N}}{{with .TopPicks}} · top picks: {{range $i, $c := .}}{{if $i}}, {{end}}{{$c.Name}} ×{{$c.N}}{{end}}{{end}}</p>

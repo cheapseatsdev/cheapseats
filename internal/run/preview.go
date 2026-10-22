@@ -3,8 +3,8 @@ package run
 import (
 	"context"
 
-	"github.com/metcalfc/popcorn/internal/answer"
-	"github.com/metcalfc/popcorn/internal/sets"
+	"github.com/cheapseatsdev/cheapseats/internal/answer"
+	"github.com/cheapseatsdev/cheapseats/internal/sets"
 )
 
 // Preview is what Create would make of a set now, recorded nowhere: the snapshot (with adaptive

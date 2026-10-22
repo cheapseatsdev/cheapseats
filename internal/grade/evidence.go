@@ -28,7 +28,7 @@ func Quote(answer, quote string) string {
 		return ""
 	}
 	start, end := starts[i], ends[i+len(q)-1]
-	// Take in the marks around it too, so "**Popcorn** is" isn't cut to "Popcorn** is".
+	// Take in the marks around it too, so "**Cheap Seats** is" isn't cut to "Cheap Seats** is".
 	for start > 0 && strings.IndexByte(marks, answer[start-1]) >= 0 {
 		start--
 	}

@@ -20,7 +20,7 @@ jobs:
       - run: go vet ./...
       - run: go test -race ./...
       - name: the example config passes its own checks
-        run: POPCORN_CONFIG=examples/popcorn-config/popcorn.toml go run ./cmd/popcorn check
+        run: CHEAPSEATS_CONFIG=examples/cheapseats-config/cheapseats.toml go run ./cmd/cheapseats check
       - name: scripts parse
         run: bash -n deploy/*.sh
 
@@ -36,5 +36,5 @@ jobs:
       - uses: helm/kind-action@v1
         with:
           install_only: true
-      - run: helm lint charts/popcorn --set image.repository=x --set image.tag=y --set existingSecret=s
+      - run: helm lint charts/cheapseats --set image.repository=x --set image.tag=y --set existingSecret=s
       - run: deploy/kind-smoke.sh

@@ -1,9 +1,9 @@
-# Starting a config repo: popcorn init
+# Starting a config repo: cheapseats init
 
 ```bash
-popcorn init https://yoursite.com                  # writes ./<brand>-popcorn-config
-popcorn init yoursite.com ../acme-config -dry-run  # prints what it found and would write
-popcorn init yoursite.com -name "Acme" -competitors "Asana,Trello" -suggest
+cheapseats init https://yoursite.com                  # writes ./<brand>-cheapseats-config
+cheapseats init yoursite.com ../acme-config -dry-run  # prints what it found and would write
+cheapseats init yoursite.com -name "Acme" -competitors "Asana,Trello" -suggest
 ```
 
 | flag | |
@@ -39,8 +39,8 @@ sitemaps). No model is called unless you pass `-suggest`.
 ## What it writes
 
 ```
-<brand>-popcorn-config/
-  popcorn.toml                   brand, sites, competitors; claude-code answerer, grader and
+<brand>-cheapseats-config/
+  cheapseats.toml                   brand, sites, competitors; claude-code answerer, grader and
                                  analyst (codex commented out); budget; schedule off
   prompt-sets/
     discovery.toml      core     "What's the best <category> for a small team?" ...
@@ -51,8 +51,8 @@ sitemaps). No model is called unless you pass `-suggest`.
                                  that names the brand
 ```
 
-The generated files pass `popcorn check` before they're written. Review every TODO
+The generated files pass `cheapseats check` before they're written. Review every TODO
 (`grep -rn TODO`): `audience` and `facts` are left for you, and `about` and the category are
 guesses. Settle `about` and `audience` before the first run, since changing them restarts every
-trend. Then `popcorn check`, `popcorn audit`, `popcorn run discovery`, and commit the directory as
+trend. Then `cheapseats check`, `cheapseats audit`, `cheapseats run discovery`, and commit the directory as
 its own git repo.

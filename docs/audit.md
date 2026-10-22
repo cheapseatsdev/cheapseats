@@ -6,9 +6,9 @@ they cost nothing.
 ## Site audit
 
 ```bash
-popcorn audit                 # every site in [[brand.sites]] (and brand.domains)
-popcorn audit example.com     # just one, which needn't be yours (not kept)
-popcorn audit -pages 20 -info # more sitemap pages; list info findings too
+cheapseats audit                 # every site in [[brand.sites]] (and brand.domains)
+cheapseats audit example.com     # just one, which needn't be yours (not kept)
+cheapseats audit -pages 20 -info # more sitemap pages; list info findings too
 ```
 
 Also **Site audit** in the web UI (`/audit`, "Audit now"), `POST /api/audit` and `GET /api/audit`
@@ -21,8 +21,8 @@ the address dialed, so a redirect or a DNS name pointing at one is refused too. 
 redirects, http and https only, never through a proxy.
 
 For each site it fetches robots.txt, the home page, `/llms.txt`, the sitemap and up to 10 pages
-from the sitemap (spread through it), as `Mozilla/5.0 (compatible; Popcorn-Audit/<version>;
-+https://popcorn.zone)`, 4 requests at a time, 15 s timeout, 2 MB cap. It reads the raw HTML, as
+from the sitemap (spread through it), as `Mozilla/5.0 (compatible; CheapSeats-Audit/<version>;
++https://cheapseats.dev)`, 4 requests at a time, 15 s timeout, 2 MB cap. It reads the raw HTML, as
 a crawler that runs no JavaScript does. A host/path site (`github.com/example`) gets its
 robots.txt rules checked for that path, but no llms.txt or sitemap check, since those belong to the
 host. Sites of kind `code` or `community` don't get their markup checked: it isn't yours to fix.
@@ -63,22 +63,22 @@ empty without JavaScript" rather than only "this page wasn't cited".
 | `page.canonical` | warning | no canonical link |
 | `page.open-graph` | warning | no `og:title` or `og:description` |
 
-The firewall check only sends each bot's user agent, from Popcorn's address. A firewall that lets
+The firewall check only sends each bot's user agent, from Cheap Seats' address. A firewall that lets
 verified bots through by IP may block this check and still admit the real crawler: confirm in its
 log (or with the crawler counts below) before changing rules.
 
 ## Citation check
 
 ```bash
-popcorn check-citations <run-id>         # the 25 most-cited third-party pages
-popcorn check-citations -n 50 <run-id>
+cheapseats check-citations <run-id>         # the 25 most-cited third-party pages
+cheapseats check-citations -n 50 <run-id>
 ```
 
 Also on the **Site audit** page ("Check citations", for any finished run),
 `POST`/`GET /api/runs/<id>/citation-check`, and the MCP tool `check_citations`.
 
 It takes the run's third-party pages, most cited first, then most surfaced in searches, and fetches
-each one as Popcorn (where its robots.txt allows `Popcorn-Audit`; once per page per day, kept a
+each one as Cheap Seats (where its robots.txt allows `CheapSeats-Audit`; once per page per day, kept a
 month). It reads the page's visible text and says whether it names the brand or an alias, and which
 of the set's competitors. A page that names competitors but not you is marked **outreach**: the
 answers read it, and it leaves you out. Matching is by whole word, ignoring case: stricter than the
@@ -87,10 +87,10 @@ grader's own check, so a short alias doesn't match inside another word.
 ## AI crawlers
 
 ```bash
-popcorn crawl import access.log access.log.1.gz        # nginx, Apache: pass -host for the site
-popcorn crawl import -host docs.example.com docs.log
-popcorn crawl import cloudflare-*.json caddy.json -    # - reads stdin
-popcorn crawl report -days 30
+cheapseats crawl import access.log access.log.1.gz        # nginx, Apache: pass -host for the site
+cheapseats crawl import -host docs.example.com docs.log
+cheapseats crawl import cloudflare-*.json caddy.json -    # - reads stdin
+cheapseats crawl report -days 30
 ```
 
 Also **AI crawlers** in the web UI (`/crawlers`), `GET /api/crawlers?days=30`, and the MCP tool

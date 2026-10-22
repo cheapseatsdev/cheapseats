@@ -13,9 +13,9 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/metcalfc/popcorn/internal/app"
-	"github.com/metcalfc/popcorn/internal/opinion"
-	"github.com/metcalfc/popcorn/internal/report"
+	"github.com/cheapseatsdev/cheapseats/internal/app"
+	"github.com/cheapseatsdev/cheapseats/internal/opinion"
+	"github.com/cheapseatsdev/cheapseats/internal/report"
 )
 
 // Shared reports: /share/<token> is a run's report for someone without a sign-in, open without
@@ -40,14 +40,14 @@ func shareToken(path string) (string, bool) {
 }
 
 // The host and scheme a request came in on, as the MCP handler passes them to tools (the SDK
-// passes headers but not the Host). Set by Popcorn, overwriting anything a client sent.
+// passes headers but not the Host). Set by Cheap Seats, overwriting anything a client sent.
 const (
-	hostHeader   = "X-Popcorn-Request-Host"
-	schemeHeader = "X-Popcorn-Request-Scheme"
+	hostHeader   = "X-CheapSeats-Request-Host"
+	schemeHeader = "X-CheapSeats-Request-Scheme"
 )
 
-// linkBase is where links to this Popcorn point: POPCORN_PUBLIC_URL when set, else the first of
-// POPCORN_HOSTS over https, else the host and scheme the request came in on.
+// linkBase is where links to this Cheap Seats point: CHEAPSEATS_PUBLIC_URL when set, else the first of
+// CHEAPSEATS_HOSTS over https, else the host and scheme the request came in on.
 func (s *Server) linkBase(host, scheme string) string {
 	if s.publicURL != "" {
 		return s.publicURL
@@ -77,7 +77,7 @@ func linkWarning(base string) string {
 	if !loopback(host) {
 		return ""
 	}
-	return "This link points at " + base + ", which only this machine can open. Set POPCORN_PUBLIC_URL to the address people reach Popcorn at."
+	return "This link points at " + base + ", which only this machine can open. Set CHEAPSEATS_PUBLIC_URL to the address people reach Cheap Seats at."
 }
 
 func requestScheme(r *http.Request) string {

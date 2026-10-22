@@ -1,4 +1,4 @@
-// Package config reads popcorn.toml: the brand, who answers, who grades, what it costs, and the
+// Package config reads cheapseats.toml: the brand, who answers, who grades, what it costs, and the
 // limits. Secrets never live here; they come from the environment.
 package config
 
@@ -13,7 +13,8 @@ import (
 	"unicode"
 
 	"github.com/BurntSushi/toml"
-	"github.com/metcalfc/popcorn/internal/sets"
+	"github.com/cheapseatsdev/cheapseats/internal/env"
+	"github.com/cheapseatsdev/cheapseats/internal/sets"
 )
 
 type Config struct {
@@ -34,7 +35,7 @@ type Config struct {
 	// prefixes: [sources] ugc = ["community.example.com"]. They win over the built-in lists; the
 	// brand's sites are always "own" and competitors' domains always "competitor".
 	Sources map[string][]string `toml:"sources"`
-	// The directory popcorn.toml was read from: prompt sets live beside it.
+	// The directory cheapseats.toml was read from: prompt sets live beside it.
 	Dir string `toml:"-"`
 	// The config repo's commit, if known (see Revision).
 	Rev string `toml:"-"`
@@ -206,10 +207,13 @@ func (c *Config) Cost(model string, u Usage) float64 {
 }
 
 func Load(path string) (*Config, error) {
+	if filepath.Base(path) == "cheapseats.toml" {
+		path = env.File(filepath.Dir(path), "cheapseats.toml", "popcorn.toml")
+	}
 	var c Config
 	md, err := toml.DecodeFile(path, &c)
 	if err != nil {
-		return nil, fmt.Errorf("reading %s (set POPCORN_CONFIG to your config repo's popcorn.toml): %w", path, err)
+		return nil, fmt.Errorf("reading %s (set CHEAPSEATS_CONFIG to your config repo's cheapseats.toml): %w", path, err)
 	}
 	// A misspelled or misplaced key would otherwise be dropped without a word (a schedule hour
 	// in the wrong table just turns the schedule off).
@@ -360,15 +364,15 @@ func Missing(provider string) string {
 	return ""
 }
 
-// AnthropicBaseURLVar names a base URL for Popcorn's own Anthropic API calls, such as a proxy that
+// AnthropicBaseURLVar names a base URL for Cheap Seats' own Anthropic API calls, such as a proxy that
 // adds the key (exe.dev's integrations). With it set, ANTHROPIC_API_KEY is optional. It isn't
 // ANTHROPIC_BASE_URL because the claude CLI reads that, and subscription answers must not go through
 // a proxy that bills an API key.
-const AnthropicBaseURLVar = "POPCORN_ANTHROPIC_BASE_URL"
+const AnthropicBaseURLVar = "CHEAPSEATS_ANTHROPIC_BASE_URL"
 
 // AnthropicBaseURL is AnthropicBaseURLVar without a trailing slash, or "".
 func AnthropicBaseURL() string {
-	return strings.TrimRight(strings.TrimSpace(os.Getenv(AnthropicBaseURLVar)), "/")
+	return strings.TrimRight(strings.TrimSpace(env.Get("ANTHROPIC_BASE_URL")), "/")
 }
 
 // AnswererName is what the UI calls an answerer: its name, or its id if it has none or is no
