@@ -228,18 +228,30 @@ func TestTheFixLoopOverMCP(t *testing.T) {
 	// Mark: proposed with the pull request; it leaves the open list.
 	pr := "https://github.com/metcalfc/popcorn-site/pull/11"
 	var at app.Attempt
-	json.Unmarshal([]byte(call("mark_fix", map[string]any{"run": todo[0].RunID, "rank": todo[0].Rank, "url": pr, "note": "the guide"})), &at)
+	marked := call("mark_fix", map[string]any{"run": todo[0].RunID, "rank": todo[0].Rank, "url": pr, "note": "the guide"})
+	json.Unmarshal([]byte(marked), &at)
 	if at.ID == 0 || at.State != app.Proposed || at.By != "mcp" || at.URL != pr {
 		t.Fatalf("mark: %+v", at)
 	}
 	if got := call("get_quick_wins", open); got != "[]" {
 		t.Errorf("a marked fix is still open: %s", limit(got))
 	}
+	// The loop's results stay small: no Claude prompt in an attempt's copy of its fix, nested or not.
+	proposed := call("get_quick_wins", map[string]any{"status": "proposed", "brief": true})
+	for name, text := range map[string]string{"mark_fix": marked, "brief get_quick_wins": proposed} {
+		if strings.Contains(text, "## Your task") {
+			t.Errorf("%s carries a Claude prompt: %s", name, limit(text))
+		}
+	}
 
 	// Accept when it merges; list_attempts shows it.
 	call("set_attempt_state", map[string]any{"id": at.ID, "state": "accepted"})
 	var all []app.Attempt
-	json.Unmarshal([]byte(call("list_attempts", map[string]any{"set": "ai-search-visibility"})), &all)
+	listed := call("list_attempts", map[string]any{"set": "ai-search-visibility"})
+	if strings.Contains(listed, "## Your task") {
+		t.Errorf("list_attempts carries a Claude prompt: %s", limit(listed))
+	}
+	json.Unmarshal([]byte(listed), &all)
 	if len(all) != 1 || all[0].State != app.Accepted || all[0].Fix.Title != "Write a credential-gateway guide" {
 		t.Fatalf("list: %+v", all)
 	}
