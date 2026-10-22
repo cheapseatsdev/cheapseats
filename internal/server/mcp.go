@@ -200,7 +200,7 @@ func (s *Server) mcpHandler() http.Handler {
 		})
 	addTool(srv, "audit_sites", "Audit the brand's sites for AI crawlers, free (plain HTTP, no model calls): robots.txt and firewall blocks per AI crawler, llms.txt, the sitemap, and each page's title, description, H1, lang, noindex, canonical, JSON-LD, Open Graph and whether it renders without JavaScript. Returns the errors and warnings with a fix for each.",
 		func(ctx context.Context, a struct {
-			Site   string `json:"site,omitempty" jsonschema:"audit only this site (a host or host/path); default every site of the brand's"`
+			Site   string `json:"site,omitempty" jsonschema:"audit only this one of the brand's sites (as listed in its config); default all of them"`
 			Cached bool   `json:"cached,omitempty" jsonschema:"return the latest kept audit instead of running one"`
 			Info   bool   `json:"info,omitempty" jsonschema:"include info findings (often a choice, like blocking training crawlers)"`
 		}) (any, error) {
@@ -217,6 +217,11 @@ func (s *Server) mcpHandler() http.Handler {
 			} else {
 				var sites []string
 				if a.Site != "" {
+					// Only the brand's own sites: anything else is for the CLI, run by someone at
+					// the machine, not a request that can make this server fetch any address.
+					if !s.App.IsBrandSite(a.Site) {
+						return nil, fmt.Errorf("%q isn't one of the brand's sites (%s); audit other sites with popcorn audit on the command line", a.Site, strings.Join(s.App.AuditSites(), ", "))
+					}
 					sites = []string{a.Site}
 				}
 				r, err := s.App.Audit(ctx, sites, audit.Options{})

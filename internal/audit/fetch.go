@@ -3,11 +3,11 @@ package audit
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/metcalfc/popcorn/internal/version"
 )
@@ -31,13 +31,14 @@ type Fetcher struct {
 	limit  chan struct{}
 }
 
-// NewFetcher allows n requests in flight at once (4 when n <= 0).
+// NewFetcher allows n requests in flight at once (4 when n <= 0). A nil client is one that only
+// reaches public addresses (guard.go); a client given is trusted as it is.
 func NewFetcher(client *http.Client, n int) *Fetcher {
 	if n <= 0 {
 		n = 4
 	}
 	if client == nil {
-		client = &http.Client{Timeout: 15 * time.Second}
+		client = safeClient()
 	}
 	return &Fetcher{Client: client, UA: UA(), limit: make(chan struct{}, n)}
 }
@@ -69,6 +70,9 @@ func (f *Fetcher) Get(ctx context.Context, url string, ua ...string) (*Response,
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, err
+	}
+	if req.URL.Scheme != "http" && req.URL.Scheme != "https" {
+		return nil, fmt.Errorf("not an http or https URL: %s", url)
 	}
 	agent := f.UA
 	if len(ua) > 0 && ua[0] != "" {

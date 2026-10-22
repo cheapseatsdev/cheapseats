@@ -165,8 +165,8 @@ func crawlCmd(ctx context.Context, args []string) error {
 			if err != nil {
 				return fmt.Errorf("%s: %w", name, err)
 			}
-			fmt.Printf("%s: %d lines, %d counted (%d assistant, %d search, %d training, %d engine, %d AI referrals), %d already imported, %d unreadable\n",
-				name, st.Lines, st.Counted, st.ByClass[bots.Assistant], st.ByClass[bots.Search], st.ByClass[bots.Training], st.ByClass[bots.Engine], st.ByClass[bots.Referral], st.Duplicate, st.Unread)
+			fmt.Printf("%s: %d lines, %d counted (%d assistant, %d search, %d training, %d engine, %d AI referrals), %d already imported, %d over 400 days old, %d unreadable\n",
+				name, st.Lines, st.Counted, st.ByClass[bots.Assistant], st.ByClass[bots.Search], st.ByClass[bots.Training], st.ByClass[bots.Engine], st.ByClass[bots.Referral], st.Duplicate, st.TooOld, st.Unread)
 			if st.NoHost {
 				fmt.Println("  some lines name no host; pass -host to say which site the log is for")
 			}

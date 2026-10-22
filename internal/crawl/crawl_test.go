@@ -143,3 +143,33 @@ func TestImportAndReport(t *testing.T) {
 		t.Errorf("totals %+v, hosts %v, bots %+v", rep.Totals, rep.Hosts, rep.Bots)
 	}
 }
+
+// One absurd line doesn't sink the import, and lines older than the hashes are kept aren't counted
+// (they could count twice).
+func TestImportSkipsLongAndOldLines(t *testing.T) {
+	db, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	old := today.AddDate(0, 0, -keepDays-5).Format("02/Jan/2006:15:04:05 -0700")
+	log := strings.Join([]string{
+		`203.0.113.7 - - [` + clf + `] "GET /a HTTP/1.1" 200 1 "-" "GPTBot/1.0"`,
+		`203.0.113.7 - - [` + clf + `] "GET /` + strings.Repeat("x", 3*maxLine) + ` HTTP/1.1" 200 1 "-" "GPTBot/1.0"`,
+		`203.0.113.7 - - [` + old + `] "GET /old HTTP/1.1" 200 1 "-" "GPTBot/1.0"`,
+		`203.0.113.7 - - [` + clf + `] "GET /b HTTP/1.1" 200 1 "-" "GPTBot/1.0"`, // last, with no newline
+	}, "\r\n")
+	st, err := Import(context.Background(), db.DB, strings.NewReader(log), "popcorn.zone")
+	if err != nil || st.Lines != 4 || st.Unread != 1 || st.TooOld != 1 || st.Counted != 2 {
+		t.Fatalf("%+v %v", st, err)
+	}
+	db.Exec(`INSERT INTO crawl_seen (hash, day) VALUES ('stale', ?)`, today.AddDate(0, 0, -keepDays-1).Format("2006-01-02"))
+	if _, err := Import(context.Background(), db.DB, strings.NewReader(""), ""); err != nil {
+		t.Fatal(err)
+	}
+	var n int
+	db.QueryRow(`SELECT COUNT(*) FROM crawl_seen WHERE hash='stale'`).Scan(&n)
+	if n != 0 {
+		t.Error("hashes past the horizon weren't pruned")
+	}
+}

@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/metcalfc/popcorn/internal/sets"
 	"github.com/metcalfc/popcorn/internal/store"
@@ -34,6 +36,7 @@ func TestNamesAny(t *testing.T) {
 }
 
 func TestCheckCitations(t *testing.T) {
+	defer AllowLoopbackForTests()()
 	var hits atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hits.Add(1)
@@ -100,5 +103,19 @@ func TestCheckCitations(t *testing.T) {
 	c.RunID = "r-1"
 	if err := SaveCheck(context.Background(), db.DB, c); err == nil {
 		t.Error("a check for a run that doesn't exist should be refused (foreign key)")
+	}
+}
+
+// A stray Latin-1 byte early on, in a page long enough to be cut, keeps the rest of the page up to
+// the cut: the brand named well past the byte is still found.
+func TestClipText(t *testing.T) {
+	page := "Caf\xe9 roundup. " + strings.Repeat("filler ", 20_000) + "Popcorn is our pick. " + strings.Repeat("filler ", 20_000)
+	got := clipText(page)
+	if len(page) <= maxText || len(got) > maxText || !utf8.ValidString(got) || !NamesAny(got, []string{"Popcorn"}) || !strings.HasPrefix(got, "Caf\uFFFD roundup") {
+		t.Errorf("len %d, valid %v, prefix %q", len(got), utf8.ValidString(got), got[:20])
+	}
+	long := strings.Repeat("é", maxText) // two bytes each: the cut falls inside a rune
+	if got := clipText(long); !utf8.ValidString(got) || len(got) > maxText || len(got) < maxText-1 {
+		t.Errorf("len %d, valid %v", len(got), utf8.ValidString(got))
 	}
 }

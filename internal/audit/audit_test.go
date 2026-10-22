@@ -133,6 +133,7 @@ const goodPage = `<!doctype html><html lang="en"><head><title>Popcorn: track AI 
 <body><h1>Popcorn</h1><p>` + "Popcorn asks the questions your buyers ask, of every assistant, and grades the answers. " + "It runs on your laptop on the subscription you already have, and tells you which pages to write next to be recommended more often." + `</p></body></html>`
 
 func TestAudit(t *testing.T) {
+	defer AllowLoopbackForTests()()
 	now := time.Date(2026, 10, 22, 12, 0, 0, 0, time.UTC)
 	good := map[string]string{
 		"/":            goodPage,
@@ -213,6 +214,7 @@ func TestAudit(t *testing.T) {
 }
 
 func TestAuditSite(t *testing.T) {
+	defer AllowLoopbackForTests()()
 	srv := site{files: map[string]string{
 		"/robots.txt": "User-agent: Claude-SearchBot\nDisallow: /team\n",
 		"/team":       "<html><body>hi</body></html>",

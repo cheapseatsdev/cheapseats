@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/metcalfc/popcorn/internal/audit"
 	"github.com/metcalfc/popcorn/internal/config"
 	"github.com/metcalfc/popcorn/internal/llm"
 	"github.com/metcalfc/popcorn/internal/store"
@@ -22,6 +23,7 @@ import (
 // The site audit, the citation check and the crawler counts end to end: the audit's findings reach
 // the analyst, the check reads the page the answers cited, and the pages and MCP tools show them.
 func TestSiteChecks(t *testing.T) {
+	defer audit.AllowLoopbackForTests()() // the sites are httptest servers
 	// The brand's site: an app shell with no text until JavaScript runs.
 	brandSite := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
@@ -142,6 +144,10 @@ func TestSiteChecks(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer cs.Close()
+	// MCP can audit only the brand's sites, not make the server fetch any address it's given.
+	if res, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: "audit_sites", Arguments: map[string]any{"site": "169.254.169.254"}}); err != nil || !res.IsError {
+		t.Errorf("audit_sites on another site: %v %+v", err, res)
+	}
 	for name, c := range map[string]struct {
 		args map[string]any
 		want string

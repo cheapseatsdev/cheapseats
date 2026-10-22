@@ -133,14 +133,21 @@ func fetchNow(ctx context.Context, f *Fetcher, robots *robotsCache, raw string) 
 	if ct != "" && !strings.HasPrefix(ct, "text/") && !strings.Contains(ct, "html") && !strings.Contains(ct, "xml") {
 		return r.Status, "not a text page (" + ct + ")", ""
 	}
-	text := Text(r.Body, ct)
-	if len(text) > maxText {
-		text = text[:maxText]
-		for !utf8.ValidString(text) {
-			text = text[:len(text)-1]
-		}
+	return r.Status, "", clipText(Text(r.Body, ct))
+}
+
+// clipText makes text valid UTF-8 (a Latin-1 page's bytes become U+FFFD, which matching reads as
+// a word break) and cuts it to maxText bytes, without splitting the last rune.
+func clipText(text string) string {
+	text = strings.ToValidUTF8(text, "\uFFFD")
+	if len(text) <= maxText {
+		return text
 	}
-	return r.Status, "", text
+	cut := maxText
+	for cut > 0 && !utf8.RuneStart(text[cut]) {
+		cut--
+	}
+	return text[:cut]
 }
 
 // robotsCache fetches each host's robots.txt once per check.

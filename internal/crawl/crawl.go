@@ -105,9 +105,10 @@ func Key(raw string) (host, p string) {
 // Stats is what an import found.
 type Stats struct {
 	Lines     int                `json:"lines"`
-	Unread    int                `json:"unread"`    // in no format Parse knows
+	Unread    int                `json:"unread"`    // in no format Parse knows, or too long to be a request
 	Counted   int                `json:"counted"`   // new AI crawler fetches and referred visits
 	Duplicate int                `json:"duplicate"` // counted by an earlier import
+	TooOld    int                `json:"too_old"`   // from more than keepDays ago: not counted
 	ByClass   map[bots.Class]int `json:"by_class"`
 	NoHost    bool               `json:"no_host"` // lines had no host, and none was given
 }
@@ -131,51 +132,86 @@ func Import(ctx context.Context, db *sql.DB, r io.Reader, host string) (Stats, e
 	if err != nil {
 		return st, err
 	}
-	sc := bufio.NewScanner(r)
-	sc.Buffer(make([]byte, 64*1024), 4*1024*1024)
-	for sc.Scan() {
-		line := sc.Text()
-		if strings.TrimSpace(line) == "" {
-			continue
-		}
-		st.Lines++
-		h, ok := Parse(line)
-		if !ok {
-			st.Unread++
-			continue
-		}
-		e, ok := Classify(h, host)
-		if !ok {
-			continue
-		}
+	// Hashes are kept as long as a log line counts: older lines are left out, so a log from
+	// before then imported again can't count twice.
+	horizon := time.Now().UTC().AddDate(0, 0, -keepDays).Format("2006-01-02")
+	if _, err := tx.ExecContext(ctx, `DELETE FROM crawl_seen WHERE day < ?`, horizon); err != nil {
+		return st, err
+	}
+	count := func(e Event) error {
 		if e.Host == "" {
 			st.NoHost = true
 		}
 		res, err := seen.ExecContext(ctx, e.Hash, e.Day)
 		if err != nil {
-			return st, err
+			return err
 		}
 		if n, _ := res.RowsAffected(); n == 0 {
 			st.Duplicate++
-			continue
+			return nil
 		}
 		errs := 0
 		if e.Error {
 			errs = 1
 		}
 		if _, err := add.ExecContext(ctx, e.Day, e.Host, e.Path, string(e.Class), e.Bot, errs); err != nil {
-			return st, err
+			return err
 		}
 		st.Counted++
 		st.ByClass[e.Class]++
+		return nil
 	}
-	if err := sc.Err(); err != nil {
-		return st, err
+	br := bufio.NewReaderSize(r, 64*1024)
+	for {
+		line, long, err := readLine(br)
+		if err != nil && err != io.EOF {
+			return st, err
+		}
+		if strings.TrimSpace(line) != "" || long {
+			st.Lines++
+			if h, ok := Parse(line); long || !ok {
+				st.Unread++ // a line too long to be a request, or in no format Parse knows
+			} else if e, ok := Classify(h, host); ok && e.Day < horizon {
+				st.TooOld++
+			} else if ok {
+				if err := count(e); err != nil {
+					return st, err
+				}
+			}
+		}
+		if err == io.EOF {
+			break
+		}
 	}
 	if st.Lines > 0 && st.Unread == st.Lines {
 		return st, fmt.Errorf("no line is in a format Popcorn reads: %s", Formats)
 	}
 	return st, tx.Commit()
+}
+
+// keepDays is how far back an import counts lines, and keeps their hashes.
+const keepDays = 400
+
+// maxLine is the longest log line read; a longer one is skipped, not the whole import.
+const maxLine = 1 << 20
+
+// readLine reads one line, without its newline. Long reports a line over maxLine, whose text is
+// dropped (the rest of it is read and discarded).
+func readLine(br *bufio.Reader) (line string, long bool, err error) {
+	var b []byte
+	for {
+		chunk, err := br.ReadSlice('\n')
+		if !long {
+			b = append(b, chunk...)
+			if len(b) > maxLine {
+				long, b = true, nil
+			}
+		}
+		if err == bufio.ErrBufferFull {
+			continue
+		}
+		return strings.TrimRight(string(b), "\r\n"), long, err
+	}
 }
 
 // Use is how answers drew on one of the brand's pages, from the latest runs.

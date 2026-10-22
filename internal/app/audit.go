@@ -37,8 +37,8 @@ func (a *App) AuditSites() []string {
 	return out
 }
 
-// isBrandSite reports whether a site is one of the brand's.
-func (a *App) isBrandSite(site string) bool {
+// IsBrandSite reports whether a site is one of the brand's.
+func (a *App) IsBrandSite(site string) bool {
 	for _, s := range a.AuditSites() {
 		if strings.EqualFold(strings.TrimSuffix(s, "/"), strings.TrimSuffix(site, "/")) {
 			return true
@@ -70,7 +70,7 @@ func (a *App) Audit(ctx context.Context, sites []string, o audit.Options) (audit
 	}
 	res := audit.Run(ctx, sites, o)
 	for _, s := range sites {
-		if !a.isBrandSite(s) {
+		if !a.IsBrandSite(s) {
 			return res, nil // someone else's site: shown, not kept
 		}
 	}
@@ -94,7 +94,7 @@ func (a *App) siteFindings(ctx context.Context) []string {
 	}
 	var out []string
 	for _, f := range r.Findings {
-		if f.Severity != audit.Info && a.isBrandSite(f.Site) && len(out) < 40 {
+		if f.Severity != audit.Info && a.IsBrandSite(f.Site) && len(out) < 40 {
 			out = append(out, f.String())
 		}
 	}
