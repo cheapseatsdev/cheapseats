@@ -51,6 +51,9 @@ Quick wins: every fix across your sets, filterable by site, gap and set:
   <img alt="Quick wins: ranked fixes with priority, gap, effort and the site each belongs on" src="docs/images/quickwins-light.webp">
 </picture>
 
+[What the assistants searched](docs/searches.md): the queries behind each answer, the names they
+added that the prompt didn't have, and the searches where competitors show up and you don't.
+
 ## Quick start
 
 On your subscriptions, with the `claude` and `codex` CLIs installed and logged in: no API key, no
@@ -117,7 +120,7 @@ popcorn version                        version and database schema
 
 ## API and MCP
 
-- JSON API under `/api/` (status, sets, runs, fixes, quick wins, fix attempts, rankings, citations, search probe):
+- JSON API under `/api/` (status, sets, runs, fixes, quick wins, fix attempts, rankings, citations, searches, search probe):
   [reference](https://popcorn.zone/docs/reference/).
 - MCP server at `/api/mcp` (Streamable HTTP):
 

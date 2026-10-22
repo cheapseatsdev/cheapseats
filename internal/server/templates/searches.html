@@ -1,0 +1,38 @@
+{{define "title"}}Searches · {{.Run.Name}} · {{end}}{{define "body"}}{{$d := .}}
+<h1>What the assistants searched</h1>
+<p class="sub"><a href="/runs/{{.Run.ID}}">{{.Run.Name}}</a>{{if .Pool}} pooled with the set's finished runs before it that were asked and graded the same way: {{len .Pooled}} {{if eq (len .Pooled) 1}}run{{else}}runs{{end}}{{end}} · search track only, from the stored answers{{if .Pool}} · <a href="/runs/{{.Run.ID}}/searches">this run alone</a>{{else}} · <a href="?pool=1">pool the last {{.PoolN}} runs</a>{{end}} · <a href="/api/runs/{{.Run.ID}}/searches{{if .Pool}}?pool=1{{end}}">JSON</a></p>
+{{if not .Searches}}<p class="muted">No searches in these answers yet.</p>{{else}}
+<div class="kpis"><div class="kpi"><b>{{.Searched}}/{{.Answers}}</b><small>answers searched</small></div><div class="kpi"><b>{{.Searches}}</b><small>searches</small></div><div class="kpi"><b>{{.Distinct}}</b><small>distinct queries</small></div><div class="kpi"><b>{{pct .FromPrompt}}</b><small title="Share of a search's words that are in its prompt">from prompt</small></div><div class="kpi"><b>{{pct .PromptKept}}</b><small title="Share of the prompt's words the search kept">prompt kept</small></div></div>
+
+<nav class="runnav" aria-label="Sections"><a href="#queries">Top queries</a>{{if .Injected}}<a href="#injected">Names added</a>{{end}}<a href="#words">Words</a>{{if .Suggested}}<a href="#suggest">Add as prompt</a>{{end}}<a href="#prompts">Prompt by prompt</a></nav>
+
+<h2 id="queries">Top queries</h2>
+<p class="sub">Queries counted together whatever their case, quotes or spacing. <b>{{brand}}'s sites</b>: searches whose results included a page on one of them. <b>Competitors</b>: named in a result's title, or its site. <b>Named {{brand}}</b>: of the graded answers that ran the query, those that named {{brand}}.</p>
+<div class="scroll"><table><thead><tr><th>Query</th><th class="num">Prompts</th><th class="num">Answers</th><th class="num">{{brand}}'s sites</th><th>Competitors in results</th><th class="num">Named {{brand}}</th></tr></thead>
+<tbody>{{range $i, $q := .Queries}}{{if lt $i 50}}<tr><td>{{$q.Query}}{{range $q.Injected}} <span class="chip" title="Not in the prompt: the assistant added it">+{{.}}</span>{{end}}{{if $q.Failed}} <span class="chip err">{{$q.Failed}} failed</span>{{end}}</td><td class="num">{{range $j, $n := $q.Prompts}}{{if $j}} {{end}}<a href="#prompt-{{add $n 1}}">{{add $n 1}}</a>{{end}}</td><td class="num">{{$q.Answers}}</td><td class="num">{{if $q.FirstParty}}{{$q.FirstParty}}/{{$q.Runs}}{{else}}<span class="muted">0/{{$q.Runs}}</span>{{end}}</td><td>{{range $q.Competitors}}{{.Name}} <span class="muted">×{{.N}}</span> {{end}}</td><td class="num">{{if $q.Graded}}{{$q.Named}}/{{$q.Graded}}{{else}}<span class="muted">–</span>{{end}}</td></tr>{{end}}{{end}}</tbody></table></div>
+{{if gt (len .Queries) 50}}<p class="muted small">Showing the 50 run by the most answers; {{add (len .Queries) -50}} more in the JSON.</p>{{end}}
+
+{{with .Injected}}<h2 id="injected">Names the assistants added</h2>
+<p class="sub">Searches that named a product the prompt hadn't: the assistant added it to the search.</p>
+<div class="scroll"><table><thead><tr><th>Name</th><th class="num">Searches</th><th class="num">Answers</th><th class="num">Prompts</th><th>For example</th></tr></thead>
+<tbody>{{range .}}<tr{{if .IsBrand}} class="us"{{end}}><td>{{if .IsBrand}}<b>{{.Name}}</b>{{else}}{{.Name}}{{end}}</td><td class="num">{{.Searches}}</td><td class="num">{{.Answers}}</td><td class="num">{{.Prompts}}</td><td class="muted">{{range $i, $e := .Examples}}{{if $i}}; {{end}}“{{$e}}”{{end}}</td></tr>{{end}}</tbody></table></div>{{end}}
+
+<h2 id="words">How the prompts were rewritten</h2>
+<p class="sub">Words compared without stopwords, plurals folded. <b>From prompt</b> is the share of a search's words that were in its prompt; <b>prompt kept</b>, the share of the prompt's words still in the search.</p>
+<div class="tracks"><div class="card"><h3>Added</h3><p class="muted small">The vocabulary the assistants search with.</p>
+<table><thead><tr><th>Word</th><th class="num">Searches</th><th class="num">Prompts</th></tr></thead><tbody>{{range $i, $w := .Added}}{{if lt $i 25}}<tr><td>{{$w.Word}}</td><td class="num">{{$w.Searches}}</td><td class="num">{{$w.Prompts}}</td></tr>{{end}}{{end}}</tbody></table></div>
+<div class="card"><h3>Dropped</h3><p class="muted small">Prompt words the searches left out.</p>
+<table><thead><tr><th>Word</th><th class="num">Searches</th><th class="num">Prompts</th></tr></thead><tbody>{{range $i, $w := .Dropped}}{{if lt $i 25}}<tr><td>{{$w.Word}}</td><td class="num">{{$w.Searches}}</td><td class="num">{{$w.Prompts}}</td></tr>{{end}}{{end}}</tbody></table></div></div>
+
+{{with .Suggested}}<h2 id="suggest">Add as prompt</h2>
+<p class="sub">Queries whose results named competitors and never reached {{brand}}'s sites. To measure one as a prompt of its own, paste its entry into the set's file in the config repo and reword it as the question a buyer would ask; prompt ids are permanent, so pick one you'll keep.</p>
+{{range .}}<details><summary>“{{.Query}}” <span class="muted">— {{.Answers}} answers · {{range $i, $c := .Competitors}}{{if $i}}, {{end}}{{$c}}{{end}}</span></summary>
+<p class="muted small">Append to <span class="mono">prompt-sets/{{.File}}</span>:</p><pre>{{.TOML}}</pre></details>{{end}}{{end}}
+
+<h2 id="prompts">Prompt by prompt</h2>
+<div class="scroll"><table><thead><tr><th class="num">#</th><th>Prompt</th><th class="num">Searched</th><th class="num">Searches per answer</th><th class="num">Distinct</th><th class="num">From prompt</th><th class="num">Prompt kept</th></tr></thead>
+<tbody>{{range .Prompts}}<tr><td class="num muted">{{add .Idx 1}}</td><td><a href="#prompt-{{add .Idx 1}}">{{.Prompt}}</a></td><td class="num">{{.Searched}}/{{.Answers}}</td><td class="num">{{printf "%.1f" .PerAnswer}}</td><td class="num">{{.Distinct}}</td><td class="num">{{pct .FromPrompt}}</td><td class="num">{{pct .PromptKept}}</td></tr>{{end}}</tbody></table></div>
+{{range .Prompts}}<details id="prompt-{{add .Idx 1}}"><summary><span class="muted">{{add .Idx 1}}.</span> {{.Prompt}} <span class="muted">— {{.Distinct}} queries</span></summary>
+<ul>{{range .Queries}}<li>{{.Name}} <span class="muted">×{{.N}}</span></li>{{end}}</ul>
+{{if .Added}}<p class="muted small">Added: {{range .Added}}{{.Word}} ×{{.Searches}} {{end}}</p>{{end}}{{if .Dropped}}<p class="muted small">Dropped: {{range .Dropped}}{{.Word}} ×{{.Searches}} {{end}}</p>{{end}}</details>{{end}}
+{{end}}{{end}}
