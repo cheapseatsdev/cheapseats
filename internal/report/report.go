@@ -121,8 +121,10 @@ type Page struct {
 	// Its source class (see Classifier.Class), and whose site it is when that's a competitor.
 	Class          string `json:"class"`
 	CompetitorSite string `json:"competitor,omitempty"`
-	Cited          int    `json:"cited"`    // answers that linked it
-	Surfaced       int    `json:"surfaced"` // answers whose searches returned it
+	// What kind of page it is (PageType): listicle, comparison, review, docs and so on.
+	Type     string `json:"page_type"`
+	Cited    int    `json:"cited"`    // answers that linked it
+	Surfaced int    `json:"surfaced"` // answers whose searches returned it
 	// Answers whose searches returned it and that linked it.
 	SurfacedAndCited int `json:"surfaced_and_cited"`
 	SourceRates
@@ -158,6 +160,15 @@ type ClassUse struct {
 	Surfaced      int     `json:"surfaced"`
 	Pages         int     `json:"pages"`
 	Hosts         int     `json:"hosts"`
+	CitationShare float64 `json:"citation_share"`
+}
+
+// TypeUse is one page type across the run, counted as ClassUse counts a class.
+type TypeUse struct {
+	Type          string  `json:"page_type"`
+	Cited         int     `json:"cited"`
+	Surfaced      int     `json:"surfaced"`
+	Pages         int     `json:"pages"`
 	CitationShare float64 `json:"citation_share"`
 }
 
@@ -220,6 +231,7 @@ type Summary struct {
 	Pages          []Page       `json:"pages"`
 	Hosts          []HostUse    `json:"hosts"`
 	Classes        []ClassUse   `json:"source_classes"`
+	PageTypes      []TypeUse    `json:"page_types"`
 	Outreach       []Outreach   `json:"outreach"`
 	// The brand's pages that searches returned and no answer cited.
 	Uncited  []Page      `json:"found_not_cited"`
@@ -326,6 +338,27 @@ func BuildWith(brand config.Brand, results []run.Result, opt Options) Summary {
 	classes := map[string]*ClassUse{}
 	for _, c := range ClassOrder {
 		classes[c] = &ClassUse{Class: c}
+	}
+	types := map[string]*TypeUse{}
+	for _, t := range PageTypeOrder {
+		types[t] = &TypeUse{Type: t}
+	}
+	// Each page's title, the first any answer gave it, so its type doesn't hang on which answer
+	// reached it first.
+	titles := map[string]string{}
+	for _, r := range results {
+		if r.Answer == nil {
+			continue
+		}
+		links := append([]answer.Link{}, r.Answer.Citations...)
+		for _, q := range r.Answer.Searches {
+			links = append(links, q.Results...)
+		}
+		for _, l := range links {
+			if u := NormalizeURL(l.URL); titles[u] == "" {
+				titles[u] = strings.TrimSpace(l.Title)
+			}
+		}
 	}
 	// Every site, in config order, used or not.
 	sites := map[string]*SiteUse{}
@@ -476,9 +509,11 @@ func BuildWith(brand config.Brand, results []run.Result, opt Options) Summary {
 				}
 				var hk string
 				p.Class, p.CompetitorSite, hk = cls.classify(u)
+				p.Type = PageType(u, titles[u])
 				pages[u] = p
 				pageHost[u] = hk
 				classes[p.Class].Pages++
+				types[p.Type].Pages++
 				h := hosts[hk]
 				if h == nil {
 					h = &HostUse{Host: hk, Class: p.Class, CompetitorSite: p.CompetitorSite}
@@ -498,6 +533,7 @@ func BuildWith(brand config.Brand, results []run.Result, opt Options) Summary {
 		citedSite := map[string]bool{}
 		citedHost := map[string]bool{}
 		citedClass := map[string]bool{}
+		citedType := map[string]bool{}
 		for _, c := range r.Answer.Citations {
 			p := touch(c.URL)
 			if !cited[p.URL] {
@@ -513,6 +549,10 @@ func BuildWith(brand config.Brand, results []run.Result, opt Options) Summary {
 				citedClass[p.Class] = true
 				classes[p.Class].Cited++
 			}
+			if !citedType[p.Type] {
+				citedType[p.Type] = true
+				types[p.Type].Cited++
+			}
 			if p.Site != "" && !citedSite[p.Site] {
 				citedSite[p.Site] = true
 				siteUse(p.Site).Cited++
@@ -523,6 +563,7 @@ func BuildWith(brand config.Brand, results []run.Result, opt Options) Summary {
 		surfacedSite := map[string]bool{}
 		surfacedHost := map[string]bool{}
 		surfacedClass := map[string]bool{}
+		surfacedType := map[string]bool{}
 		for _, q := range r.Answer.Searches {
 			for _, l := range q.Results {
 				p := touch(l.URL)
@@ -543,6 +584,10 @@ func BuildWith(brand config.Brand, results []run.Result, opt Options) Summary {
 				if !surfacedClass[p.Class] {
 					surfacedClass[p.Class] = true
 					classes[p.Class].Surfaced++
+				}
+				if !surfacedType[p.Type] {
+					surfacedType[p.Type] = true
+					types[p.Type].Surfaced++
 				}
 				if p.Site != "" && !surfacedSite[p.Site] {
 					surfacedSite[p.Site] = true
@@ -687,6 +732,19 @@ func BuildWith(brand config.Brand, results []run.Result, opt Options) Summary {
 			u.CitationShare = float64(n) / float64(citations)
 		}
 		s.Classes = append(s.Classes, *u)
+	}
+	for _, t := range PageTypeOrder {
+		u := types[t]
+		if citations > 0 {
+			n := 0
+			for _, p := range pages {
+				if p.Type == t {
+					n += p.Cited
+				}
+			}
+			u.CitationShare = float64(n) / float64(citations)
+		}
+		s.PageTypes = append(s.PageTypes, *u)
 	}
 	for _, h := range s.Hosts {
 		if h.Bucket != Missing || h.Class == Competitor {
