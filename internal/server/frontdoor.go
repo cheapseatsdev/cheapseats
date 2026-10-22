@@ -44,6 +44,9 @@ type FrontDoor struct {
 	NextSteps       []nextStep `json:"next_steps"`
 	// MCP prompts this server offers, for a client that shows them.
 	Prompts []string `json:"prompts"`
+
+	// Sets with four weeks of runs whose prompts weren't reviewed in the last 30 days.
+	reviewDue []doorSet
 }
 
 type doorSite struct {
@@ -187,6 +190,11 @@ func (s *Server) frontDoor(ctx context.Context) FrontDoor {
 			fd.AwaitingOutcome++
 		}
 	}
+	for _, ds := range append(append([]doorSet(nil), fresh...), stale...) {
+		if app.ReviewDue(s.App.FirstRun(ctx, ds.ID), s.App.LastReview(ctx, ds.ID), now) {
+			fd.reviewDue = append(fd.reviewDue, ds)
+		}
+	}
 	fd.NextSteps = fd.steps(running, never, stale, fresh)
 	return fd
 }
@@ -238,6 +246,10 @@ func (fd FrontDoor) steps(running, never, stale, fresh []doorSet) []nextStep {
 	}
 	if fd.AwaitingOutcome > 0 {
 		add("list_attempts", nil, "%d submitted fixes are waiting for the set to run again before their outcome can be measured.", fd.AwaitingOutcome)
+	}
+	if len(fd.reviewDue) > 0 {
+		r := fd.reviewDue[0]
+		add("review_prompts", map[string]any{"set": r.ID}, "%s has four weeks of runs and its prompts haven't been reviewed this month: which are flat, noisy, off target or duplicates, and what no prompt asks. Free.", r.Name)
 	}
 	return out
 }

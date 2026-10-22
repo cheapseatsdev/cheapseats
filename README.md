@@ -48,6 +48,9 @@ are plain text in your own repo, so they come with you. Site and docs: [popcorn.
   crawlers can read (robots.txt and firewall blocks per AI bot, llms.txt, sitemap, and pages that
   are empty without JavaScript), a **citation check** of which pages the answers cite name you and
   which name only competitors, and **AI crawler** counts from your access logs.
+- A monthly [prompt review](docs/prompt-review.md), free from the answers you already have: which
+  prompts are flat, noisy, answered about other products, duplicates, or searched for in other
+  words, and the competitors and topics no prompt asks about, with prompts to paste.
 - Web UI, CLI, JSON API and MCP server.
 - [Share a run](docs/sharing.md) with someone without a sign-in: a read-only link to its
   headline rates, share of voice, strongest and weakest prompts and top fixes, revocable, expiring.
@@ -165,6 +168,9 @@ popcorn crawl import <logfile>...      AI crawler fetches and AI referrals from 
 popcorn crawl report [-days 30]        those counts per page, beside how often runs cite it
 popcorn themes <run-id> [-rebuild]     net sentiment and the run's themes
 popcorn suggest-prompts <set-id> [-n 10]  new buyer questions as TOML to paste (one analyst call)
+popcorn review <set-id> [-days 30] [-json] [-suggest]
+                                       flat, noisy, off-target and duplicate prompts, and gaps
+                                       (free; -suggest proposes edits, one analyst call)
 popcorn regrade <set-id|run-id> [-since 28d] [-dry-run=false]
                                        grade stored answers again with today's grader, brand and
                                        competitors; a dry run with its cost unless -dry-run=false
@@ -176,11 +182,13 @@ popcorn version                        version and database schema
 
 ## API and MCP
 
-- JSON API under `/api/` (status, sets, runs, fixes, quick wins, fix attempts, rankings, citations, searches, search probe, site audit, citation check, crawlers):
+- JSON API under `/api/` (status, sets, runs, fixes, quick wins, fix attempts, rankings, citations, searches, prompt review, search probe, site audit, citation check, crawlers):
   [reference](https://popcorn.zone/docs/reference/).
 - MCP server at `/api/mcp` (Streamable HTTP). `get_run` includes net sentiment, themes and page
   types; `get_result` the grade's evidence quote; `get_citation_stability` has a set's run-to-run
-  citation stability; `suggest_prompts` drafts new prompts for a set (one analyst call); `regrade`
+  citation stability; `suggest_prompts` drafts new prompts for a set (one analyst call);
+  `review_prompts` reviews a set's prompts from their answers (free; `suggest: true` adds one
+  analyst call for proposed edits, [prompt review](docs/prompt-review.md)); `regrade`
   re-grades stored answers ([re-grading](docs/regrading.md)), a dry run unless `dry_run` is false:
 
   ```bash

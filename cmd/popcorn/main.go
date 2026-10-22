@@ -53,6 +53,9 @@ const usage = `popcorn: how AI assistants answer your buyers' questions.
                                          and competitors (a dry run, its cost, unless -dry-run=false)
   popcorn suggest-prompts <set-id> [-n 10]  new buyer questions for a set, as TOML to paste
                                          (one analyst call; writes nothing)
+  popcorn review <set-id> [-days 30] [-json] [-suggest]
+                                         flat, noisy, off-target and duplicate prompts, and gaps,
+                                         from stored answers (free; -suggest: one analyst call)
   popcorn audit [site...]                what AI crawlers can read on the brand's sites (free)
   popcorn check-citations <run-id>       which pages the run cited name the brand, and which rivals
   popcorn crawl import <logfile>...      count AI crawler fetches and AI referrals from access logs
@@ -378,6 +381,8 @@ func dispatch(ctx context.Context, cmd string, args []string) error {
 		fmt.Print(res.Snippet)
 		fmt.Fprintf(os.Stderr, "%d prompts for %s (%d dropped as repeats), $%.3f. Paste into its file and open a pull request.\n", len(res.Prompts), fs.Arg(0), res.Dropped, res.CostUSD)
 		return nil
+	case "review":
+		return reviewCmd(ctx, args)
 	case "init":
 		return initCmd(ctx, args)
 	case "audit":

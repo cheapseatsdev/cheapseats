@@ -198,7 +198,7 @@ func New(a *app.App) (*Server, error) {
 		},
 	}
 	s.pages = map[string]*template.Template{}
-	for _, p := range []string{"home", "set", "run", "rankings", "quickwins", "search", "login", "searches", "audit", "crawlers", "regrade"} {
+	for _, p := range []string{"home", "set", "run", "rankings", "quickwins", "search", "login", "searches", "audit", "crawlers", "regrade", "review"} {
 		t, err := template.New(p).Funcs(funcs).ParseFS(assets, "templates/layout.html", "templates/"+p+".html")
 		if err != nil {
 			return nil, fmt.Errorf("template %s: %w", p, err)
@@ -258,6 +258,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /sets/{id}/run", s.startRunForm)
 	mux.HandleFunc("GET /sets/{id}/regrade", s.regradePage)
 	mux.HandleFunc("POST /sets/{id}/regrade", s.regradeForm)
+	mux.HandleFunc("GET /sets/{id}/review", s.reviewPage)
+	mux.HandleFunc("POST /sets/{id}/review", s.reviewSuggestForm)
 	mux.HandleFunc("GET /runs/{id}", s.runPage)
 	mux.HandleFunc("POST /runs/{id}/fixes", s.rebuildFixesForm)
 	mux.HandleFunc("POST /runs/{id}/fixes/{rank}/attempts", s.markFixForm)
@@ -281,6 +283,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/sets", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, s.App.Sets()) })
 	mux.HandleFunc("GET /api/sets/{id}", s.apiSet)
 	mux.HandleFunc("GET /api/sets/{id}/citation-stability", s.apiCitationStability)
+	mux.HandleFunc("GET /api/sets/{id}/review", s.apiReview)
 	mux.HandleFunc("GET /api/runs", s.apiRuns)
 	mux.HandleFunc("POST /api/runs", s.apiStartRun)
 	mux.HandleFunc("GET /api/runs/{id}", s.apiRun)
