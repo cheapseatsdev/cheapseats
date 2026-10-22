@@ -1,11 +1,12 @@
 # Popcorn
 
-Popcorn is an open-source (MIT), self-hosted AI visibility tracker, and an alternative to Profound,
-Peec AI and Ahrefs Brand Radar. It asks Claude and OpenAI models your buyers' questions, grades
-whether they recommend your brand, and builds a ranked list of fixes.
+Popcorn is a free, open-source (MIT) AI visibility tracker, inspired by tools like
+[Gauge](https://withgauge.com), Profound and Peec AI: the 20% of what they do that you'll use 80% of
+the time, running on the Claude and ChatGPT subscriptions you already have. It asks your buyers'
+questions, grades whether AI assistants recommend your brand, and builds a ranked list of fixes.
 
-One Docker container with SQLite. Site and docs: [popcorn.zone](https://popcorn.zone/docs/). It
-started as a small, self-hosted take on [Gauge](https://withgauge.com).
+Start here at no cost. If you outgrow it, your prompts are plain text in your own repo, ready to
+take to whichever of those tools you move to. Site and docs: [popcorn.zone](https://popcorn.zone/docs/).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/dashboard-dark.webp">
