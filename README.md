@@ -1,11 +1,12 @@
 # Popcorn
 
-Popcorn is an open-source (MIT), self-hosted AI visibility tracker, and an alternative to Profound,
-Peec AI and Ahrefs Brand Radar. It asks Claude and OpenAI models your buyers' questions, grades
-whether they recommend your brand, and builds a ranked list of fixes.
+Popcorn is a free, open-source (MIT) AI visibility tracker, inspired by tools like
+[Gauge](https://withgauge.com), Profound and Peec AI: the 20% of what they do that you'll use 80% of
+the time, running on the Claude subscription you already have (ChatGPT optional). It asks your buyers'
+questions, grades whether AI assistants recommend your brand, and builds a ranked list of fixes.
 
-One Docker container with SQLite. Site and docs: [popcorn.zone](https://popcorn.zone/docs/). It
-started as a small, self-hosted take on [Gauge](https://withgauge.com).
+Start here at no cost. If you outgrow it, your prompts are plain text in your own repo, ready to
+take to whichever of those tools you move to. Site and docs: [popcorn.zone](https://popcorn.zone/docs/).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/dashboard-dark.webp">
@@ -52,6 +53,15 @@ Quick wins: every fix across your sets, filterable by site, gap and set:
 
 ## Quick start
 
+On your subscriptions, with the `claude` and `codex` CLIs installed and logged in: no API key, no
+API spend.
+
+```bash
+POPCORN_CONFIG=examples/popcorn-config/popcorn.subscriptions.toml go run ./cmd/popcorn serve
+```
+
+Or through the APIs:
+
 ```bash
 cp .env.example .env          # set ANTHROPIC_API_KEY
 go run ./cmd/popcorn serve    # the example config, at http://127.0.0.1:3000
@@ -81,8 +91,9 @@ is unset.
   | `claude-code` | the local `claude` CLI | your Claude subscription |
   | `codex` | the local `codex` CLI | your ChatGPT subscription |
 
-- `[grader]`, `[analyst]`: Claude models. `ANTHROPIC_API_KEY` is always required, unless
-  `POPCORN_ANTHROPIC_BASE_URL` points at a proxy that adds it (such as an exe.dev integration).
+- `[grader]`, `[analyst]`: Claude models, through the API (`ANTHROPIC_API_KEY`, or a proxy that
+  adds it in `POPCORN_ANTHROPIC_BASE_URL`), or with `provider = "claude-code"` through the local
+  `claude` CLI on your subscription. With subscription answerers too, a laptop needs no API key.
 - `[budget]`: a daily cap on API spend
 - `[schedule]`, `[tiers]`: when sets run (weekly is usually enough)
 - Prompt sets: one file per category of buyer question; every prompt has a permanent id

@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/metcalfc/popcorn/internal/answer"
 	"github.com/metcalfc/popcorn/internal/config"
 	"github.com/metcalfc/popcorn/internal/llm"
 	"github.com/metcalfc/popcorn/internal/run"
@@ -196,6 +197,10 @@ func triedText(brand string, tried []Tried) string {
 	return b.String()
 }
 
+// structuredCLI writes the fix list through the claude CLI when the analyst's provider is
+// claude-code; a test swaps it for a fake.
+var structuredCLI = answer.ClaudeStructured
+
 // Build runs the analyst over a finished run's results, with the fixes already tried in the set.
 func Build(ctx context.Context, cfg *config.Config, set sets.Set, results []run.Result, tried []Tried) (Analysis, float64, error) {
 	brand := cfg.Brand.Name
@@ -251,10 +256,16 @@ Don't propose generic marketing, brand campaigns, or anything you can't point at
 %[7]s`, brand, domain, cfg.Brand.About, facts, len(set.Prompts), set.Name, body, sites, triedText(brand, tried))
 
 	var a Analysis
-	resp, err := llm.Structured(ctx, cfg.Analyst.Model, System, prompt, 16000, schema, &a)
 	cost := 0.0
-	if resp != nil {
-		cost = cfg.Cost(cfg.Analyst.Model, llm.Usage(resp, false))
+	var err error
+	if cfg.Analyst.Via() == config.ClaudeCode {
+		err = structuredCLI(ctx, cfg.Analyst.Model, System, prompt, schema, &a) // on the subscription
+	} else {
+		var resp map[string]any
+		resp, err = llm.Structured(ctx, cfg.Analyst.Model, System, prompt, 16000, schema, &a)
+		if resp != nil {
+			cost = cfg.Cost(cfg.Analyst.Model, llm.Usage(resp, false))
+		}
 	}
 	if err != nil {
 		return Analysis{}, cost, err

@@ -9,9 +9,35 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
+
+// With provider = "claude-code" the grader runs on the claude CLI: no API key, no API call, no
+// cost, and the same rules after it (here, absent for an answer that never names the brand).
+func TestGradingOnTheClaudeCLI(t *testing.T) {
+	dir := t.TempDir()
+	out := `{"type":"result","subtype":"success","is_error":false,"result":"","structured_output":{"verdict":"recommended","position":1,"top_pick":null,"named":["Gauge"],"reasoning":"r","why_not_top":null,"objections":[],"other_product":false}}`
+	if err := os.WriteFile(filepath.Join(dir, "claude"), []byte("#!/bin/sh\ncat > /dev/null\nprintf '%s\\n' '"+out+"'\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+":"+os.Getenv("PATH"))
+	t.Setenv("ANTHROPIC_API_KEY", "")
+	old := llm.AnthropicURL
+	llm.AnthropicURL = "http://127.0.0.1:1/never-called"
+	defer func() { llm.AnthropicURL = old }()
+	cfg := &config.Config{Brand: config.Brand{Name: "Popcorn"}, Grader: config.Model{Model: "claude-haiku-5-5", Provider: config.ClaudeCode}}
+	g, cost, err := Answer(context.Background(), cfg, sets.Set{}, "Is Gauge any good?", "Yes, Gauge is a credible choice.")
+	if err != nil || cost != 0 || g.Verdict != Absent || g.Position != nil {
+		t.Fatalf("%+v cost=%v %v", g, cost, err)
+	}
+	g, _, err = Answer(context.Background(), cfg, sets.Set{}, "Popcorn or Gauge?", "Use Popcorn.")
+	if err != nil || g.Verdict != Recommended {
+		t.Fatalf("a named brand keeps the CLI's verdict: %+v %v", g, err)
+	}
+}
 
 func TestGraderSeesTheAnswerAndBrand(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

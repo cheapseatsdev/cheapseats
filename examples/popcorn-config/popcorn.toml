@@ -71,7 +71,8 @@ provider = "openai"
 model = "gpt-6.1-sol"
 samples = { search = 2, recall = 1 }
 
-# The same two through local subscriptions, for a laptop:
+# The same two through local subscriptions, for a laptop (popcorn.subscriptions.toml beside this
+# file is the whole config that way, with no API key):
 # [[answerers]]
 # id = "claude-code-opus"
 # provider = "claude-code"
@@ -119,11 +120,16 @@ aliases = ["Semrush"]
 name = "Ahrefs Brand Radar"
 aliases = ["Ahrefs"]
 
+# The grader and the analyst go through the API. With provider = "claude-code" they run on the local
+# claude CLI and your Claude subscription instead; with the subscription answerers above too, a
+# laptop needs no API key at all. Switching it is a new method for every trend.
 [grader]
 model = "claude-haiku-5-5"
+# provider = "claude-code"
 
 [analyst]
 model = "claude-opus-5-5"
+# provider = "claude-code"
 
 [budget]
 # Admission budget across every provider attempt. In-flight operations can exceed reservations.

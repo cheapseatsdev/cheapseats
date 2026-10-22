@@ -38,6 +38,11 @@ const cliTimeout = 10 * time.Minute
 
 // runCLI runs one command in a throwaway directory and returns its stdout.
 func runCLI(ctx context.Context, provider, unsetKey string, name string, args ...string) ([]byte, error) {
+	return runCLIInput(ctx, provider, unsetKey, nil, name, args...)
+}
+
+// runCLIInput is runCLI with stdin: a prompt too long for one argument (Linux caps one at 128 KiB).
+func runCLIInput(ctx context.Context, provider, unsetKey string, stdin []byte, name string, args ...string) ([]byte, error) {
 	select {
 	case cliSlots[provider] <- struct{}{}:
 		defer func() { <-cliSlots[provider] }()
@@ -54,6 +59,9 @@ func runCLI(ctx context.Context, provider, unsetKey string, name string, args ..
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Dir = dir
 	cmd.Stdin = nil // /dev/null: codex otherwise waits for more input
+	if stdin != nil {
+		cmd.Stdin = bytes.NewReader(stdin)
+	}
 	for _, kv := range os.Environ() {
 		if !strings.HasPrefix(kv, unsetKey+"=") {
 			cmd.Env = append(cmd.Env, kv)
@@ -95,6 +103,50 @@ func askClaudeCode(ctx context.Context, model string, track Track, sys, prompt s
 		return ans, fmt.Errorf("claude: no result in output")
 	}
 	return ans, nil
+}
+
+// ClaudeStructured asks the claude CLI, on its subscription and with no tools, for output that
+// matches schema, and decodes it into out: the grader and analyst through claude-code. The prompt
+// goes on stdin, since the analyst's holds a whole run. It has no cost to record.
+func ClaudeStructured(ctx context.Context, model, system, prompt string, schema map[string]any, out any) error {
+	js, err := json.Marshal(schema)
+	if err != nil {
+		return err
+	}
+	// --json-schema answers through a tool call, so it needs a turn beyond the first.
+	args := []string{"-p", "--output-format", "json", "--no-session-persistence",
+		"--safe-mode", "--strict-mcp-config", "--disable-slash-commands",
+		"--model", model, "--tools", "", "--max-turns", "3", "--system-prompt", system, "--json-schema", string(js)}
+	stdout, err := runCLIInput(ctx, config.ClaudeCode, "ANTHROPIC_API_KEY", []byte(prompt), "claude", args...)
+	perr := parseClaudeStructured(stdout, out)
+	if err == nil {
+		return perr
+	}
+	// A failed run usually still writes its result: say why, not only the exit status.
+	if perr != nil && len(bytes.TrimSpace(stdout)) > 0 {
+		return fmt.Errorf("%w (%v)", err, perr)
+	}
+	return err
+}
+
+// parseClaudeStructured reads `claude -p --output-format json --json-schema` output.
+func parseClaudeStructured(stdout []byte, out any) error {
+	var res struct {
+		Subtype          string          `json:"subtype"`
+		IsError          bool            `json:"is_error"`
+		Result           string          `json:"result"`
+		StructuredOutput json.RawMessage `json:"structured_output"`
+	}
+	if err := json.Unmarshal(stdout, &res); err != nil {
+		return fmt.Errorf("claude: reading output: %w", err)
+	}
+	if res.IsError || res.Subtype != "success" {
+		return fmt.Errorf("claude: %s: %s", res.Subtype, res.Result)
+	}
+	if len(res.StructuredOutput) == 0 || string(res.StructuredOutput) == "null" {
+		return fmt.Errorf("claude: no structured output")
+	}
+	return json.Unmarshal(res.StructuredOutput, out)
 }
 
 // ParseClaudeCode reads `claude -p --output-format stream-json` output.

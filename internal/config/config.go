@@ -87,8 +87,35 @@ type Samples struct {
 	Recall int `toml:"recall"`
 }
 
+// Model is the grader or the analyst: a Claude model, through the API (anthropic, the default) or
+// the local claude CLI on a subscription (claude-code), so a laptop setup needs no API key.
 type Model struct {
-	Model string `toml:"model"`
+	Model    string `toml:"model"`
+	Provider string `toml:"provider"`
+}
+
+// Via is the provider the model is called through: anthropic unless it's claude-code.
+func (m Model) Via() string {
+	if m.Provider == ClaudeCode {
+		return ClaudeCode
+	}
+	return Anthropic
+}
+
+// Ref names the model and how it's called, for a run's snapshot: the model alone through the API,
+// as runs always recorded it, and "claude-code:<model>" through the CLI. ModelFromRef reads it back.
+func (m Model) Ref() string {
+	if m.Via() == ClaudeCode {
+		return ClaudeCode + ":" + m.Model
+	}
+	return m.Model
+}
+
+func ModelFromRef(ref string) Model {
+	if p, model, ok := strings.Cut(ref, ":"); ok && p == ClaudeCode {
+		return Model{Model: model, Provider: ClaudeCode}
+	}
+	return Model{Model: ref}
 }
 
 type Budget struct {
@@ -207,6 +234,13 @@ func Load(path string) (*Config, error) {
 		case Anthropic, OpenAI, ClaudeCode, Codex:
 		default:
 			return nil, fmt.Errorf("%s: answerer %s: provider must be anthropic, openai, claude-code or codex", path, a.ID)
+		}
+	}
+	for name, m := range map[string]Model{"grader": c.Grader, "analyst": c.Analyst} {
+		switch m.Provider {
+		case "", Anthropic, ClaudeCode:
+		default:
+			return nil, fmt.Errorf("%s: [%s] provider must be anthropic or claude-code", path, name)
 		}
 	}
 	if c.Budget.DailyUSD < 0 || math.IsNaN(c.Budget.DailyUSD) || math.IsInf(c.Budget.DailyUSD, 0) {

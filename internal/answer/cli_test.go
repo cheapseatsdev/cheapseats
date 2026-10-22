@@ -95,3 +95,44 @@ func TestClaudeCodeRunsIsolatedOnTheSubscription(t *testing.T) {
 		t.Error("recall should allow no tools")
 	}
 }
+
+// The grader and analyst on the subscription: the prompt on stdin, a JSON schema, no tools, no
+// API key, and the structured output decoded.
+func TestClaudeStructuredRunsOnTheSubscription(t *testing.T) {
+	dir := t.TempDir()
+	log, in := filepath.Join(dir, "log"), filepath.Join(dir, "stdin")
+	script := "#!/bin/sh\n{ printf '%s\\n' \"$@\"; echo \"KEY=${ANTHROPIC_API_KEY:-unset}\"; } > " + log + "\ncat > " + in + "\n" +
+		"printf '%s\\n' '{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"result\":\"{}\",\"structured_output\":{\"verdict\":\"mentioned\"}}'\n"
+	if err := os.WriteFile(filepath.Join(dir, "claude"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+":"+os.Getenv("PATH"))
+	t.Setenv("ANTHROPIC_API_KEY", "api-key")
+	var out struct{ Verdict string }
+	prompt := strings.Repeat("a long prompt ", 20000) // past Linux's 128 KiB cap on one argument
+	if err := ClaudeStructured(context.Background(), "claude-haiku-5-5", "You grade.", prompt, map[string]any{"type": "object"}, &out); err != nil || out.Verdict != "mentioned" {
+		t.Fatalf("%+v %v", out, err)
+	}
+	got, _ := os.ReadFile(log)
+	args := string(got)
+	for _, want := range []string{"-p\n", "\n--json-schema\n{\"type\":\"object\"}\n", "\n--tools\n\n", "\n--max-turns\n3\n", "\n--safe-mode\n", "\n--model\nclaude-haiku-5-5\n", "KEY=unset"} {
+		if !strings.Contains(args, want) {
+			t.Errorf("claude call lacks %q:\n%s", want, args)
+		}
+	}
+	if strings.Contains(args, "a long prompt") {
+		t.Error("the prompt should go on stdin, not in an argument")
+	}
+	if b, _ := os.ReadFile(in); string(b) != prompt {
+		t.Errorf("stdin got %d bytes, want %d", len(b), len(prompt))
+	}
+
+	for name, body := range map[string]string{
+		"error":     `{"type":"result","subtype":"error_max_turns","is_error":true,"result":"too many turns"}`,
+		"no output": `{"type":"result","subtype":"success","is_error":false,"result":"text only"}`,
+	} {
+		if err := parseClaudeStructured([]byte(body), &out); err == nil {
+			t.Errorf("%s: want an error", name)
+		}
+	}
+}

@@ -135,8 +135,8 @@ func (e *Engine) Create(ctx context.Context, set sets.Set, trigger string) (*Run
 	if len(snap.Answerers) == 0 {
 		return nil, errors.New("no answerer is available: set ANTHROPIC_API_KEY or OPENAI_API_KEY, or install the claude or codex CLI")
 	}
-	if !config.Available(config.Anthropic) {
-		return nil, errors.New("grading needs ANTHROPIC_API_KEY, or " + config.AnthropicBaseURLVar + " for a proxy that adds it")
+	if m := config.Missing(e.Cfg.Grader.Via()); m != "" {
+		return nil, fmt.Errorf("grading needs the grader's provider (%s): %s", e.Cfg.Grader.Via(), m)
 	}
 	r := &Run{Design: Design(snap), Method: Method(snap), ConfigRev: e.Cfg.Rev, AppVersion: version.String(), ID: NewID("r-"), SetID: set.ID, SetVersion: set.Version, Trigger: trigger, Status: "queued",
 		Name: fmt.Sprintf("%s %s", set.Name, time.Now().UTC().Format("2006-01-02 15:04")), Snapshot: snap, CreatedAt: store.Now()}
@@ -315,7 +315,7 @@ func (e *Engine) execute(ctx context.Context, id string) error {
 				for j := range ch {
 					cfg := *e.Cfg
 					cfg.Brand = r.Snapshot.Brand
-					cfg.Grader.Model = r.Snapshot.Grader
+					cfg.Grader = config.ModelFromRef(r.Snapshot.Grader)
 					callErr := e.one(stopCtx, &cfg, r.Snapshot.Set, answerers[j.answerer], j.id, j.prompt, j.track)
 					var storage *StorageError
 					if errors.Is(callErr, errBudget) || errors.As(callErr, &storage) {
@@ -492,7 +492,7 @@ func NewSnapshot(c *config.Config, s sets.Set) Snapshot {
 			skipped = append(skipped, a.ID)
 		}
 	}
-	return Snapshot{Set: s, Brand: c.Brand, Answerers: answerers, Skipped: skipped, Grader: c.Grader.Model, AnswerPrompt: answer.System(c.Brand.Audience), SearchPolicy: answer.SearchPolicy, GraderPrompt: grade.System}
+	return Snapshot{Set: s, Brand: c.Brand, Answerers: answerers, Skipped: skipped, Grader: c.Grader.Ref(), AnswerPrompt: answer.System(c.Brand.Audience), SearchPolicy: answer.SearchPolicy, GraderPrompt: grade.System}
 }
 
 // Current reports whether the run was answered and graded under the prompts c would use today,

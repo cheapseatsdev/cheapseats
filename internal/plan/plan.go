@@ -228,6 +228,9 @@ func methodChanges(before, after *config.Config) []string {
 	if before.Grader.Model != after.Grader.Model {
 		out = append(out, "the grader model")
 	}
+	if before.Grader.Via() != after.Grader.Via() {
+		out = append(out, "how the grader is called (`[grader] provider`)")
+	}
 	if len(out) == 0 {
 		out = append(out, "how answers are asked or graded")
 	}
