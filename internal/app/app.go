@@ -134,7 +134,12 @@ func (a *App) Fixes(ctx context.Context, id string) ([]analysis.Fix, *string, er
 // the set's prompts today: ones removed since the run are dropped, and ones reworded are listed.
 type QuickWin struct {
 	analysis.Fix
-	Speed   float64 `json:"speed"` // prompts it could flip per working day
+	Speed float64 `json:"speed"` // prompts it could flip per working day
+	// Expected gain: Speed with each prompt weighted by how much it has left to win, 1 - p, p its
+	// recommended rate (named, for an info prompt) pooled over the set's runs of the last
+	// quickWinDays asked and graded as the fix's run was. A prompt already recommended in most
+	// answers adds little; one with no data counts in full.
+	Gain    float64 `json:"gain"`
 	SetID   string  `json:"set_id"`
 	SetName string  `json:"set_name"`
 	Tier    string  `json:"tier"`
@@ -151,8 +156,9 @@ type QuickWin struct {
 }
 
 // QuickWins pulls the fix lists from the latest finished run of every set, core sets first, then
-// fastest ranking gain: prompts flipped per working day, then reach, then the analyst's own rank.
-// A fix none of whose prompts the set still asks is left out.
+// fastest expected ranking gain (Gain: prompts flipped per working day, each weighted by what it
+// has left to win), then reach, then the analyst's own rank. A fix none of whose prompts the set
+// still asks is left out.
 func (a *App) QuickWins(ctx context.Context) ([]QuickWin, error) {
 	var out []QuickWin
 	tried := a.FixAttempts(ctx)
@@ -172,6 +178,7 @@ func (a *App) QuickWins(ctx context.Context) ([]QuickWin, error) {
 		for i, p := range s.Prompts {
 			number[p.ID] = i + 1
 		}
+		left := a.leftToWin(ctx, s, r.Method)
 		fixes, _, _ := a.Fixes(ctx, id)
 		for _, f := range fixes {
 			q := QuickWin{SetID: s.ID, SetName: s.Name, Tier: string(s.Tier), RunID: id, Attempts: tried.On(id, f.Rank), Earlier: tried.Earlier(id, f)}
@@ -198,6 +205,11 @@ func (a *App) QuickWins(ctx context.Context) ([]QuickWin, error) {
 			f.Prompts = now
 			q.Fix = analysis.Triage(a.Cfg, s, f)
 			q.Speed = q.Fix.Speed()
+			w := 0.0
+			for _, n := range now {
+				w += left(s.Prompts[n-1])
+			}
+			q.Gain = q.Speed * w / float64(len(now))
 			out = append(out, q)
 		}
 	}
@@ -206,8 +218,8 @@ func (a *App) QuickWins(ctx context.Context) ([]QuickWin, error) {
 		if (x.Tier == "core") != (y.Tier == "core") {
 			return x.Tier == "core"
 		}
-		if x.Speed != y.Speed {
-			return x.Speed > y.Speed
+		if x.Gain != y.Gain {
+			return x.Gain > y.Gain
 		}
 		if len(x.Prompts) != len(y.Prompts) {
 			return len(x.Prompts) > len(y.Prompts)
@@ -215,6 +227,42 @@ func (a *App) QuickWins(ctx context.Context) ([]QuickWin, error) {
 		return x.Rank < y.Rank
 	})
 	return out, nil
+}
+
+// quickWinDays is how far back quick wins pool a prompt's answers to weigh it.
+const quickWinDays = 14
+
+// leftToWin is, for each of the set's prompts as worded today, 1 - its recommended rate (named,
+// for an info prompt) over the finished runs of the last quickWinDays with the given method; 1
+// for a prompt without graded answers there.
+func (a *App) leftToWin(ctx context.Context, s sets.Set, method string) func(sets.Prompt) float64 {
+	type counts struct{ n, named, rec int }
+	got := map[[2]string]counts{}
+	since := time.Now().UTC().AddDate(0, 0, -quickWinDays).Format(time.RFC3339)
+	rows, err := a.DB.QueryContext(ctx, `SELECT x.prompt_id, x.prompt_sha, COUNT(*), SUM(x.verdict<>'absent'), SUM(x.verdict='recommended')
+		FROM results x JOIN runs r ON r.id = x.run_id
+		WHERE r.set_id=? AND r.status='done' AND r.method=? AND r.created_at>=? AND x.status='done' AND x.grade IS NOT NULL AND x.verdict IS NOT NULL
+		GROUP BY x.prompt_id, x.prompt_sha`, s.ID, method, since)
+	if err == nil {
+		for rows.Next() {
+			var id, sha string
+			var c counts
+			if rows.Scan(&id, &sha, &c.n, &c.named, &c.rec) == nil {
+				got[[2]string{id, sha}] = c
+			}
+		}
+		rows.Close()
+	}
+	return func(p sets.Prompt) float64 {
+		c := got[[2]string{p.ID, p.SHA()}]
+		if c.n == 0 {
+			return 1
+		}
+		if p.Info() {
+			return 1 - float64(c.named)/float64(c.n)
+		}
+		return 1 - float64(c.rec)/float64(c.n)
+	}
 }
 
 // RunBrand is the brand a past run is summarized with: who the brand is (name, aliases, about,

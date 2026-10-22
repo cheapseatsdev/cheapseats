@@ -70,7 +70,7 @@ func TestBuildTriagesTheAnalystsList(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"PUBLIC-FACT", "Prompt 1: first question", "preferred Coder", "Popcorn pages seen: NONE", "https://coder.com/docs"} {
+	for _, want := range []string{"PUBLIC-FACT", "Prompt 1: first question", "preferred Coder", "Popcorn pages seen: NONE", "https://coder.com/docs", "named 0/1, recommended 0/1", "a prompt's count is noisy"} {
 		if !strings.Contains(sent, want) {
 			t.Errorf("analyst input lacks %q", want)
 		}
