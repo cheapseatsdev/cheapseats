@@ -125,10 +125,8 @@ func (c *counter) top(n int) []Count {
 	return out
 }
 
-// fold is a phrase for counting: lowercase, single-spaced, without surrounding punctuation.
-func fold(s string) string {
-	return strings.Trim(strings.Join(strings.Fields(strings.ToLower(s)), " "), ".,;:!?\"'()")
-}
+// fold is a phrase for counting, as the run page's objections count it.
+func fold(s string) string { return grade.Fold(s) }
 
 // Report is a run's opinion: the sentiment counted from its grades, and its theme pass, if it had
 // one.

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"unicode"
 
 	"github.com/metcalfc/popcorn/internal/answer"
 	"github.com/metcalfc/popcorn/internal/config"
@@ -202,4 +203,23 @@ func (g *Grade) normalize(brand string) {
 	if g.Objections == nil {
 		g.Objections = []string{}
 	}
+}
+
+// Fold makes a phrase from a grade (an objection, praise) a key for counting: lowercase, every run of punctuation and
+// space one space, trimmed.
+func Fold(o string) string {
+	var b strings.Builder
+	space := false
+	for _, r := range strings.ToLower(o) {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			if space && b.Len() > 0 {
+				b.WriteByte(' ')
+			}
+			b.WriteRune(r)
+			space = false
+		} else {
+			space = true
+		}
+	}
+	return b.String()
 }
