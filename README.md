@@ -1,12 +1,13 @@
 # Popcorn
 
-Popcorn is a free, open-source (MIT) AI visibility tracker, inspired by tools like
-[Gauge](https://withgauge.com), Profound and Peec AI: the 20% of what they do that you'll use 80% of
-the time, running on the Claude subscription you already have (ChatGPT optional). It asks your buyers'
-questions, grades whether AI assistants recommend your brand, and builds a ranked list of fixes.
+Popcorn is an open-source (MIT) AI visibility tracker I wrote to make my own product better. It
+asks your buyers' questions of AI assistants, grades whether they recommend you, and builds a ranked
+list of fixes, running on the Claude subscription you already have (ChatGPT optional).
 
-Start here at no cost. If you outgrow it, your prompts are plain text in your own repo, ready to
-take to whichever of those tools you move to. Site and docs: [popcorn.zone](https://popcorn.zone/docs/).
+It draws on a lot of inspiration, [Gauge](https://withgauge.com) first among them, along with
+Profound and Peec AI. It's free, and always will be: no hosted tier, no upsell. I hope you find it
+useful. If you outgrow it, do whatever suits you; I'd suggest Gauge, that team is great. Your prompts
+are plain text in your own repo, so they come with you. Site and docs: [popcorn.zone](https://popcorn.zone/docs/).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/dashboard-dark.webp">
