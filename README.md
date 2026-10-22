@@ -52,6 +52,15 @@ Quick wins: every fix across your sets, filterable by site, gap and set:
 
 ## Quick start
 
+On your subscriptions, with the `claude` and `codex` CLIs installed and logged in: no API key, no
+API spend.
+
+```bash
+POPCORN_CONFIG=examples/popcorn-config/popcorn.subscriptions.toml go run ./cmd/popcorn serve
+```
+
+Or through the APIs:
+
 ```bash
 cp .env.example .env          # set ANTHROPIC_API_KEY
 go run ./cmd/popcorn serve    # the example config, at http://127.0.0.1:3000

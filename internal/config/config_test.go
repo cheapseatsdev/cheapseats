@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -92,5 +93,33 @@ func TestGraderProvider(t *testing.T) {
 	os.WriteFile(p, []byte("[brand]\nname = \"X\"\n[grader]\nmodel = \"m\"\nprovider = \"codex\"\n"), 0o644)
 	if _, err := Load(p); err == nil || !strings.Contains(err.Error(), "[grader] provider") {
 		t.Errorf("want a provider error, got %v", err)
+	}
+}
+
+// The subscription example is the API example with every model on the CLIs: nothing else may drift.
+func TestSubscriptionExampleMatchesTheAPIExample(t *testing.T) {
+	api, err := Load("../../examples/popcorn-config/popcorn.toml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	subs, err := Load("../../examples/popcorn-config/popcorn.subscriptions.toml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if subs.Grader.Via() != ClaudeCode || subs.Analyst.Via() != ClaudeCode || len(subs.Answerers) != len(api.Answerers) {
+		t.Fatalf("grader %s, analyst %s, %d answerers", subs.Grader.Via(), subs.Analyst.Via(), len(subs.Answerers))
+	}
+	cli := map[string]string{Anthropic: ClaudeCode, OpenAI: Codex}
+	for i, a := range subs.Answerers {
+		b := api.Answerers[i]
+		if a.Provider != cli[b.Provider] || a.Model != b.Model || a.Name != b.Name || a.Samples != b.Samples {
+			t.Errorf("answerer %d: %+v is not %+v on the CLI", i, a, b)
+		}
+	}
+	// Everything else: the same.
+	subs.Answerers, api.Answerers = nil, nil
+	subs.Grader.Provider, subs.Analyst.Provider = api.Grader.Provider, api.Analyst.Provider
+	if a, b := fmt.Sprintf("%+v", *api), fmt.Sprintf("%+v", *subs); a != b {
+		t.Errorf("the examples drifted apart:\n%s\n%s", a, b)
 	}
 }

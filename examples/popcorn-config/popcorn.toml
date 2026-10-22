@@ -71,7 +71,8 @@ provider = "openai"
 model = "gpt-6.1-sol"
 samples = { search = 2, recall = 1 }
 
-# The same two through local subscriptions, for a laptop:
+# The same two through local subscriptions, for a laptop (popcorn.subscriptions.toml beside this
+# file is the whole config that way, with no API key):
 # [[answerers]]
 # id = "claude-code-opus"
 # provider = "claude-code"
