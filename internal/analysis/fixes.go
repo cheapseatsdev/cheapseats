@@ -256,6 +256,7 @@ Every field must be executable by someone who hasn't read the data:
 Don't propose generic marketing, brand campaigns, or anything you can't point at a prompt for.
 %[9]s
 %[7]s`, brand, domain, cfg.Brand.About, facts, len(set.Prompts), set.Name, body, sites, triedText(brand, tried))
+	prompt += siteFindingsText(ctx, brand)
 
 	var a Analysis
 	cost := 0.0
@@ -463,3 +464,26 @@ func Markdown(set sets.Set, fixes []Fix) string {
 }
 
 func Decode(s string) []Fix { var f []Fix; json.Unmarshal([]byte(s), &f); return f }
+
+type siteFindingsKey struct{}
+
+// WithSiteFindings gives Build the latest site audit's errors and warnings for the brand's sites
+// (audit.Finding.String, one per line), as more evidence beside the answers.
+func WithSiteFindings(ctx context.Context, findings []string) context.Context {
+	return context.WithValue(ctx, siteFindingsKey{}, findings)
+}
+
+// siteFindingsText lists the site audit's findings for the analyst, or "" when there are none.
+func siteFindingsText(ctx context.Context, brand string) string {
+	f, _ := ctx.Value(siteFindingsKey{}).([]string)
+	if len(f) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "\nThe latest audit of %s's own sites (plain HTTP, as a crawler that runs no JavaScript sees them) found these errors and warnings:\n", brand)
+	for _, x := range f {
+		fmt.Fprintf(&b, "- %s\n", x)
+	}
+	b.WriteString("Use them as evidence where one explains why a page of ours wasn't surfaced or cited for a prompt (blocked crawlers, a page empty without JavaScript, noindex), and name the check in the claim. Don't propose a fix for a finding no prompt points at.\n")
+	return b.String()
+}

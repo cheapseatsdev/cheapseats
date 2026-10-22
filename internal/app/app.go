@@ -106,6 +106,7 @@ func (a *App) BuildFixes(ctx context.Context, id string) error {
 	cfg := *a.Cfg
 	cfg.Brand = r.Snapshot.Brand
 	cfg.Brand.Facts = a.Cfg.Brand.Facts
+	ctx = analysis.WithSiteFindings(ctx, a.siteFindings(ctx)) // the latest site audit, as evidence
 	an, cost, err := analysis.Build(ctx, &cfg, r.Snapshot.Set, results, a.triedFor(ctx, r.SetID))
 	if err != nil {
 		a.DB.ExecContext(ctx, `UPDATE runs SET fixes_error=?, analysis_cost_usd=analysis_cost_usd+? WHERE id=?`, err.Error(), cost, id)

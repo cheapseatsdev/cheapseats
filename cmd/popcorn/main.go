@@ -41,6 +41,10 @@ const usage = `popcorn: how AI assistants answer your buyers' questions.
   popcorn run <set-id>                   run one set and wait for it (costs money)
   popcorn report <run-id> [-json]        rates, share of voice and top pages for a run
   popcorn fixes <run-id> [-rebuild]      the run's fix list as markdown
+  popcorn audit [site...]                what AI crawlers can read on the brand's sites (free)
+  popcorn check-citations <run-id>       which pages the run cited name the brand, and which rivals
+  popcorn crawl import <logfile>...      count AI crawler fetches and AI referrals from access logs
+  popcorn crawl report [-days 30]        imported counts per page, beside how the latest runs cite it
 
 Config: POPCORN_CONFIG, else the example in examples/popcorn-config; prompt sets beside it,
 data in ./data (POPCORN_DATA_DIR). Secrets from the environment or .env: ANTHROPIC_API_KEY
@@ -318,6 +322,12 @@ func dispatch(ctx context.Context, cmd string, args []string) error {
 		}
 		fmt.Print(analysis.Markdown(r.Snapshot.Set, fx))
 		return nil
+	case "audit":
+		return auditCmd(ctx, args)
+	case "check-citations":
+		return checkCitationsCmd(ctx, args)
+	case "crawl":
+		return crawlCmd(ctx, args)
 	}
 	return fmt.Errorf("unknown command %q\n\n%s", cmd, usage)
 }

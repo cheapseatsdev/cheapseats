@@ -34,6 +34,10 @@ take to whichever of those tools you move to. Site and docs: [popcorn.zone](http
 - **Rankings** trend each set week to week, through prompt and model changes: 7-, 14- or 28-day
   averages with 95% bands, day-over-day changes greyed out when they're within noise, and fixes
   marked on the chart. How it's worked out: [docs/statistics.md](docs/statistics.md).
+- Free checks beside the runs, no model calls ([docs](docs/audit.md)): a **site audit** of what AI
+  crawlers can read (robots.txt and firewall blocks per AI bot, llms.txt, sitemap, and pages that
+  are empty without JavaScript), a **citation check** of which pages the answers cite name you and
+  which name only competitors, and **AI crawler** counts from your access logs.
 - Web UI, CLI, JSON API and MCP server.
 - Self-hosted, MIT licensed: Docker, Kubernetes (Helm chart) or an exe.dev VM. Your prompts live
   in a git repo you own.
@@ -124,6 +128,10 @@ popcorn sets                           list prompt sets
 popcorn run <set-id>                   run one set (costs money)
 popcorn report <run-id> [-json]        rates, share of voice and top pages
 popcorn fixes <run-id> [-rebuild]      the fix list as markdown
+popcorn audit [site...]                what AI crawlers can read on your sites (free)
+popcorn check-citations <run-id>       which cited pages name you, and which competitors
+popcorn crawl import <logfile>...      AI crawler fetches and AI referrals from access logs
+popcorn crawl report [-days 30]        those counts per page, beside how often runs cite it
 popcorn check                          validate the config
 popcorn plan <before> [<after>]        what a config change does to trends
 popcorn migrate-config [dir]           give prompts ids (sets from before ids)
@@ -132,7 +140,7 @@ popcorn version                        version and database schema
 
 ## API and MCP
 
-- JSON API under `/api/` (status, sets, runs, fixes, quick wins, fix attempts, rankings, citations, searches, search probe):
+- JSON API under `/api/` (status, sets, runs, fixes, quick wins, fix attempts, rankings, citations, searches, search probe, site audit, citation check, crawlers):
   [reference](https://popcorn.zone/docs/reference/).
 - MCP server at `/api/mcp` (Streamable HTTP):
 

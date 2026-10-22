@@ -12,6 +12,8 @@ import (
 
 	"github.com/metcalfc/popcorn/internal/analysis"
 	"github.com/metcalfc/popcorn/internal/app"
+	"github.com/metcalfc/popcorn/internal/audit"
+	"github.com/metcalfc/popcorn/internal/crawl"
 	"github.com/metcalfc/popcorn/internal/probe"
 	"github.com/metcalfc/popcorn/internal/report"
 	"github.com/metcalfc/popcorn/internal/run"
@@ -209,6 +211,78 @@ func (s *Server) mcpHandler() http.Handler {
 			}
 			return searchDigest(d, a.Limit), nil
 		})
+	addTool(srv, "audit_sites", "Audit the brand's sites for AI crawlers, free (plain HTTP, no model calls): robots.txt and firewall blocks per AI crawler, llms.txt, the sitemap, and each page's title, description, H1, lang, noindex, canonical, JSON-LD, Open Graph and whether it renders without JavaScript. Returns the errors and warnings with a fix for each.",
+		func(ctx context.Context, a struct {
+			Site   string `json:"site,omitempty" jsonschema:"audit only this one of the brand's sites (as listed in its config); default all of them"`
+			Cached bool   `json:"cached,omitempty" jsonschema:"return the latest kept audit instead of running one"`
+			Info   bool   `json:"info,omitempty" jsonschema:"include info findings (often a choice, like blocking training crawlers)"`
+		}) (any, error) {
+			var res *audit.Result
+			if a.Cached {
+				latest, err := s.App.LatestAudit(ctx)
+				if err != nil {
+					return nil, err
+				}
+				if latest == nil {
+					return nil, errors.New("no audit yet; call again without cached")
+				}
+				res = latest
+			} else {
+				var sites []string
+				if a.Site != "" {
+					// Only the brand's own sites: anything else is for the CLI, run by someone at
+					// the machine, not a request that can make this server fetch any address.
+					if !s.App.IsBrandSite(a.Site) {
+						return nil, fmt.Errorf("%q isn't one of the brand's sites (%s); audit other sites with popcorn audit on the command line", a.Site, strings.Join(s.App.AuditSites(), ", "))
+					}
+					sites = []string{a.Site}
+				}
+				r, err := s.App.Audit(ctx, sites, audit.Options{})
+				if err != nil {
+					return nil, err
+				}
+				res = &r
+			}
+			return auditDigest(res, a.Info), nil
+		})
+	addTool(srv, "check_citations", "For a run, fetch the third-party pages its answers cited most (free, plain HTTP; each page at most once a day) and say which name the brand and which competitors. Pages naming competitors but not the brand are outreach targets.",
+		func(ctx context.Context, a struct {
+			Run    string `json:"run" jsonschema:"run id, from list_runs"`
+			Limit  int    `json:"limit,omitempty" jsonschema:"how many of the most-cited pages (default 25)"`
+			Cached bool   `json:"cached,omitempty" jsonschema:"return the run's latest check instead of running one"`
+		}) (any, error) {
+			if a.Cached {
+				c, err := s.App.CitationCheck(ctx, a.Run)
+				if err == nil && c == nil {
+					err = fmt.Errorf("run %s hasn't been checked; call again without cached", a.Run)
+				}
+				return c, err
+			}
+			c, err := s.App.CheckCitations(ctx, a.Run, a.Limit, audit.CiteOptions{})
+			return c, err
+		})
+	addTool(srv, "get_crawlers", "AI crawler fetches and AI-referred visits per page of the brand's, from imported access logs (by user agent only, unverified), beside how often the latest runs cited and surfaced each page. Flags pages crawled but never cited, and cited but never fetched by an assistant or AI search crawler.",
+		func(ctx context.Context, a struct {
+			LastDays int    `json:"last_days,omitempty" jsonschema:"default 30"`
+			Flag     string `json:"flag,omitempty" jsonschema:"only pages flagged crawled-not-cited or cited-not-crawled"`
+			Limit    int    `json:"limit,omitempty" jsonschema:"at most this many pages (default 30)"`
+		}) (any, error) {
+			rep, err := s.App.Crawlers(ctx, a.LastDays)
+			if err != nil {
+				return nil, err
+			}
+			if a.Limit <= 0 {
+				a.Limit = 30
+			}
+			pages := []crawl.PageRow{}
+			for _, p := range rep.Pages {
+				if (a.Flag == "" || p.Flag == a.Flag) && len(pages) < a.Limit {
+					pages = append(pages, p)
+				}
+			}
+			rep.Pages = pages
+			return rep, nil
+		})
 
 	h := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return srv }, nil)
 	if len(s.hosts) == 0 {
@@ -351,4 +425,45 @@ func runDigest(d *RunData) any {
 		Prompts        []prompt            `json:"prompts"`
 	}{d.Run, sum.Overall, sum.Slices, sum.Unbranded, sum.BrandedPrompts, sum.BrandRank(), voice, head(sum.HeadToHead, 10), head(sum.Objections, 10),
 		sum.Classes, head(sum.Hosts, 10), head(sum.Outreach, 10), uncited, pages, fixes, d.Insights, prompts}
+}
+
+// auditDigest is audit_sites' answer: each site in a line or two, and the findings without info
+// unless asked.
+func auditDigest(r *audit.Result, info bool) any {
+	type site struct {
+		Site        string   `json:"site"`
+		Robots      int      `json:"robots_status"`
+		LLMs        int      `json:"llms_status,omitempty"`
+		SitemapURLs int      `json:"sitemap_urls"`
+		Newest      string   `json:"sitemap_newest,omitempty"`
+		Pages       int      `json:"pages_checked"`
+		Blocked     []string `json:"blocked"` // "GPTBot (training): robots.txt"
+	}
+	sites := []site{}
+	for _, x := range r.Sites {
+		st := site{Site: x.Site, Robots: x.RobotsStatus, LLMs: x.LLMsStatus, SitemapURLs: x.SitemapURLs, Newest: x.Newest, Pages: len(x.Pages), Blocked: []string{}}
+		for _, b := range x.Bots {
+			if !b.Allowed {
+				st.Blocked = append(st.Blocked, fmt.Sprintf("%s (%s): robots.txt", b.Bot, b.Class))
+			}
+			if b.Blocked {
+				st.Blocked = append(st.Blocked, fmt.Sprintf("%s (%s): firewall %d", b.Bot, b.Class, b.Status))
+			}
+		}
+		sites = append(sites, st)
+	}
+	findings := []audit.Finding{}
+	for _, f := range r.Findings {
+		if info || f.Severity != audit.Info {
+			findings = append(findings, f)
+		}
+	}
+	return struct {
+		At       string          `json:"at"`
+		Errors   int             `json:"errors"`
+		Warnings int             `json:"warnings"`
+		Info     int             `json:"info"`
+		Sites    []site          `json:"sites"`
+		Findings []audit.Finding `json:"findings"`
+	}{r.At, r.Errors(), r.Warnings(), r.Infos(), sites, findings}
 }
