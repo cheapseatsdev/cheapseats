@@ -143,14 +143,27 @@ func dispatch(ctx context.Context, cmd string, args []string) error {
 		if err := sets.Check(dir, append([]string{cfg.Brand.Name}, cfg.Brand.Aliases...)); err != nil {
 			errs = append(errs, err)
 		}
-		// A subscription answerer needs its CLI where Popcorn runs; the image has none, so a
-		// config meant for a container fails here rather than skipping every answer later. API
-		// keys are deploy-time secrets, so a missing key is only reported.
+		// A subscription answerer needs its CLI where Popcorn runs, and a run skips one that's
+		// missing: fine for an optional one (codex beside claude), but if none can run, as with
+		// CLI answerers in the image, that fails here rather than skipping every answer later.
+		// API keys are deploy-time secrets, so a missing key is only reported.
+		var noCLI []config.Answerer
+		runnable := 0
 		for _, a := range cfg.Answerers {
-			if bin := config.CLI(a.Provider); bin != "" && config.Missing(a.Provider) != "" {
-				errs = append(errs, fmt.Errorf("answerer %s: %s is not installed here; use an anthropic or openai answerer in a container", a.ID, bin))
-			} else if m := config.Missing(a.Provider); m != "" {
+			if config.CLI(a.Provider) != "" && config.Missing(a.Provider) != "" {
+				noCLI = append(noCLI, a)
+				continue
+			}
+			runnable++
+			if m := config.Missing(a.Provider); m != "" {
 				fmt.Printf("note: answerer %s needs %s at runtime\n", a.ID, config.KeyVar(a.Provider))
+			}
+		}
+		for _, a := range noCLI {
+			if runnable == 0 {
+				errs = append(errs, fmt.Errorf("answerer %s: %s is not installed here; use an anthropic or openai answerer in a container", a.ID, config.CLI(a.Provider)))
+			} else {
+				fmt.Printf("note: answerer %s: %s isn't installed here, so runs skip it\n", a.ID, config.CLI(a.Provider))
 			}
 		}
 		// The same for the grader and the analyst, which can run on the claude CLI too.

@@ -1,7 +1,8 @@
 # popcorn.toml on your subscriptions: the same brand, prompt sets and settings, with every model
 # called through the local claude and codex CLIs, logged in to your Claude and ChatGPT
-# subscriptions. No API key and no API spend. Needs both CLIs installed and logged in, so it
-# won't run in the Docker image; use popcorn.toml there.
+# subscriptions. No API key and no API spend. Claude is required (the claude CLI answers, grades
+# and writes the fix list); codex is optional and adds ChatGPT's answers: without it, its answerer
+# is skipped. The Docker image has no CLIs; use popcorn.toml there.
 #
 #   POPCORN_CONFIG=examples/popcorn-config/popcorn.subscriptions.toml go run ./cmd/popcorn serve
 #
