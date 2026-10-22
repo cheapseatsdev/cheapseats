@@ -11,6 +11,7 @@ import (
 
 	"github.com/metcalfc/popcorn/internal/answer"
 	"github.com/metcalfc/popcorn/internal/config"
+	"github.com/metcalfc/popcorn/internal/grade"
 	"github.com/metcalfc/popcorn/internal/llm"
 	"github.com/metcalfc/popcorn/internal/run"
 	"github.com/metcalfc/popcorn/internal/sets"
@@ -193,7 +194,7 @@ func triedText(brand string, tried []Tried) string {
 	for _, t := range tried {
 		fmt.Fprintf(&b, "- %s | %s | %s | %s | %s\n", t.Title, t.Target, t.URL, t.State, t.Outcome)
 	}
-	b.WriteString("Don't propose one of these again unchanged. Where the prompts still lose, propose what would work instead and say in the claim why the attempt fell short (not crawled yet, wrong page, the claim missing). Where it's pending, give it time: propose it again only if the data shows a different gap.\n")
+	b.WriteString("Don't propose one of these again unchanged. Where the prompts still lose, propose what would work instead and say in the claim why the attempt fell short (not crawled yet, wrong page, the claim missing). Where it's pending or too early, give it time: propose it again only if the data shows a different gap. \"No detectable change\" means within the noise of the answers so far, not shown not to work.\n")
 	return b.String()
 }
 
@@ -228,6 +229,7 @@ Public facts you may rely on: %[4]s
 %[1]s's own sites: %[8]s
 
 Below are graded answers to %[5]d buyer questions in the category "%[6]s", from several AI assistants, with and without web search.
+Each prompt's first line counts its answers that named %[1]s and that recommended it; with this few answers a prompt's count is noisy (one answer more or less is a big swing), so trust a pattern across several prompts over any single prompt's count.
 Prompts marked (info) ask for an explanation or a how-to, not a choice: a good answer may recommend no product, so "not recommended" there is not a loss. What counts on them is whether %[1]s is named or its pages are cited while the topic is explained; the loss is a competitor or third-party page being the source instead. Don't count info prompts in "Why %[1]s lost"; their fixes are usually the guide or reference page that answers the question.
 
 1. insights: a concise markdown report for the %[1]s team, no preamble, with these sections:
@@ -303,10 +305,19 @@ func results2text(brand config.Brand, set sets.Set, results []run.Result) string
 		if len(rs) == 0 {
 			continue
 		}
+		named, rec := 0, 0
+		for _, r := range rs {
+			if r.Grade.Verdict != grade.Absent {
+				named++
+			}
+			if r.Grade.Verdict == grade.Recommended {
+				rec++
+			}
+		}
 		if p.Info() {
-			fmt.Fprintf(&b, "### Prompt %d (info): %s\n", i+1, p.Text)
+			fmt.Fprintf(&b, "### Prompt %d (info): %s\nnamed %d/%d\n", i+1, p.Text, named, len(rs))
 		} else {
-			fmt.Fprintf(&b, "### Prompt %d: %s\n", i+1, p.Text)
+			fmt.Fprintf(&b, "### Prompt %d: %s\nnamed %d/%d, recommended %d/%d\n", i+1, p.Text, named, len(rs), rec, len(rs))
 		}
 		for _, r := range rs {
 			g := r.Grade

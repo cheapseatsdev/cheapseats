@@ -191,8 +191,8 @@ document.addEventListener("submit", (e) => {
       key.className = "k";
       const strong = document.createElement("b");
       strong.textContent = p.rolling;
-      value.append(key, strong, document.createTextNode(" named, 7-day"));
-      const lines = [p.date, "band " + p.band + " · that day " + p.day + " · rank " + p.rank];
+      value.append(key, strong, document.createTextNode(" " + (p.label || "named, 7-day")));
+      const lines = [p.date, "band " + p.band + " across prompts", "that day " + p.day + (p.today ? " (this set: " + p.today + ")" : "") + " · rank " + p.rank];
       tip.append(value);
       for (const l of lines) {
         const d = document.createElement("div");

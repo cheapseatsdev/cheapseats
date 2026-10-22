@@ -98,6 +98,8 @@ func New(a *app.App) (*Server, error) {
 			}
 			return fmt.Sprintf("%+.0f pts", 100*d)
 		},
+		// A change's 95% margin, in points.
+		"margin": func(m float64) string { return fmt.Sprintf("±%.0f pts", 100*m) },
 		// A history cell's shade: none, some or most of its answers named the brand.
 		"shade": func(c app.Cell) string {
 			switch {
@@ -607,7 +609,7 @@ func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 	progress, _ := s.App.Progress(ctx)
 	// Each set's latest day on each track, from the same series as the rankings, so the two
 	// pages always agree.
-	rk, _ := s.App.Rankings(ctx, 30, "")
+	rk, _ := s.App.Rankings(ctx, 30, 0, "")
 	latest := map[string]*app.Day{}
 	for i := range rk {
 		if len(rk[i].Days) > 0 {
@@ -666,8 +668,10 @@ func (s *Server) setPage(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("track") == "recall" {
 		track = "recall"
 	}
-	hist, _ := s.App.History(r.Context(), st, track, 30)
-	s.render(w, "set", map[string]any{"Set": st, "Runs": rows, "Spend": s.spend(r.Context()), "History": hist})
+	window := app.Window(atoi(r.URL.Query().Get("window")))
+	hist, _ := s.App.History(r.Context(), st, track, 30, window)
+	s.render(w, "set", map[string]any{"Set": st, "Runs": rows, "Spend": s.spend(r.Context()), "History": hist,
+		"Advice": s.App.SampleAdvice(r.Context(), st), "Windows": windowLinks(r, window)})
 }
 
 func (s *Server) startRunForm(w http.ResponseWriter, r *http.Request) {
@@ -761,9 +765,31 @@ func (s *Server) retryForm(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) rankingsPage(w http.ResponseWriter, r *http.Request) {
-	rk, _ := s.App.Rankings(r.Context(), 30, "")
-	s.render(w, "rankings", map[string]any{"Rankings": rk})
+	window := app.Window(atoi(r.URL.Query().Get("window")))
+	metric := trendMetric(r.URL.Query().Get("metric"))
+	rk, _ := s.App.Rankings(r.Context(), 30, window, "")
+	var metrics []filterOption
+	for _, m := range trendMetrics {
+		q := r.URL.Query()
+		q.Set("metric", m.key)
+		metrics = append(metrics, filterOption{Label: m.label, On: m.key == metric.key, Href: "?" + q.Encode()})
+	}
+	s.render(w, "rankings", map[string]any{"Rankings": rk, "Metric": metric.key, "MetricName": metric.label, "Window": window,
+		"Windows": windowLinks(r, window), "Metrics": metrics})
 }
+
+// windowLinks is a link to the page with each rolling window, the current one on.
+func windowLinks(r *http.Request, current int) []filterOption {
+	var out []filterOption
+	for _, w := range app.Windows {
+		q := r.URL.Query()
+		q.Set("window", strconv.Itoa(w))
+		out = append(out, filterOption{Label: fmt.Sprintf("%d days", w), On: w == current, Href: "?" + q.Encode()})
+	}
+	return out
+}
+
+func atoi(s string) int { n, _ := strconv.Atoi(s); return n }
 
 // filterRow is one row of filter links on the quick wins page.
 type filterRow struct {
@@ -1005,7 +1031,7 @@ func (s *Server) apiRankings(w http.ResponseWriter, r *http.Request) {
 	if days <= 0 {
 		days = 30
 	}
-	rk, err := s.App.Rankings(r.Context(), days, r.URL.Query().Get("set"))
+	rk, err := s.App.Rankings(r.Context(), days, atoi(r.URL.Query().Get("window")), r.URL.Query().Get("set"))
 	if err != nil {
 		httpErr(w, err, 500)
 		return

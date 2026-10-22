@@ -2,14 +2,15 @@ package app
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/metcalfc/popcorn/internal/analysis"
-	"github.com/metcalfc/popcorn/internal/grade"
+	"github.com/metcalfc/popcorn/internal/answer"
 	"github.com/metcalfc/popcorn/internal/run"
 	"github.com/metcalfc/popcorn/internal/store"
 )
@@ -53,17 +54,26 @@ func FixStatus(attempts []Attempt) string {
 	return attempts[0].State
 }
 
-// Outcome is what the newest run of the set since an attempt shows for the prompts its fix meant
-// to flip, against the run the fix came from. It's measured, not judged: a page can take weeks to
-// be crawled, and recall moves only with new models.
+// Outcome is what the runs of the set since an attempt show for the prompts its fix meant to
+// flip, against the fix's own run and the runs just before it. Answers are pooled per prompt on
+// each side and the change is tested prompt by prompt (Diff), so a prompt drifting by chance
+// isn't read as the fix working. It's measured, not judged: a page can take weeks to be crawled,
+// and recall moves only with new models.
 type Outcome struct {
-	// The run it's measured on; empty while the set hasn't run since.
-	RunID   string          `json:"run_id,omitempty"`
+	// The newest run it's measured on; empty while the set hasn't run since.
+	RunID string `json:"run_id,omitempty"`
+	// Each target prompt's answers, pooled over the runs before and the runs after.
 	Prompts []PromptOutcome `json:"prompts,omitempty"`
 	// Whether an answer's searches, fetches or citations included the fix's target, before and
-	// after.
+	// after. Supporting evidence: a page turning up doesn't by itself mean answers changed.
 	TargetBefore bool `json:"target_seen_before"`
 	TargetAfter  bool `json:"target_seen_after"`
+	// Runs pooled on each side, and days from the attempt to the newest run after it.
+	BeforeRuns int     `json:"before_runs,omitempty"`
+	AfterRuns  int     `json:"after_runs,omitempty"`
+	Days       float64 `json:"days,omitempty"`
+	// The set has run since, but only asked or graded differently, so nothing compares.
+	Incomparable bool `json:"incomparable,omitempty"`
 }
 
 type PromptOutcome struct {
@@ -72,43 +82,136 @@ type PromptOutcome struct {
 	After    Tally  `json:"after"`
 }
 
-// Tally counts a prompt's graded answers in one run.
+// Tally counts a prompt's graded answers, in one run or pooled over several.
 type Tally struct {
 	N           int `json:"n"`
 	Named       int `json:"named"`
 	Recommended int `json:"recommended"`
+	// Answers to it asked as a choice (not an info prompt): what recommended is out of.
+	Choice int `json:"choice"`
 }
 
-// Status is the outcome in a word: pending until the set runs again, then moved when any of the
-// prompts is named or recommended more often, or the target newly turns up, else unmoved.
-func (o Outcome) Status() string {
-	if o.RunID == "" {
-		return "pending"
-	}
-	if o.TargetAfter && !o.TargetBefore {
-		return "moved"
-	}
+// When an outcome is read. Runs after the attempt count once it's at least OutcomeMinDays old
+// (a page has to be crawled before answers can change; Gauge waits 14 days) and its target
+// prompts average OutcomeMinAnswers graded answers since. Before is the fix's run and the
+// same-method runs up to OutcomeBeforeDays before it, at most OutcomeBeforeRuns in all; after is
+// every same-method run since the attempt within OutcomeAfterDays of the newest.
+const (
+	OutcomeMinDays    = 7
+	OutcomeMinAnswers = 4
+	OutcomeBeforeDays = 28
+	OutcomeBeforeRuns = 5
+	OutcomeAfterDays  = 28
+)
+
+// Outcome statuses.
+const (
+	OutcomePending      = "pending"
+	OutcomeTooEarly     = "too early"
+	OutcomeMoved        = "moved"
+	OutcomeWorse        = "worse"
+	OutcomeMixed        = "mixed"
+	OutcomeNoChange     = "no detectable change"
+	OutcomeIncomparable = "not comparable"
+)
+
+// Changes is the stratified change over the target prompts in named (out of every answer) and
+// recommended (out of answers to choice prompts).
+func (o Outcome) Changes() (named, recommended Diff) {
+	var nb, na, rb, ra []Hits
 	for _, p := range o.Prompts {
-		if p.After.N > 0 && p.Before.N > 0 && (p.After.Named*p.Before.N > p.Before.Named*p.After.N || p.After.Recommended*p.Before.N > p.Before.Recommended*p.After.N) {
-			return "moved"
+		nb, na = append(nb, Hits{p.Before.Named, p.Before.N}), append(na, Hits{p.After.Named, p.After.N})
+		rb, ra = append(rb, Hits{p.Before.Recommended, p.Before.Choice}), append(ra, Hits{p.After.Recommended, p.After.Choice})
+	}
+	return PairedDiff(nb, na), PairedDiff(rb, ra)
+}
+
+// Status is the outcome in a word: pending until the set runs again; too early until the attempt
+// is OutcomeMinDays old with OutcomeMinAnswers answers a prompt since; then moved when named or
+// recommended rose beyond its 95% margin, worse when one fell beyond it, mixed when one did each,
+// and otherwise no detectable change.
+func (o Outcome) Status() string {
+	if o.Incomparable {
+		return OutcomeIncomparable
+	}
+	if o.RunID == "" {
+		return OutcomePending
+	}
+	measured, after := 0, 0
+	for _, p := range o.Prompts {
+		if p.After.N > 0 && p.Before.N > 0 {
+			measured++
+			after += p.After.N
 		}
 	}
-	return "unmoved"
+	if o.Days < OutcomeMinDays || measured == 0 || after < OutcomeMinAnswers*measured {
+		return OutcomeTooEarly
+	}
+	named, rec := o.Changes()
+	up := named.Sign() > 0 || rec.Sign() > 0
+	down := named.Sign() < 0 || rec.Sign() < 0
+	switch {
+	case up && down:
+		return OutcomeMixed
+	case up:
+		return OutcomeMoved
+	case down:
+		return OutcomeWorse
+	}
+	return OutcomeNoChange
 }
 
-// Summary is the outcome in one line, for the page and for the analyst.
+// Summary is the outcome in one line, for the page and for the analyst: the status, the change in
+// named and recommended with their margins, how much data it rests on, then each prompt.
 func (o Outcome) Summary() string {
-	if o.RunID == "" {
+	switch o.Status() {
+	case OutcomePending:
 		return "pending: the set hasn't run since"
+	case OutcomeIncomparable:
+		return "not comparable: the set has only run since with answers asked or graded differently"
 	}
-	var parts []string
+	named, rec := o.Changes()
+	head := o.Status()
+	if head == OutcomeNoChange {
+		head += fmt.Sprintf(" (±%.0f pts)", 100*named.Margin)
+	}
+	before, after := 0, 0
+	for _, p := range o.Prompts {
+		before, after = before+p.Before.N, after+p.After.N
+	}
+	parts := []string{fmt.Sprintf("named %s, recommended %s over %s; %d answers in %s before, %d in %s over %s after",
+		named, rec, plural(named.Prompts, "prompt"), before, plural(o.BeforeRuns, "run"), after, plural(o.AfterRuns, "run"), plural(int(math.Round(o.Days)), "day"))}
 	for _, p := range o.Prompts {
 		parts = append(parts, fmt.Sprintf("%s named %d/%d→%d/%d, recommended %d/%d→%d/%d", p.PromptID,
-			p.Before.Named, p.Before.N, p.After.Named, p.After.N, p.Before.Recommended, p.Before.N, p.After.Recommended, p.After.N))
+			p.Before.Named, p.Before.N, p.After.Named, p.After.N, p.Before.Recommended, p.Before.Choice, p.After.Recommended, p.After.Choice))
 	}
 	seen := map[bool]string{true: "seen", false: "not seen"}
-	parts = append(parts, fmt.Sprintf("target %s→%s", seen[o.TargetBefore], seen[o.TargetAfter]))
-	return o.Status() + ": " + strings.Join(parts, "; ")
+	target := fmt.Sprintf("target %s→%s", seen[o.TargetBefore], seen[o.TargetAfter])
+	if o.TargetAfter && !o.TargetBefore {
+		target += " (newly surfaced)"
+	}
+	parts = append(parts, target)
+	return head + ": " + strings.Join(parts, "; ")
+}
+
+func plural(n int, one string) string {
+	if n == 1 {
+		return "1 " + one
+	}
+	return fmt.Sprintf("%d %ss", n, one)
+}
+
+// MarshalJSON adds what the outcome works out to: status, summary and the two changes.
+func (o Outcome) MarshalJSON() ([]byte, error) {
+	type plain Outcome
+	named, rec := o.Changes()
+	return json.Marshal(struct {
+		plain
+		Status      string `json:"status"`
+		Summary     string `json:"summary"`
+		Named       Diff   `json:"named"`
+		Recommended Diff   `json:"recommended"`
+	}{plain(o), o.Status(), o.Summary(), named, rec})
 }
 
 // TargetKey is a fix target reduced to what two fixes for the same page share: lowercase, no
@@ -279,57 +382,158 @@ func (fa FixAttempts) Earlier(runID string, f analysis.Fix) []Attempt {
 	return out
 }
 
-// outcome measures an attempt on the newest finished run of its set made after it.
+// outcome measures an attempt: the fix's run and the same-method runs just before it, against the
+// same-method runs of the set since the attempt, pooled per target prompt (Outcome). Counts come
+// from the results' verdict column and only answers that might name the target are decoded, so
+// listing attempts stays cheap however many runs it covers.
 func (a *App) outcome(ctx context.Context, at Attempt) Outcome {
 	var o Outcome
-	var later sql.NullString
-	// Timestamps are to the second, so a run started in the attempt's second counts as after it.
-	a.DB.QueryRowContext(ctx, `SELECT id FROM runs WHERE set_id=? AND status='done' AND created_at>=? AND id<>? ORDER BY created_at DESC LIMIT 1`, at.SetID, at.CreatedAt, at.RunID).Scan(&later)
-	if !later.Valid {
-		return o
-	}
-	before, err := a.Runs.Results(ctx, at.RunID)
+	r, err := a.Runs.Get(ctx, at.RunID)
 	if err != nil {
 		return o
 	}
-	after, err := a.Runs.Results(ctx, later.String)
+	fixAt := r.CreatedAt
+	// Timestamps are to the second, so a run started in the attempt's second counts as after it,
+	// and so does one started in the fix run's own second.
+	since := at.CreatedAt
+	if fixAt > since {
+		since = fixAt
+	}
+	rows, err := a.DB.QueryContext(ctx, `SELECT id, created_at, method FROM runs WHERE set_id=? AND status='done' AND created_at>=? AND id<>? ORDER BY created_at DESC, rowid DESC`, at.SetID, since, at.RunID)
 	if err != nil {
 		return o
 	}
-	o.RunID = later.String
+	var after []string
+	var newest time.Time
+	ran := false
+	for rows.Next() {
+		var id, created, method string
+		rows.Scan(&id, &created, &method)
+		ran = true
+		if method != r.Method {
+			continue
+		}
+		t, _ := time.Parse(time.RFC3339, created)
+		if len(after) == 0 {
+			newest = t
+		} else if newest.Sub(t) > OutcomeAfterDays*24*time.Hour {
+			break
+		}
+		after = append(after, id)
+	}
+	rows.Close()
+	if len(after) == 0 {
+		o.Incomparable = ran
+		return o
+	}
+	o.RunID = after[0]
+	if t, err := time.Parse(time.RFC3339, at.CreatedAt); err == nil {
+		o.Days = math.Max(0, newest.Sub(t).Hours()/24)
+	}
+	before := []string{at.RunID}
+	floor := ""
+	if t, err := time.Parse(time.RFC3339, fixAt); err == nil {
+		floor = t.AddDate(0, 0, -OutcomeBeforeDays).Format(time.RFC3339)
+	}
+	rows, err = a.DB.QueryContext(ctx, `SELECT id FROM runs WHERE set_id=? AND status='done' AND method=? AND created_at<? AND created_at>=? ORDER BY created_at DESC LIMIT ?`,
+		at.SetID, r.Method, fixAt, floor, OutcomeBeforeRuns-1)
+	if err == nil {
+		for rows.Next() {
+			var id string
+			rows.Scan(&id)
+			before = append(before, id)
+		}
+		rows.Close()
+	}
+	o.BeforeRuns, o.AfterRuns = len(before), len(after)
+
 	ids := at.Fix.PromptIDs
 	if len(ids) == 0 { // a fix stored before prompt ids: map its numbers through the run's set
-		if r, err := a.Runs.Get(ctx, at.RunID); err == nil {
-			for _, n := range at.Fix.Prompts {
-				if n >= 1 && n <= len(r.Snapshot.Set.Prompts) {
-					ids = append(ids, r.Snapshot.Set.Prompts[n-1].ID)
-				}
+		for _, n := range at.Fix.Prompts {
+			if n >= 1 && n <= len(r.Snapshot.Set.Prompts) {
+				ids = append(ids, r.Snapshot.Set.Prompts[n-1].ID)
 			}
 		}
 	}
+	// Each prompt as the fix's run asked it: answers to it worded differently aren't pooled.
+	sha, info := map[string]string{}, map[string]bool{}
+	for _, p := range r.Snapshot.Set.Prompts {
+		sha[p.ID], info[p.ID] = p.SHA(), p.Info()
+	}
+	pb, pa := a.tallies(ctx, before, sha, info), a.tallies(ctx, after, sha, info)
 	for _, id := range ids {
-		o.Prompts = append(o.Prompts, PromptOutcome{PromptID: id, Before: tally(before, id), After: tally(after, id)})
+		o.Prompts = append(o.Prompts, PromptOutcome{PromptID: id, Before: pb[id], After: pa[id]})
 	}
 	key := TargetKey(at.Fix.Target)
-	o.TargetBefore, o.TargetAfter = surfaced(before, key), surfaced(after, key)
+	o.TargetBefore, o.TargetAfter = a.surfacedIn(ctx, before, key), a.surfacedIn(ctx, after, key)
 	return o
 }
 
-func tally(results []run.Result, promptID string) Tally {
-	var t Tally
-	for _, r := range results {
-		if r.PromptID != promptID || r.Status != "done" || r.Grade == nil {
+// inRuns is "run_id IN (?,…)" for ids, with its arguments.
+func inRuns(ids []string) (string, []any) {
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		args[i] = id
+	}
+	return "run_id IN (" + strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",") + ")", args
+}
+
+// tallies counts the graded answers to each prompt over runs, keeping only answers to the prompt
+// worded as sha has it (any wording for a prompt sha doesn't list). Recommended is out of the
+// answers to prompts that ask for a choice.
+func (a *App) tallies(ctx context.Context, runs []string, sha map[string]string, info map[string]bool) map[string]Tally {
+	out := map[string]Tally{}
+	in, args := inRuns(runs)
+	rows, err := a.DB.QueryContext(ctx, `SELECT prompt_id, prompt_sha, COUNT(*), SUM(verdict<>'absent'), SUM(verdict='recommended') FROM results
+		WHERE `+in+` AND status='done' AND grade IS NOT NULL AND verdict IS NOT NULL AND prompt_id<>'' GROUP BY prompt_id, prompt_sha`, args...)
+	if err != nil {
+		return out
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, s string
+		var n, named, rec int
+		if rows.Scan(&id, &s, &n, &named, &rec) != nil {
 			continue
 		}
-		t.N++
-		if r.Grade.Verdict != grade.Absent {
-			t.Named++
+		if want, ok := sha[id]; ok && want != s {
+			continue
 		}
-		if r.Grade.Verdict == grade.Recommended {
-			t.Recommended++
+		t := out[id]
+		t.N, t.Named, t.Recommended = t.N+n, t.Named+named, t.Recommended+rec
+		if info[id] {
+			t.Recommended -= rec // an info prompt asks for no choice, so recommended doesn't apply
+		} else {
+			t.Choice += n
+		}
+		out[id] = t
+	}
+	return out
+}
+
+// surfacedIn reports whether any answer in runs reached the target (surfaced). Only answers whose
+// JSON mentions the key are decoded.
+func (a *App) surfacedIn(ctx context.Context, runs []string, key string) bool {
+	if key == "" {
+		return false
+	}
+	in, args := inRuns(runs)
+	rows, err := a.DB.QueryContext(ctx, `SELECT answer FROM results WHERE `+in+` AND status='done' AND answer LIKE ?`, append(args, "%"+key+"%")...)
+	if err != nil {
+		return false
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var js string
+		var ans answer.Answer
+		if rows.Scan(&js) != nil || json.Unmarshal([]byte(js), &ans) != nil {
+			continue
+		}
+		if surfaced([]run.Result{{Answer: &ans}}, key) {
+			return true
 		}
 	}
-	return t
+	return false
 }
 
 // surfaced reports whether any answer's searches, fetches or citations reached the target.

@@ -25,11 +25,15 @@ take to whichever of those tools you move to. Site and docs: [popcorn.zone](http
 - Ends each run with **Fix these first**: the exact page to create or change, what it must say, the
   prompts it should flip, effort, priority, the site it belongs on and its owner, plus a prompt to
   hand Claude Code.
-- **Quick wins** ranks fixes across all sets by prompts flipped per day of work. Mark a fix with
-  the commit or PR you submitted (proposed, then accepted) and it leaves the open list; if it
-  wasn't enough, the next run's fix for the same page comes back open, with the attempt and what
-  changed for its prompts, and the fix list is written knowing what was tried.
-- **Rankings** trend each set week to week, through prompt and model changes.
+- **Quick wins** ranks fixes across all sets by expected gain: prompts flipped per day of work,
+  each weighted by what it has left to win. Mark a fix with the commit or PR you submitted
+  (proposed, then accepted) and it leaves the open list. If it wasn't enough, the next run's fix
+  for the same page comes back open, with the attempt and what changed for its prompts (moved,
+  worse, or no detectable change, tested against the noise of a few answers a prompt), and the
+  fix list is written knowing what was tried.
+- **Rankings** trend each set week to week, through prompt and model changes: 7-, 14- or 28-day
+  averages with 95% bands, day-over-day changes greyed out when they're within noise, and fixes
+  marked on the chart. How it's worked out: [docs/statistics.md](docs/statistics.md).
 - Web UI, CLI, JSON API and MCP server.
 - Self-hosted, MIT licensed: Docker, Kubernetes (Helm chart) or an exe.dev VM. Your prompts live
   in a git repo you own.
