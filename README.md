@@ -1,7 +1,11 @@
 # Popcorn
 
-Ask AI assistants the questions your buyers ask, and see whether they recommend you. A small,
-self-hosted take on [Gauge](https://withgauge.com). Docs: [popcorn.zone/docs](https://popcorn.zone/docs/).
+Popcorn is an open-source (MIT), self-hosted AI visibility tracker, and an alternative to Profound,
+Peec AI and Ahrefs Brand Radar. It asks Claude and OpenAI models your buyers' questions, grades
+whether they recommend your brand, and builds a ranked list of fixes.
+
+One Docker container with SQLite. Site and docs: [popcorn.zone](https://popcorn.zone/docs/). It
+started as a small, self-hosted take on [Gauge](https://withgauge.com).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/dashboard-dark.webp">
@@ -22,7 +26,9 @@ self-hosted take on [Gauge](https://withgauge.com). Docs: [popcorn.zone/docs](ht
   hand Claude Code.
 - **Quick wins** ranks fixes across all sets by prompts flipped per day of work.
 - **Rankings** trend each set week to week, through prompt and model changes.
-- Self-hosted, MIT licensed. Your prompts live in a git repo you own.
+- Web UI, CLI, JSON API and MCP server.
+- Self-hosted, MIT licensed: Docker, Kubernetes (Helm chart) or an exe.dev VM. Your prompts live
+  in a git repo you own.
 
 
 ## What a run gives you
