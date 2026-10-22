@@ -131,6 +131,7 @@ func (s *Server) mcpHandler() http.Handler {
 			if a.Brief {
 				for i := range out {
 					out[i].ClaudePrompt = ""
+					out[i].Attempts, out[i].Earlier = briefAttempts(out[i].Attempts), briefAttempts(out[i].Earlier)
 				}
 			}
 			return out, nil
@@ -143,7 +144,11 @@ func (s *Server) mcpHandler() http.Handler {
 			State string `json:"state,omitempty" jsonschema:"proposed (default) or accepted"`
 			Note  string `json:"note,omitempty" jsonschema:"what was done, briefly"`
 		}) (any, error) {
-			return s.App.MarkFix(ctx, a.Run, a.Rank, a.URL, a.State, a.Note, "mcp")
+			at, err := s.App.MarkFix(ctx, a.Run, a.Rank, a.URL, a.State, a.Note, "mcp")
+			if err != nil {
+				return nil, err
+			}
+			return briefAttempts([]app.Attempt{at})[0], nil
 		})
 	addTool(srv, "set_attempt_state", "Move work submitted for a fix on: accepted when its pull request merges, withdrawn when it's closed (which reopens the fix).",
 		func(ctx context.Context, a struct {
@@ -159,7 +164,8 @@ func (s *Server) mcpHandler() http.Handler {
 		func(ctx context.Context, a struct {
 			Set string `json:"set,omitempty" jsonschema:"only this prompt set"`
 		}) (any, error) {
-			return s.App.Attempts(ctx, a.Set)
+			at, err := s.App.Attempts(ctx, a.Set)
+			return briefAttempts(at), err
 		})
 	addTool(srv, "get_citations", "Every URL linked from an answer across runs, most cited first, with the answers scanned as the denominator.",
 		func(ctx context.Context, a struct {
@@ -207,6 +213,17 @@ func (s *Server) mcpHandler() http.Handler {
 		}
 		h.ServeHTTP(w, r)
 	})
+}
+
+// briefAttempts drops the Claude Code prompt from each attempt's copy of its fix: the caller has
+// the fix already, and the prompt is most of its size.
+func briefAttempts(at []app.Attempt) []app.Attempt {
+	out := make([]app.Attempt, len(at))
+	for i, a := range at {
+		a.Fix.ClaudePrompt = ""
+		out[i] = a
+	}
+	return out
 }
 
 // hostOnly is a Host header without its port, lowercased.
