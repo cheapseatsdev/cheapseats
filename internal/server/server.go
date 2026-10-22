@@ -34,6 +34,7 @@ import (
 	"github.com/metcalfc/popcorn/internal/analysis"
 	"github.com/metcalfc/popcorn/internal/app"
 	"github.com/metcalfc/popcorn/internal/llm"
+	"github.com/metcalfc/popcorn/internal/opinion"
 	"github.com/metcalfc/popcorn/internal/probe"
 	"github.com/metcalfc/popcorn/internal/report"
 	"github.com/metcalfc/popcorn/internal/run"
@@ -463,8 +464,10 @@ func askedDifferently(st sets.Set, res []run.Result) bool {
 }
 
 type RunData struct {
-	Progress  *app.Progress
-	Insights  string
+	Progress *app.Progress
+	Insights string
+	// Tone, praise and objections over the answers naming the brand, and the theme pass.
+	Opinion   opinion.Report `json:"opinion"`
 	Run       *run.Run
 	Active    bool
 	Summary   report.Summary
@@ -531,6 +534,7 @@ func (s *Server) runData(ctx context.Context, id string) (*RunData, error) {
 	s.App.DB.QueryRowContext(ctx, `SELECT insights, fixes_at FROM runs WHERE id=?`, id).Scan(&insights, &fixesAt)
 	d.Insights, d.FixesAt = insights.String, fixesAt.String
 	d.Progress = s.App.RunProgress(ctx, id)
+	d.Opinion = s.App.Runs.Opinion(ctx, id, res)
 	for _, a := range r.Snapshot.Answerers {
 		d.Answerers = append(d.Answerers, a.ID)
 	}

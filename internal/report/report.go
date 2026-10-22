@@ -7,7 +7,6 @@ import (
 	"slices"
 	"sort"
 	"strings"
-	"unicode"
 
 	"github.com/metcalfc/popcorn/internal/answer"
 	"github.com/metcalfc/popcorn/internal/config"
@@ -282,24 +281,9 @@ func Branded(brand config.Brand, prompt string) bool {
 	return false
 }
 
-// NormalizeObjection folds an objection for counting: lowercase, every run of punctuation and
-// space one space, trimmed.
-func NormalizeObjection(o string) string {
-	var b strings.Builder
-	space := false
-	for _, r := range strings.ToLower(o) {
-		if unicode.IsLetter(r) || unicode.IsDigit(r) {
-			if space && b.Len() > 0 {
-				b.WriteByte(' ')
-			}
-			b.WriteRune(r)
-			space = false
-		} else {
-			space = true
-		}
-	}
-	return b.String()
-}
+// NormalizeObjection folds an objection for counting (grade.Fold), the same way the run's
+// sentiment counts it.
+func NormalizeObjection(o string) string { return grade.Fold(o) }
 
 // answerRec is what one graded answer named, for the measures worked out after the pass.
 type answerRec struct {

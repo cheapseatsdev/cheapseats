@@ -152,6 +152,20 @@ func Markdown(before, after Config) string {
 		}
 	}
 
+	if x, y := before.Cfg.Sampling, after.Cfg.Sampling; x != y {
+		if y.Adaptive {
+			ans = append(ans, fmt.Sprintf("- Adaptive sampling on: up to %d extra answers a core run, for the least certain prompts. Trends carry on; extras don't change the method.", y.MaxExtra))
+		} else if x.Adaptive {
+			ans = append(ans, "- Adaptive sampling off: runs take their planned samples only. Trends carry on.")
+		}
+	}
+	if x, y := before.Cfg.ThemesOn(), after.Cfg.ThemesOn(); x != y {
+		state := "off"
+		if y {
+			state = "on"
+		}
+		ans = append(ans, "- The theme pass is "+state+" (`[grader] themes`). Rates and trends are unaffected.")
+	}
 	if x, y := siteList(before.Cfg.Brand), siteList(after.Cfg.Brand); x != y {
 		ans = append(ans, "- The brand's sites changed: which pages count as its own, and where fixes go. Trends carry on.")
 	}
@@ -202,6 +216,12 @@ func volume(c Config) string {
 		every = fmt.Sprintf("every %d days", n)
 	}
 	fmt.Fprintf(&b, "\nCore sets run %s: %d answers each time, each graded once. Subscription answerers cost nothing per answer; API ones are billed per token against `budget.daily_usd`.\n", every, total)
+	if s := c.Cfg.Sampling; s.Adaptive {
+		fmt.Fprintf(&b, "Adaptive sampling adds up to %d answers to each core run, while today's budget allows.\n", s.MaxExtra)
+	}
+	if c.Cfg.ThemesOn() {
+		b.WriteString("Each run ends with one more grader call that groups its objections and praise into themes.\n")
+	}
 	return b.String()
 }
 

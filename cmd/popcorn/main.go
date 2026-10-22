@@ -21,6 +21,8 @@ import (
 	"github.com/metcalfc/popcorn/internal/analysis"
 	"github.com/metcalfc/popcorn/internal/app"
 	"github.com/metcalfc/popcorn/internal/config"
+	"github.com/metcalfc/popcorn/internal/grade"
+	"github.com/metcalfc/popcorn/internal/opinion"
 	"github.com/metcalfc/popcorn/internal/plan"
 	"github.com/metcalfc/popcorn/internal/report"
 	"github.com/metcalfc/popcorn/internal/server"
@@ -41,6 +43,9 @@ const usage = `popcorn: how AI assistants answer your buyers' questions.
   popcorn run <set-id>                   run one set and wait for it (costs money)
   popcorn report <run-id> [-json]        rates, share of voice and top pages for a run
   popcorn fixes <run-id> [-rebuild]      the run's fix list as markdown
+  popcorn themes <run-id> [-rebuild]     what the run's answers praise and object to, grouped
+  popcorn suggest-prompts <set-id> [-n 10]  new buyer questions for a set, as TOML to paste
+                                         (one analyst call; writes nothing)
   popcorn audit [site...]                what AI crawlers can read on the brand's sites (free)
   popcorn check-citations <run-id>       which pages the run cited name the brand, and which rivals
   popcorn crawl import <logfile>...      count AI crawler fetches and AI referrals from access logs
@@ -322,6 +327,48 @@ func dispatch(ctx context.Context, cmd string, args []string) error {
 		}
 		fmt.Print(analysis.Markdown(r.Snapshot.Set, fx))
 		return nil
+	case "themes":
+		fs := flag.NewFlagSet("themes", flag.ExitOnError)
+		rebuild := fs.Bool("rebuild", false, "run the theme pass again first (one grader call)")
+		fs.Parse(positionalLast(args))
+		if fs.NArg() != 1 {
+			return errors.New("usage: popcorn themes <run-id> [-rebuild]")
+		}
+		a, err := open()
+		if err != nil {
+			return err
+		}
+		if *rebuild {
+			if _, err := a.Runs.BuildThemes(ctx, fs.Arg(0)); err != nil {
+				return err
+			}
+		}
+		t, err := a.Runs.Themes(ctx, fs.Arg(0))
+		if err != nil {
+			return err
+		}
+		if t == nil {
+			return errors.New("this run has no themes; -rebuild makes them")
+		}
+		return printThemes(a, fs.Arg(0), *t)
+	case "suggest-prompts":
+		fs := flag.NewFlagSet("suggest-prompts", flag.ExitOnError)
+		n := fs.Int("n", 10, "how many prompts")
+		fs.Parse(positionalLast(args))
+		if fs.NArg() != 1 {
+			return errors.New("usage: popcorn suggest-prompts <set-id> [-n 10]")
+		}
+		a, err := open()
+		if err != nil {
+			return err
+		}
+		res, err := a.SuggestPrompts(ctx, fs.Arg(0), *n)
+		if err != nil {
+			return err
+		}
+		fmt.Print(res.Snippet)
+		fmt.Fprintf(os.Stderr, "%d prompts for %s (%d dropped as repeats), $%.3f. Paste into its file and open a pull request.\n", len(res.Prompts), fs.Arg(0), res.Dropped, res.CostUSD)
+		return nil
 	case "audit":
 		return auditCmd(ctx, args)
 	case "check-citations":
@@ -330,6 +377,51 @@ func dispatch(ctx context.Context, cmd string, args []string) error {
 		return crawlCmd(ctx, args)
 	}
 	return fmt.Errorf("unknown command %q\n\n%s", cmd, usage)
+}
+
+// positionalLast moves a leading argument that isn't a flag to the end, so "themes <id> -rebuild"
+// parses as well as "themes -rebuild <id>".
+func positionalLast(args []string) []string {
+	if len(args) > 1 && !strings.HasPrefix(args[0], "-") {
+		return append(append([]string{}, args[1:]...), args[0])
+	}
+	return args
+}
+
+func printThemes(a *app.App, id string, t opinion.Themes) error {
+	ctx := context.Background()
+	r, err := a.Runs.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+	res, err := a.Runs.Results(ctx, id)
+	if err != nil {
+		return err
+	}
+	var grades []*grade.Grade
+	for _, x := range res {
+		grades = append(grades, x.Grade)
+	}
+	s := opinion.Summarize(grades)
+	fmt.Printf("%s\n\nNet sentiment %s over %d answers naming %s with a tone:", r.Name, s.NetText(), s.Toned, a.Cfg.Brand.Name)
+	for _, c := range s.Tones {
+		fmt.Printf(" %s %d", c.Tone, c.N)
+	}
+	fmt.Println()
+	switch {
+	case t.Error != "":
+		fmt.Println("\nTheme pass failed:", t.Error)
+	case t.Skipped != "":
+		fmt.Println("\nNo themes:", t.Skipped)
+	}
+	for _, th := range t.Themes {
+		who := ""
+		if th.Beneficiary != "" {
+			who = ", helps " + th.Beneficiary
+		}
+		fmt.Printf("\n%-11s %s (%d answers%s)\n            “%s”\n", th.Kind, th.Name, th.Answers, who, th.Quote)
+	}
+	return nil
 }
 
 func answererIDs(as []config.Answerer) []string {

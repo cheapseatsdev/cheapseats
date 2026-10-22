@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -19,7 +20,7 @@ import (
 // cost, and the same rules after it (here, absent for an answer that never names the brand).
 func TestGradingOnTheClaudeCLI(t *testing.T) {
 	dir := t.TempDir()
-	out := `{"type":"result","subtype":"success","is_error":false,"result":"","structured_output":{"verdict":"recommended","position":1,"top_pick":null,"named":["Gauge"],"reasoning":"r","why_not_top":null,"objections":[],"other_product":false}}`
+	out := `{"type":"result","subtype":"success","is_error":false,"result":"","structured_output":{"verdict":"recommended","position":1,"top_pick":null,"named":["Gauge"],"reasoning":"r","why_not_top":null,"objections":[],"other_product":false,"tone":"positive","praise":["credible"]}}`
 	if err := os.WriteFile(filepath.Join(dir, "claude"), []byte("#!/bin/sh\ncat > /dev/null\nprintf '%s\\n' '"+out+"'\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -33,9 +34,12 @@ func TestGradingOnTheClaudeCLI(t *testing.T) {
 	if err != nil || cost != 0 || g.Verdict != Absent || g.Position != nil {
 		t.Fatalf("%+v cost=%v %v", g, cost, err)
 	}
+	if g.Tone != "" || len(g.Praise) > 0 {
+		t.Fatalf("an absent brand has no tone or praise: %+v", g)
+	}
 	g, _, err = Answer(context.Background(), cfg, sets.Set{}, "Popcorn or Gauge?", "Use Popcorn.")
-	if err != nil || g.Verdict != Recommended {
-		t.Fatalf("a named brand keeps the CLI's verdict: %+v %v", g, err)
+	if err != nil || g.Verdict != Recommended || g.Tone != Positive || len(g.Praise) != 1 {
+		t.Fatalf("a named brand keeps the CLI's verdict, tone and praise: %+v %v", g, err)
 	}
 }
 
@@ -153,5 +157,27 @@ func TestAbsentBrandDoesNotGetInventedObjectionAndTiesStayUnpicked(t *testing.T)
 	g.normalize("Popcorn")
 	if g.TopPick != nil {
 		t.Fatal("tie forced into a top pick")
+	}
+}
+
+// Tone and praise describe how the answer talks about the brand, so only a named brand has them,
+// and a tone outside the four (the schema's "none", or nothing from an older grade) is no tone.
+func TestToneAndPraiseOnlyForANamedBrand(t *testing.T) {
+	g := Grade{Verdict: Absent, Tone: Positive, Praise: []string{"open source"}}
+	g.normalize("Popcorn")
+	if g.Tone != "" || g.Praise != nil {
+		t.Fatalf("%+v", g)
+	}
+	for tone, want := range map[Tone]Tone{"none": "", "": "", "glowing": "", Mixed: Mixed, Negative: Negative} {
+		g = Grade{Verdict: Mentioned, Tone: tone, Praise: []string{"cheap"}}
+		g.normalize("Popcorn")
+		if g.Tone != want || len(g.Praise) != 1 {
+			t.Errorf("tone %q: %+v", tone, g)
+		}
+	}
+	for _, f := range []string{"tone", "praise"} {
+		if !slices.Contains(schema["required"].([]string), f) || !strings.Contains(System, "\n"+f+":") {
+			t.Errorf("%s isn't required by the schema and described in System", f)
+		}
 	}
 }

@@ -320,6 +320,7 @@ type dayData struct {
 	models  map[string]string                   // answerer -> model
 	samples map[string]int                      // answerer -> samples per prompt
 	tallies map[string]map[string]*report.Tally // prompt id -> answerer -> tally
+	planned map[string]map[string]*report.Tally // the same, without adaptive sampling's extras
 	named   map[string]map[string]int           // prompt id -> product (lowercase) -> answers naming it
 }
 
@@ -396,7 +397,7 @@ func newDay(r *run.Run, brand config.Brand, date string, results []run.Result) d
 		Day:     Day{Date: date, RunID: r.ID, Method: r.Method, ConfigRev: r.ConfigRev, Rank: sum.BrandRank(), Rates: sum.Overall, Answers: sum.Done, Board: sum.Voice},
 		snap:    r.Snapshot,
 		prompts: map[string]string{}, texts: map[string]string{}, info: map[string]bool{}, models: map[string]string{}, samples: map[string]int{},
-		tallies: map[string]map[string]*report.Tally{}, named: map[string]map[string]int{},
+		tallies: map[string]map[string]*report.Tally{}, planned: map[string]map[string]*report.Tally{}, named: map[string]map[string]int{},
 	}
 	if len(sum.Voice) > 0 {
 		d.Leader = sum.Voice[0].Name
@@ -413,7 +414,8 @@ func newDay(r *run.Run, brand config.Brand, date string, results []run.Result) d
 			d.info[x.PromptID] = true
 		}
 		d.models[x.Answerer] = x.Model
-		if x.Sample+1 > d.samples[x.Answerer] {
+		// Planned samples only: adaptive extras vary run to run and aren't a change of samples.
+		if x.Sample+1 > d.samples[x.Answerer] && !r.Snapshot.Sampling.IsExtra(x.PromptID, x.Answerer, x.Track, x.Sample) {
 			d.samples[x.Answerer] = x.Sample + 1
 		}
 		if x.Status != "done" || x.Grade == nil {
@@ -428,6 +430,17 @@ func newDay(r *run.Run, brand config.Brand, date string, results []run.Result) d
 			d.tallies[x.PromptID][x.Answerer] = t
 		}
 		t.Add(x.Grade, name, x.Info)
+		if !r.Snapshot.Sampling.IsExtra(x.PromptID, x.Answerer, x.Track, x.Sample) {
+			if d.planned[x.PromptID] == nil {
+				d.planned[x.PromptID] = map[string]*report.Tally{}
+			}
+			pt := d.planned[x.PromptID][x.Answerer]
+			if pt == nil {
+				pt = &report.Tally{}
+				d.planned[x.PromptID][x.Answerer] = pt
+			}
+			pt.Add(x.Grade, name, x.Info)
+		}
 		// Products named, counted as the share-of-voice board counts them: the brand by its
 		// verdict, everyone else by the grader's list.
 		if d.named[x.PromptID] == nil {
@@ -951,7 +964,8 @@ func (a *App) SampleAdvice(ctx context.Context, s sets.Set) SampleAdvice {
 		for j := range days {
 			d := &days[j]
 			for _, pid := range d.order {
-				for ans, t := range d.tallies[pid] {
+				// Planned samples only: extras would leave a cell with a different count each day.
+				for ans, t := range d.planned[pid] {
 					if d.samples[ans] < 2 || t.N != d.samples[ans] {
 						continue // one sample, or not every sample graded
 					}

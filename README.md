@@ -21,7 +21,11 @@ take to whichever of those tools you move to. Site and docs: [popcorn.zone](http
   - `mentioned`: named, but as one option among many, in passing, or with reservations
   - `absent`: not named at all
 - Records your position, the top pick, every product named (share of voice), "why not #1", objections,
-  and every search result and citation.
+  the strengths it credits you with, its tone about you (positive, neutral, mixed or negative), and
+  every search result and citation.
+- Sums up what the answers say about you: **net sentiment** (the share of answers naming you that are
+  positive, minus the share negative), the praise and objections heard most, and a few named
+  **themes** with the competitor each one helps and a quote, from one cheap grader call a run.
 - Ends each run with **Fix these first**: the exact page to create or change, what it must say, the
   prompts it should flip, effort, priority, the site it belongs on and its owner, plus a prompt to
   hand Claude Code.
@@ -109,10 +113,18 @@ is unset.
 - `[grader]`, `[analyst]`: Claude models, through the API (`ANTHROPIC_API_KEY`, or a proxy that
   adds it in `POPCORN_ANTHROPIC_BASE_URL`), or with `provider = "claude-code"` through the local
   `claude` CLI on your subscription. With subscription answerers too, a laptop needs no API key.
+  The theme pass is one extra grader call per run (about $0.003 on Haiku, nothing on `claude-code`);
+  `[grader] themes = false` turns it off.
 - `[[competitors]]`: names (and aliases) the grader folds onto one, shared by every set, and their
   `domains`, so their pages count as theirs
 - `[sources]`: hosts to move between the kinds of source the run page sorts pages into
   ([reading a run](docs/reading-a-run.md#configuring-it))
+- `[sampling]`: `adaptive = true` and `max_extra = N` let a run ask up to N extra answers, decided
+  before it starts: the prompts whose named rate has been least certain over the last 28 days are
+  asked twice over, every answerer and track alike, within today's budget. Off by default; it never
+  starts a trend over, and extras that fail are dropped rather than holding the run back. A prompt's
+  rate means the same with or without them; totals pooled over all of a run's answers weigh a
+  doubled prompt twice.
 - `[budget]`: a daily cap on API spend
 - `[schedule]`, `[tiers]`: when sets run (weekly is usually enough)
 - Prompt sets: one file per category of buyer question; every prompt has a permanent id
@@ -132,6 +144,8 @@ popcorn audit [site...]                what AI crawlers can read on your sites (
 popcorn check-citations <run-id>       which cited pages name you, and which competitors
 popcorn crawl import <logfile>...      AI crawler fetches and AI referrals from access logs
 popcorn crawl report [-days 30]        those counts per page, beside how often runs cite it
+popcorn themes <run-id> [-rebuild]     net sentiment and the run's themes
+popcorn suggest-prompts <set-id> [-n 10]  new buyer questions as TOML to paste (one analyst call)
 popcorn check                          validate the config
 popcorn plan <before> [<after>]        what a config change does to trends
 popcorn migrate-config [dir]           give prompts ids (sets from before ids)
@@ -142,7 +156,8 @@ popcorn version                        version and database schema
 
 - JSON API under `/api/` (status, sets, runs, fixes, quick wins, fix attempts, rankings, citations, searches, search probe, site audit, citation check, crawlers):
   [reference](https://popcorn.zone/docs/reference/).
-- MCP server at `/api/mcp` (Streamable HTTP):
+- MCP server at `/api/mcp` (Streamable HTTP). `get_run` includes net sentiment and themes;
+  `suggest_prompts` drafts new prompts for a set (one analyst call):
 
   ```bash
   claude mcp add --transport http popcorn https://<host>/api/mcp --header "Authorization: Bearer <token>"

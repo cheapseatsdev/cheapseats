@@ -146,3 +146,29 @@ func TestSourcesAndCompetitorDomains(t *testing.T) {
 		}
 	}
 }
+
+func TestThemesAndSampling(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "popcorn.toml")
+	load := func(body string) (*Config, error) {
+		t.Helper()
+		os.WriteFile(p, []byte("[brand]\nname = \"X\"\n"+body), 0o644)
+		return Load(p)
+	}
+	c, err := load("")
+	if err != nil || !c.ThemesOn() || c.Sampling.Adaptive {
+		t.Fatalf("themes are on and adaptive sampling off by default: %+v %v", c, err)
+	}
+	if c, err = load("[grader]\nmodel = \"m\"\nthemes = false\n[sampling]\nadaptive = true\nmax_extra = 12\n"); err != nil || c.ThemesOn() || c.Sampling.MaxExtra != 12 {
+		t.Fatalf("%+v %v", c, err)
+	}
+	for body, want := range map[string]string{
+		"[analyst]\nthemes = true\n":       "belongs in [grader]",
+		"[sampling]\nadaptive = true\n":    "needs max_extra",
+		"[sampling]\nmax_extra = -1\n":     "0..1000",
+		"[sampling]\nmax_extra = 100000\n": "0..1000",
+	} {
+		if _, err := load(body); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%q: want %q, got %v", body, want, err)
+		}
+	}
+}

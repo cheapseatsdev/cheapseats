@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -22,6 +23,7 @@ import (
 	"github.com/metcalfc/popcorn/internal/config"
 	"github.com/metcalfc/popcorn/internal/grade"
 	"github.com/metcalfc/popcorn/internal/llm"
+	"github.com/metcalfc/popcorn/internal/opinion"
 	"github.com/metcalfc/popcorn/internal/sets"
 	"github.com/metcalfc/popcorn/internal/store"
 	"github.com/metcalfc/popcorn/internal/version"
@@ -38,6 +40,9 @@ type Snapshot struct {
 	Answerers []config.Answerer `json:"answerers"` // only the answerers whose API key is set
 	Grader    string            `json:"grader"`
 	Skipped   []string          `json:"skipped,omitempty"` // configured answerers left out for a missing key
+	// The extra answers adaptive sampling gave this run, decided before it started; nil when it's
+	// off. Not part of the design or the method (see Design).
+	Sampling *Sampling `json:"sampling,omitempty"`
 }
 
 type Run struct {
@@ -132,6 +137,13 @@ func (e *Engine) Create(ctx context.Context, set sets.Set, trigger string) (*Run
 		return nil, errors.New("popcorn is shutting down; start the run after it restarts")
 	}
 	snap := NewSnapshot(e.Cfg, set)
+	if e.Cfg.Sampling.Adaptive && set.Tier != sets.PLG {
+		sp, err := e.plan(ctx, set, snap)
+		if err != nil {
+			return nil, stored(err)
+		}
+		snap.Sampling = sp
+	}
 	if len(snap.Answerers) == 0 {
 		return nil, errors.New("no answerer is available: set ANTHROPIC_API_KEY or OPENAI_API_KEY, or install the claude or codex CLI")
 	}
@@ -161,7 +173,7 @@ func (e *Engine) Create(ctx context.Context, set sets.Set, trigger string) (*Run
 	for i, p := range set.Prompts {
 		for _, a := range snap.Answerers {
 			for _, t := range []answer.Track{answer.Search, answer.Recall} {
-				for s := 0; s < e.samples(set, a, t); s++ {
+				for s := 0; s < e.samples(set, a, t)+snap.Sampling.Extra(p.ID, a.ID, t); s++ {
 					if _, err := tx.ExecContext(ctx, `INSERT INTO results (run_id, prompt_idx, prompt, prompt_id, prompt_sha, answerer, model, track, sample, status) VALUES (?,?,?,?,?,?,?,?,?, 'pending')`,
 						r.ID, i, p.Text, p.ID, p.SHA(), a.ID, a.Model, string(t), s); err != nil {
 						return nil, err
@@ -283,6 +295,7 @@ func (e *Engine) execute(ctx context.Context, id string) error {
 		prompt   string
 		answerer string
 		track    answer.Track
+		extra    bool // an adaptive extra sample: asked after every planned one
 	}
 	var stopOnce sync.Once
 	var stopReason error
@@ -290,22 +303,26 @@ func (e *Engine) execute(ctx context.Context, id string) error {
 	defer stop()
 	// pass answers every pending result.
 	pass := func() error {
-		rows, err := e.DB.QueryContext(ctx, `SELECT id, prompt, answerer, track FROM results WHERE run_id=? AND status='pending' ORDER BY prompt_idx, answerer, track, sample`, id)
+		rows, err := e.DB.QueryContext(ctx, `SELECT id, prompt, prompt_id, answerer, track, sample FROM results WHERE run_id=? AND status='pending' ORDER BY prompt_idx, answerer, track, sample`, id)
 		if err != nil {
 			return err
 		}
 		var jobs []job
 		for rows.Next() {
 			var j job
-			var t string
-			if err := rows.Scan(&j.id, &j.prompt, &j.answerer, &t); err != nil {
+			var t, pid string
+			var sample int
+			if err := rows.Scan(&j.id, &j.prompt, &pid, &j.answerer, &t, &sample); err != nil {
 				rows.Close()
 				return err
 			}
 			j.track = answer.Track(t)
+			j.extra = r.Snapshot.Sampling.IsExtra(pid, j.answerer, j.track, sample)
 			jobs = append(jobs, j)
 		}
 		rows.Close()
+		// Extras last, so a budget that runs out costs them rather than a planned answer.
+		sort.SliceStable(jobs, func(a, b int) bool { return !jobs[a].extra && jobs[b].extra })
 		ch := make(chan job)
 		var wg sync.WaitGroup
 		for w := 0; w < e.Cfg.Budget.Concurrency; w++ {
@@ -360,6 +377,17 @@ func (e *Engine) execute(ctx context.Context, id string) error {
 	if _, err := e.DB.ExecContext(bg, `UPDATE results SET status='skipped' WHERE run_id=? AND status IN ('pending','running')`, id); err != nil && stopReason == nil {
 		stopReason = stored(err)
 	}
+	// Extras are a bonus: once every planned answer is in, any extra not done (failed, or cut off by
+	// the budget) is dropped, so the run is done and counts in rankings, trends and the fix list.
+	if r.Snapshot.Sampling != nil && ctx.Err() == nil && (stopReason == nil || errors.Is(stopReason, errBudget)) {
+		complete, err := e.dropExtras(bg, id, r.Snapshot.Sampling)
+		switch {
+		case err != nil:
+			stopReason = stored(err)
+		case complete:
+			stopReason = nil
+		}
+	}
 	// If this count fails the run can't say it's done, so it's failed instead.
 	var unfinished int
 	if err := e.DB.QueryRow(`SELECT COUNT(*) FROM results WHERE run_id=? AND (status!='done' OR grade IS NULL)`, id).Scan(&unfinished); err != nil && stopReason == nil {
@@ -406,6 +434,11 @@ func (e *Engine) execute(ctx context.Context, id string) error {
 		}{r.Design, models})
 		if _, err := e.DB.Exec(`UPDATE runs SET profile=? WHERE id=?`, profile, id); err != nil {
 			return stored(err)
+		}
+		if e.Cfg.ThemesOn() && ctx.Err() == nil {
+			if _, err := e.BuildThemes(ctx, id); err != nil {
+				slog.Error("themes", "run", id, "err", err)
+			}
 		}
 		if e.OnFinished != nil && ctx.Err() == nil {
 			e.OnFinished(ctx, id)
@@ -509,8 +542,11 @@ func Digest(v any) string {
 // Design is what makes two runs comparable: the set, answerers, prompts and grader. Facts only
 // shape the fix list, so changing them doesn't restart the rankings; the audience is already in
 // AnswerPrompt.
+//
+// Adaptive sampling's extras aren't part of it either: they're decided from the runs before, so
+// they differ run to run, and more answers to a question measure the same thing more closely.
 func Design(s Snapshot) string {
-	s.Skipped, s.Brand.Facts, s.Brand.Audience = nil, nil, ""
+	s.Skipped, s.Brand.Facts, s.Brand.Audience, s.Sampling = nil, nil, "", nil
 	return Digest(s)
 }
 
@@ -659,4 +695,99 @@ func (e *Engine) Status(ctx context.Context, id string) string {
 	var s string
 	e.DB.QueryRowContext(ctx, `SELECT status FROM runs WHERE id=?`, id).Scan(&s)
 	return s
+}
+
+// BuildThemes runs the theme pass over a run's graded answers with the run's grader (see
+// opinion.Group) and stores what came of it, an error included, with the run.
+func (e *Engine) BuildThemes(ctx context.Context, id string) (opinion.Themes, error) {
+	r, err := e.Get(ctx, id)
+	if err != nil {
+		return opinion.Themes{}, err
+	}
+	results, err := e.Results(ctx, id)
+	if err != nil {
+		return opinion.Themes{}, err
+	}
+	var in []opinion.Answer
+	for _, x := range results {
+		if x.Status == "done" && x.Grade != nil {
+			in = append(in, opinion.Answer{ID: x.ID, Grade: x.Grade})
+		}
+	}
+	cfg := *e.Cfg
+	cfg.Brand = r.Snapshot.Brand
+	cfg.Grader = config.ModelFromRef(r.Snapshot.Grader)
+	ctx = llm.WithOperation(llm.WithAccounting(ctx, e.Budget), "themes/"+id)
+	t, gerr := opinion.Group(ctx, &cfg, r.Snapshot.Set, in)
+	js, _ := json.Marshal(t)
+	_, err = e.DB.ExecContext(context.Background(), `UPDATE runs SET themes=? WHERE id=?`, string(js), id)
+	return t, errors.Join(gerr, stored(err))
+}
+
+// Themes is the run's stored theme pass, or nil if it has none.
+func (e *Engine) Themes(ctx context.Context, id string) (*opinion.Themes, error) {
+	var js sql.NullString
+	if err := e.DB.QueryRowContext(ctx, `SELECT themes FROM runs WHERE id=?`, id).Scan(&js); err != nil || !js.Valid {
+		return nil, err
+	}
+	var t opinion.Themes
+	if err := json.Unmarshal([]byte(js.String), &t); err != nil {
+		return nil, stored(fmt.Errorf("run %s: themes: %w", id, err))
+	}
+	return &t, nil
+}
+
+// Opinion is what the run's answers say about the brand: the sentiment of results, which are the
+// run's (or a slice of them), and its stored theme pass.
+func (e *Engine) Opinion(ctx context.Context, id string, results []Result) opinion.Report {
+	var grades []*grade.Grade
+	for _, x := range results {
+		if x.Status == "done" {
+			grades = append(grades, x.Grade)
+		}
+	}
+	rep := opinion.Report{Sentiment: opinion.Summarize(grades)}
+	t, err := e.Themes(ctx, id)
+	if err != nil {
+		slog.Warn("reading themes", "run", id, "err", err)
+	}
+	rep.Themes = t
+	return rep
+}
+
+// dropExtras deletes the run's unfinished extra samples if every planned one is done, and reports
+// whether they all were.
+func (e *Engine) dropExtras(ctx context.Context, id string, sp *Sampling) (bool, error) {
+	rows, err := e.DB.QueryContext(ctx, `SELECT id, prompt_id, answerer, track, sample FROM results WHERE run_id=? AND (status!='done' OR grade IS NULL)`, id)
+	if err != nil {
+		return false, err
+	}
+	var drop []int64
+	for rows.Next() {
+		var rid int64
+		var pid, ans, t string
+		var sample int
+		if err := rows.Scan(&rid, &pid, &ans, &t, &sample); err != nil {
+			rows.Close()
+			return false, err
+		}
+		if !sp.IsExtra(pid, ans, answer.Track(t), sample) {
+			rows.Close()
+			return false, nil // a planned answer is unfinished: retry finishes the extras too
+		}
+		drop = append(drop, rid)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return false, err
+	}
+	for _, rid := range drop {
+		if _, err := e.DB.ExecContext(ctx, `DELETE FROM results WHERE id=?`, rid); err != nil {
+			return false, err
+		}
+	}
+	if len(drop) > 0 {
+		slog.Info("dropped unfinished extra samples", "run", id, "count", len(drop))
+	}
+	return true, nil
 }
