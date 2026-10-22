@@ -1,12 +1,13 @@
 # Popcorn
 
-Popcorn is a free, open-source (MIT) AI visibility tracker, inspired by tools like
-[Gauge](https://withgauge.com), Profound and Peec AI: the 20% of what they do that you'll use 80% of
-the time, running on the Claude subscription you already have (ChatGPT optional). It asks your buyers'
-questions, grades whether AI assistants recommend your brand, and builds a ranked list of fixes.
+Popcorn is an open-source (MIT) AI visibility tracker I wrote to make my own product better. It
+asks your buyers' questions of AI assistants, grades whether they recommend you, and builds a ranked
+list of fixes, running on the Claude subscription you already have (ChatGPT optional).
 
-Start here at no cost. If you outgrow it, your prompts are plain text in your own repo, ready to
-take to whichever of those tools you move to. Site and docs: [popcorn.zone](https://popcorn.zone/docs/).
+It draws on a lot of inspiration, [Gauge](https://withgauge.com) first among them, along with
+Profound and Peec AI. It's free, and always will be: no hosted tier, no upsell. I hope you find it
+useful. If you outgrow it, do whatever suits you; I'd suggest Gauge, that team is great. Your prompts
+are plain text in your own repo, so they come with you. Site and docs: [popcorn.zone](https://popcorn.zone/docs/).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/dashboard-dark.webp">
@@ -22,7 +23,8 @@ take to whichever of those tools you move to. Site and docs: [popcorn.zone](http
   - `absent`: not named at all
 - Records your position, the top pick, every product named (share of voice), "why not #1", objections,
   the strengths it credits you with, its tone about you (positive, neutral, mixed or negative), and
-  every search result and citation.
+  every search result and citation, with each cited page's type (listicle, comparison, review,
+  docs, forum, repo, article, product).
 - Sums up what the answers say about you: **net sentiment** (the share of answers naming you that are
   positive, minus the share negative), the praise and objections heard most, and a few named
   **themes** with the competitor each one helps and a quote, from one cheap grader call a run.
@@ -37,7 +39,9 @@ take to whichever of those tools you move to. Site and docs: [popcorn.zone](http
   fix list is written knowing what was tried.
 - **Rankings** trend each set week to week, through prompt and model changes: 7-, 14- or 28-day
   averages with 95% bands, day-over-day changes greyed out when they're within noise, and fixes
-  marked on the chart. How it's worked out: [docs/statistics.md](docs/statistics.md).
+  marked on the chart. Each set also gets a **citation stability** score: how much the hosts its
+  answers cite hold their share from run to run. How it's worked out:
+  [docs/statistics.md](docs/statistics.md).
 - Free checks beside the runs, no model calls ([docs](docs/audit.md)): a **site audit** of what AI
   crawlers can read (robots.txt and firewall blocks per AI bot, llms.txt, sitemap, and pages that
   are empty without JavaScript), a **citation check** of which pages the answers cite name you and
@@ -167,8 +171,8 @@ popcorn version                        version and database schema
 
 - JSON API under `/api/` (status, sets, runs, fixes, quick wins, fix attempts, rankings, citations, searches, search probe, site audit, citation check, crawlers):
   [reference](https://popcorn.zone/docs/reference/).
-- MCP server at `/api/mcp` (Streamable HTTP). `get_run` includes net sentiment and themes;
-  `suggest_prompts` drafts new prompts for a set (one analyst call):
+- MCP server at `/api/mcp` (Streamable HTTP). `get_run` includes net sentiment, themes and page
+  types; `get_citation_stability` has a set's run-to-run citation stability; `suggest_prompts` drafts new prompts for a set (one analyst call):
 
   ```bash
   claude mcp add --transport http popcorn https://<host>/api/mcp --header "Authorization: Bearer <token>"
