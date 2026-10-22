@@ -29,7 +29,8 @@ with more answers doesn't count for more. A cell is one prompt's `h` hits out of
   covariance between the two products is ignored. If no crossing is significant in the direction
   the rank moved, the table says **within noise** and draws no arrow.
 - **Rolling window**: 7 days by default, or 14 or 28 (`?window=` on the page,
-  `/api/rankings?window=`, MCP `get_rankings` `window`). The window stops at a change of method.
+  `/api/rankings?window=`, MCP `get_rankings` `window`). The window stops at a change of method;
+  a [re-graded](regrading.md) run counts as the method it was re-graded under.
 - **Two intervals**, for named, recommended and top pick:
   - *Band, across prompts* (the shaded band): the rolling mean ± 1.96 · s / √m, where s is the
     standard deviation of the m prompt-day rates in the window. It answers "questions like

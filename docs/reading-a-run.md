@@ -14,6 +14,13 @@ called to build it. The same numbers are in the JSON export (`/runs/<id>/export.
   without them (`unbranded` in JSON) and show the rates with them underneath. The prompt list marks
   each branded prompt. Rankings and trends still use the overall rates.
 
+Each grade carries **evidence**: the sentence of the answer that most supports its verdict. The
+grader is asked to copy it; Popcorn then looks for it in the answer, ignoring case, spacing,
+markdown emphasis and curly quotes, and keeps the answer's own span of text, or nothing if it isn't
+there, so a quote shown is always one the answer contains. The run page highlights it in the
+answer; it's `evidence` in the grade (JSON, CSV export, MCP `get_result`). Absent answers have
+none, nor do grades from before it.
+
 ## Share of voice
 
 | Column | What it is | JSON |

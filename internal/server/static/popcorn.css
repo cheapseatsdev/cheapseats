@@ -67,6 +67,7 @@ th{color:var(--pc-muted);font-weight:500;font-size:12px;text-transform:uppercase
 details{border-top:1px solid var(--pc-border);padding:6px 0}summary{cursor:pointer}details:target{outline:2px solid var(--pc-primary);outline-offset:2px;padding:8px}
 pre{white-space:pre-wrap;word-break:break-word;background:var(--pc-chip);padding:10px;border-radius:8px;font:12px/1.45 var(--mono);max-height:420px;overflow:auto}
 blockquote{margin-left:0;border-left:3px solid var(--pc-border);padding-left:12px;color:var(--pc-muted)}
+pre mark{background:var(--pc-gold-bg);color:var(--pc-gold-text);border-radius:3px}blockquote.evidence{margin:6px 0 10px}
 
 /* The most important action in a section is a plain button (red); everything else is .ghost. */
 button,.btn{font:inherit;font-weight:500;background:var(--pc-primary);color:var(--pc-on-primary);border:1px solid transparent;border-radius:8px;padding:7px 14px;cursor:pointer}

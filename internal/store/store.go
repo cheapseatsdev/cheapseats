@@ -32,8 +32,11 @@ var siteChecks string
 //go:embed 006_themes.sql
 var themes string
 
+//go:embed 007_regrades.sql
+var regrades string
+
 // Each entry is applied once, in order; append, never edit.
-var migrations = []string{schema, promptIDs, provenance, fixAttempts, siteChecks, themes}
+var migrations = []string{schema, promptIDs, provenance, fixAttempts, siteChecks, themes, regrades}
 
 // Schema is the schema version this Popcorn brings a database to.
 func Schema() int { return len(migrations) }
