@@ -106,6 +106,12 @@ func TestPagesRenderWithData(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}
+		// Clients on the 2025-06-18 spec reject a result whose structuredContent isn't an object.
+		if res.StructuredContent != nil {
+			if b, _ := json.Marshal(res.StructuredContent); len(b) == 0 || b[0] != '{' {
+				t.Errorf("%s: structuredContent is not an object: %s", name, limit(string(b)))
+			}
+		}
 		text := ""
 		for _, c := range res.Content {
 			if tc, ok := c.(*mcp.TextContent); ok {
@@ -119,6 +125,16 @@ func TestPagesRenderWithData(t *testing.T) {
 	}
 	if text, isErr := call("get_citations", map[string]any{"url_contains": "docker"}); isErr || !strings.Contains(text, "docs.docker.com") {
 		t.Errorf("get_citations: %s", limit(text))
+	}
+	// The tools that return lists.
+	if text, isErr := call("list_prompt_sets", nil); isErr || !strings.HasPrefix(text, "[") {
+		t.Errorf("list_prompt_sets: %s", limit(text))
+	}
+	if text, isErr := call("list_runs", nil); isErr || !strings.Contains(text, r.ID) {
+		t.Errorf("list_runs: %s", limit(text))
+	}
+	if text, isErr := call("get_quick_wins", nil); isErr || !strings.Contains(text, "Write a credential-gateway guide") {
+		t.Errorf("get_quick_wins: %s", limit(text))
 	}
 	if _, isErr := call("get_prompt_set", map[string]any{"set": "no-such-set"}); !isErr {
 		t.Error("an unknown set should be a tool error")

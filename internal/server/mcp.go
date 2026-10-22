@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -193,6 +194,9 @@ func addTool[In any](srv *mcp.Server, name, desc string, h func(context.Context,
 }
 
 // wrap adapts a plain handler to the SDK's: an error becomes a tool error the client can read.
+// A result that isn't a JSON object (a list) goes back as text only: the SDK would put it in
+// structuredContent, which clients on the 2025-06-18 spec (Claude Code among them) require to be
+// an object, and they reject the whole result.
 func wrap[In any](h func(context.Context, In) (any, error)) mcp.ToolHandlerFor[In, any] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in In) (*mcp.CallToolResult, any, error) {
 		out, err := h(ctx, in)
@@ -201,6 +205,13 @@ func wrap[In any](h func(context.Context, In) (any, error)) mcp.ToolHandlerFor[I
 		}
 		if out == nil {
 			return nil, nil, errors.New("no result")
+		}
+		b, err := json.Marshal(out)
+		if err != nil {
+			return nil, nil, err
+		}
+		if len(b) == 0 || b[0] != '{' {
+			return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(b)}}}, nil, nil
 		}
 		return nil, out, nil
 	}
