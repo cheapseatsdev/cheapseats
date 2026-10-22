@@ -86,7 +86,7 @@ func (s *Server) mcpHandler() http.Handler {
 			}
 			return out, nil
 		})
-	addTool(srv, "get_run", "One run: rates per answerer and track, share of voice, top pages, the fix list, and one line per prompt. Use get_result for a full answer.",
+	addTool(srv, "get_run", "One run: rates per answerer and track (and without branded prompts), share of voice with positions, head to head, objections, sources by kind and host, an outreach list of hosts cited without the brand, the brand's pages found but not cited, the fix list, and one line per prompt. Use get_result for a full answer.",
 		func(ctx context.Context, a runArg) (any, error) {
 			d, err := s.runData(ctx, a.Run)
 			if err != nil {
@@ -197,6 +197,18 @@ func (s *Server) mcpHandler() http.Handler {
 		func(ctx context.Context, a runArg) (any, error) {
 			return map[string]bool{"cancelled": s.App.Runs.Cancel(a.Run)}, nil
 		})
+	addTool(srv, "get_search_queries", "The web searches the assistants ran in a run's search-track answers: per prompt how many answers searched and with what queries, the top queries with whether their results reached the brand's sites or named competitors, names the assistants added to searches the prompt didn't have, the words they add, and queries worth adding as prompts (a TOML entry to paste). From stored answers; costs nothing.",
+		func(ctx context.Context, a struct {
+			Run   string `json:"run" jsonschema:"run id"`
+			Pool  bool   `json:"pool,omitempty" jsonschema:"also read the set's earlier finished runs asked and graded the same way (up to 7 runs)"`
+			Limit int    `json:"limit,omitempty" jsonschema:"rows per list (default 15)"`
+		}) (any, error) {
+			d, err := s.searchData(ctx, a.Run, a.Pool)
+			if err != nil {
+				return nil, err
+			}
+			return searchDigest(d, a.Limit), nil
+		})
 
 	h := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return srv }, nil)
 	if len(s.hosts) == 0 {
@@ -284,12 +296,13 @@ func runDigest(d *RunData) any {
 		Named       string         `json:"named"`
 		TopPicks    []report.Count `json:"top_picks"`
 		FirstParty  bool           `json:"first_party_page_surfaced"`
-		Results     []string       `json:"results"` // "id answerer/track: verdict"
+		Branded     bool           `json:"branded,omitempty"` // names the brand: left out of unbranded
+		Results     []string       `json:"results"`           // "id answerer/track: verdict"
 	}
 	sum := d.Summary
 	prompts := []prompt{}
 	for _, p := range sum.Prompts {
-		row := prompt{N: p.Idx + 1, Prompt: p.Prompt, TopPicks: p.TopPicks, FirstParty: p.FirstHand,
+		row := prompt{N: p.Idx + 1, Prompt: p.Prompt, TopPicks: p.TopPicks, FirstParty: p.FirstHand, Branded: p.Branded,
 			Named: fmt.Sprintf("%d/%d", p.Rates.Visible.Hits, p.Rates.Visible.N)}
 		if p.Info {
 			row.Intent = "info"
@@ -308,26 +321,34 @@ func runDigest(d *RunData) any {
 		}
 		prompts = append(prompts, row)
 	}
-	voice, pages := sum.Voice, sum.Pages
-	if len(voice) > 10 {
-		voice = voice[:10]
-	}
-	if len(pages) > 15 {
-		pages = pages[:15]
+	voice, pages := head(sum.Voice, 10), head(sum.Pages, 15)
+	uncited := []string{}
+	for _, p := range head(sum.Uncited, 10) {
+		uncited = append(uncited, p.URL)
 	}
 	fixes := d.Fixes
 	if fixes == nil {
 		fixes = []analysis.Fix{}
 	}
 	return struct {
-		Run      *run.Run       `json:"run"`
-		Overall  report.Rates   `json:"overall"`
-		Slices   []report.Slice `json:"slices"`
-		Rank     int            `json:"share_of_voice_rank"`
-		Voice    []report.Voice `json:"share_of_voice"`
-		Pages    []report.Page  `json:"top_pages"`
-		Fixes    []analysis.Fix `json:"fixes"`
-		Insights string         `json:"insights"`
-		Prompts  []prompt       `json:"prompts"`
-	}{d.Run, sum.Overall, sum.Slices, sum.BrandRank(), voice, pages, fixes, d.Insights, prompts}
+		Run     *run.Run       `json:"run"`
+		Overall report.Rates   `json:"overall"`
+		Slices  []report.Slice `json:"slices"`
+		// Overall without the prompts that name the brand: the headline.
+		Unbranded      report.Rates        `json:"unbranded"`
+		BrandedPrompts int                 `json:"branded_prompts"`
+		Rank           int                 `json:"share_of_voice_rank"`
+		Voice          []report.Voice      `json:"share_of_voice"`
+		HeadToHead     []report.HeadToHead `json:"head_to_head"`
+		Objections     []report.Objection  `json:"top_objections"`
+		Classes        []report.ClassUse   `json:"source_classes"`
+		Hosts          []report.HostUse    `json:"top_hosts"`
+		Outreach       []report.Outreach   `json:"outreach"`
+		Uncited        []string            `json:"found_not_cited"`
+		Pages          []report.Page       `json:"top_pages"`
+		Fixes          []analysis.Fix      `json:"fixes"`
+		Insights       string              `json:"insights"`
+		Prompts        []prompt            `json:"prompts"`
+	}{d.Run, sum.Overall, sum.Slices, sum.Unbranded, sum.BrandedPrompts, sum.BrandRank(), voice, head(sum.HeadToHead, 10), head(sum.Objections, 10),
+		sum.Classes, head(sum.Hosts, 10), head(sum.Outreach, 10), uncited, pages, fixes, d.Insights, prompts}
 }

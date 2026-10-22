@@ -88,6 +88,15 @@ func TestPagesRenderWithData(t *testing.T) {
 		}
 	}
 
+	// The run's measures beyond the rates: positions, head to head, objections and sources.
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/runs/"+r.ID, nil))
+	for _, want := range []string{`<h2 id="h2h">Head to head</h2>`, "<td>private beta</td>", `<h2 id="sources">Sources</h2>`, `<td class="mono">docs.docker.com</td><td>reference</td>`, "Avg place"} {
+		if !strings.Contains(rec.Body.String(), want) {
+			t.Errorf("run page: want %q", want)
+		}
+	}
+
 	// The same run over MCP, through a real client.
 	ts := httptest.NewServer(h)
 	defer ts.Close()
@@ -98,7 +107,7 @@ func TestPagesRenderWithData(t *testing.T) {
 	}
 	defer cs.Close()
 	tools, err := cs.ListTools(ctx, nil)
-	if err != nil || len(tools.Tools) != 14 {
+	if err != nil || len(tools.Tools) != 15 {
 		t.Fatalf("tools: %v %v", tools, err)
 	}
 	call := func(name string, args map[string]any) (string, bool) {
@@ -120,7 +129,8 @@ func TestPagesRenderWithData(t *testing.T) {
 		}
 		return text, res.IsError
 	}
-	if text, isErr := call("get_run", map[string]any{"run": r.ID}); isErr || !strings.Contains(text, "Write a credential-gateway guide") || !strings.Contains(text, `"share_of_voice_rank":1`) {
+	if text, isErr := call("get_run", map[string]any{"run": r.ID}); isErr || !strings.Contains(text, "Write a credential-gateway guide") || !strings.Contains(text, `"share_of_voice_rank":1`) ||
+		!strings.Contains(text, `"source_classes"`) || !strings.Contains(text, `"objection":"private beta"`) || !strings.Contains(text, `"head_to_head"`) {
 		t.Errorf("get_run: %s", limit(text))
 	}
 	if text, isErr := call("get_citations", map[string]any{"url_contains": "docker"}); isErr || !strings.Contains(text, "docs.docker.com") {

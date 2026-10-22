@@ -48,12 +48,19 @@ A run's scores per track, and every prompt against every assistant:
   <img alt="A run page: search and recall scores, per-answerer rates, and a prompt-by-answerer grid of verdicts" src="docs/images/run-light.webp">
 </picture>
 
+Below them: share of voice (named rate, true share, position), head to head against each
+competitor, the objections answers raise, and where the answers' sources come from, with the
+third-party hosts cited without you. [Reading a run](docs/reading-a-run.md) defines every number.
+
 Quick wins: every fix across your sets, filterable by site, gap and set:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/quickwins-dark.webp">
   <img alt="Quick wins: ranked fixes with priority, gap, effort and the site each belongs on" src="docs/images/quickwins-light.webp">
 </picture>
+
+[What the assistants searched](docs/searches.md): the queries behind each answer, the names they
+added that the prompt didn't have, and the searches where competitors show up and you don't.
 
 ## Quick start
 
@@ -98,6 +105,10 @@ is unset.
 - `[grader]`, `[analyst]`: Claude models, through the API (`ANTHROPIC_API_KEY`, or a proxy that
   adds it in `POPCORN_ANTHROPIC_BASE_URL`), or with `provider = "claude-code"` through the local
   `claude` CLI on your subscription. With subscription answerers too, a laptop needs no API key.
+- `[[competitors]]`: names (and aliases) the grader folds onto one, shared by every set, and their
+  `domains`, so their pages count as theirs
+- `[sources]`: hosts to move between the kinds of source the run page sorts pages into
+  ([reading a run](docs/reading-a-run.md#configuring-it))
 - `[budget]`: a daily cap on API spend
 - `[schedule]`, `[tiers]`: when sets run (weekly is usually enough)
 - Prompt sets: one file per category of buyer question; every prompt has a permanent id
@@ -121,7 +132,7 @@ popcorn version                        version and database schema
 
 ## API and MCP
 
-- JSON API under `/api/` (status, sets, runs, fixes, quick wins, fix attempts, rankings, citations, search probe):
+- JSON API under `/api/` (status, sets, runs, fixes, quick wins, fix attempts, rankings, citations, searches, search probe):
   [reference](https://popcorn.zone/docs/reference/).
 - MCP server at `/api/mcp` (Streamable HTTP):
 

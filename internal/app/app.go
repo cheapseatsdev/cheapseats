@@ -279,7 +279,35 @@ func (a *App) RunBrand(r *run.Run) config.Brand {
 // Summary is a run's report over results (all of its results, or a slice of them).
 func (a *App) Summary(r *run.Run, results []run.Result) report.Summary {
 	r.Intents(results)
-	return report.Build(a.RunBrand(r), results)
+	return report.BuildWith(a.RunBrand(r), results, report.Options{Competitors: a.RunCompetitors(r), Sources: a.Cfg.Sources})
+}
+
+// RunCompetitors are the competitors a run's report sorts products and sources by: the ones the
+// run was graded with, and any the config has added since, with their domains as configured
+// today, since, like the brand's sites, domains only decide whose pages are whose.
+func (a *App) RunCompetitors(r *run.Run) []sets.Competitor {
+	today := a.Cfg.Competitors
+	if st, ok := a.Set(r.SetID); ok {
+		today = st.Competitors // the shared ones folded in
+	}
+	key := func(c sets.Competitor) string { return strings.ToLower(strings.TrimSpace(c.Name)) }
+	domains := map[string][]string{}
+	for _, c := range today {
+		domains[key(c)] = c.Domains
+	}
+	var out []sets.Competitor
+	seen := map[string]bool{}
+	for _, c := range r.Snapshot.Set.Competitors {
+		c.Domains = domains[key(c)]
+		seen[key(c)] = true
+		out = append(out, c)
+	}
+	for _, c := range today {
+		if !seen[key(c)] {
+			out = append(out, c)
+		}
+	}
+	return out
 }
 
 // QuickWinFilter narrows quick wins; empty fields match everything. Site is one of the brand's
