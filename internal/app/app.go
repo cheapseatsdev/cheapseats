@@ -142,8 +142,9 @@ type QuickWin struct {
 	// Prompt ids reworded since the run, and how many of the fix's prompts the set no longer asks.
 	Reworded []string `json:"reworded,omitempty"`
 	Dropped  int      `json:"dropped,omitempty"`
-	// Open, proposed or accepted (FixStatus), from Attempts: the work submitted for this fix.
-	// Earlier is what was tried for the same target before, so a retry shows what didn't work.
+	// Open, proposed or accepted (FixAttempts.Status): from Attempts, the work submitted for this
+	// fix, or from work on the same page the fix list didn't know about. Earlier is what was tried
+	// for the same target before, so a retry shows what didn't work.
 	Status   string    `json:"status"`
 	Attempts []Attempt `json:"attempts,omitempty"`
 	Earlier  []Attempt `json:"earlier_attempts,omitempty"`
@@ -157,7 +158,8 @@ func (a *App) QuickWins(ctx context.Context) ([]QuickWin, error) {
 	tried := a.FixAttempts(ctx)
 	for _, s := range a.Sets() {
 		var id string
-		err := a.DB.QueryRowContext(ctx, `SELECT id FROM runs WHERE set_id=? AND fixes IS NOT NULL AND status='done' ORDER BY created_at DESC LIMIT 1`, s.ID).Scan(&id)
+		var fixesAt sql.NullString
+		err := a.DB.QueryRowContext(ctx, `SELECT id, fixes_at FROM runs WHERE set_id=? AND fixes IS NOT NULL AND status='done' ORDER BY created_at DESC LIMIT 1`, s.ID).Scan(&id, &fixesAt)
 		if err != nil {
 			continue
 		}
@@ -173,7 +175,7 @@ func (a *App) QuickWins(ctx context.Context) ([]QuickWin, error) {
 		fixes, _, _ := a.Fixes(ctx, id)
 		for _, f := range fixes {
 			q := QuickWin{SetID: s.ID, SetName: s.Name, Tier: string(s.Tier), RunID: id, Attempts: tried.On(id, f.Rank), Earlier: tried.Earlier(id, f)}
-			q.Status = FixStatus(q.Attempts)
+			q.Status = tried.Status(id, f, fixesAt.String)
 			var now []int
 			for _, n := range f.Prompts {
 				if n < 1 || n > len(then.Prompts) {

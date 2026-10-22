@@ -153,8 +153,8 @@ func New(a *app.App) (*Server, error) {
 			return template.HTML(b.String()) // goldmark escapes raw HTML unless told otherwise
 		},
 		"fixmd": func(set sets.Set, f []analysis.Fix) string { return analysis.Markdown(set, f) },
-		"work": func(runID string, rank int, on, earlier []app.Attempt, back string) fixWork {
-			return fixWork{runID, rank, app.FixStatus(on), on, earlier, back}
+		"work": func(runID string, rank int, status string, on, earlier []app.Attempt, back string) fixWork {
+			return fixWork{runID, rank, status, on, earlier, back}
 		},
 	}
 	s.pages = map[string]*template.Template{}
@@ -444,8 +444,10 @@ type RunData struct {
 	Fixes     []analysis.Fix
 	FixError  *string
 	Answerers []string
-	// The work submitted for this run's fixes, and for earlier fixes for the same pages.
+	// The work submitted for this run's fixes, and for earlier fixes for the same pages, and when
+	// the fix list was built (FixAttempts.Status).
 	Attempts app.FixAttempts `json:"-"`
+	FixesAt  string          `json:"-"`
 
 	// Each track's rates on their own: search and recall answer different questions.
 	Tracks []TrackRates `json:"-"`
@@ -487,9 +489,9 @@ func (s *Server) runData(ctx context.Context, id string) (*RunData, error) {
 	}
 	fx, fe, _ := s.App.Fixes(ctx, id)
 	d := &RunData{Run: r, Active: s.App.Runs.IsActive(id), Summary: s.App.Summary(r, res), Results: res, Fixes: fx, FixError: fe, Attempts: s.App.FixAttempts(ctx)}
-	var insights sql.NullString
-	s.App.DB.QueryRowContext(ctx, `SELECT insights FROM runs WHERE id=?`, id).Scan(&insights)
-	d.Insights = insights.String
+	var insights, fixesAt sql.NullString
+	s.App.DB.QueryRowContext(ctx, `SELECT insights, fixes_at FROM runs WHERE id=?`, id).Scan(&insights, &fixesAt)
+	d.Insights, d.FixesAt = insights.String, fixesAt.String
 	d.Progress = s.App.RunProgress(ctx, id)
 	for _, a := range r.Snapshot.Answerers {
 		d.Answerers = append(d.Answerers, a.ID)

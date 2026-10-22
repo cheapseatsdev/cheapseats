@@ -44,7 +44,8 @@ const (
 func validState(s string) bool { return s == Proposed || s == Accepted || s == Withdrawn }
 
 // FixStatus is where a fix stands given the attempts recorded on it (newest first): its newest
-// attempt's state, or open when it has none or the newest was withdrawn.
+// attempt's state, or open when it has none or the newest was withdrawn. FixAttempts.Status also
+// counts work on the same page that the fix list didn't know about.
 func FixStatus(attempts []Attempt) string {
 	if len(attempts) == 0 || attempts[0].State == Withdrawn {
 		return Open
@@ -250,6 +251,22 @@ func (a *App) FixAttempts(ctx context.Context) FixAttempts {
 
 // On is the attempts recorded on fix rank of run runID, which settle its status.
 func (fa FixAttempts) On(runID string, rank int) []Attempt { return fa.byFix[fixKey(runID, rank)] }
+
+// Status is where fix f of run runID stands. The attempts on it decide first. Failing those, an
+// attempt on the same target made after the fix list was built (fixesAt) covers it too: the list
+// didn't know about that work. A fix built after an attempt is a retry the analyst chose knowing
+// what was tried, so it's open.
+func (fa FixAttempts) Status(runID string, f analysis.Fix, fixesAt string) string {
+	if s := FixStatus(fa.On(runID, f.Rank)); s != Open {
+		return s
+	}
+	for _, at := range fa.Earlier(runID, f) {
+		if at.State != Withdrawn && at.CreatedAt >= fixesAt {
+			return at.State
+		}
+	}
+	return Open
+}
 
 // Earlier is the attempts on other fixes for the same target: what was tried before for the idea.
 func (fa FixAttempts) Earlier(runID string, f analysis.Fix) []Attempt {

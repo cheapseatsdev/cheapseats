@@ -115,7 +115,9 @@ func TestMarkingAFixAndItsRetry(t *testing.T) {
 	}
 
 	// The set runs again: the analyst hears about the attempt, and its new fix for the same page is
-	// open, as a retry carrying the attempt and its outcome against the new run.
+	// open, as a retry carrying the attempt and its outcome against the new run. Timestamps are to
+	// the second, so the attempt is dated well before the new fix list to keep the order certain.
+	db.Exec(`UPDATE fix_attempts SET created_at='2000-01-01T00:00:00Z'`)
 	second := execute()
 	mu.Lock()
 	last := analystSaw[len(analystSaw)-1]
@@ -133,6 +135,23 @@ func TestMarkingAFixAndItsRetry(t *testing.T) {
 	}
 	if body := get("/quick-wins"); !strings.Contains(body, `<span class="chip">retry</span>`) || !strings.Contains(body, "Tried before for this page") {
 		t.Errorf("the retry isn't marked:\n%s", limit(body))
+	}
+
+	// Work on the same page recorded after a fix list was built covers that list's fix too: the
+	// list didn't know about it. Here it's recorded on the first run's fix, after the second's list.
+	db.Exec(`UPDATE runs SET fixes_at='2001-01-01T00:00:00Z' WHERE id=?`, second)
+	pr2 := "https://github.com/metcalfc/popcorn-site/pull/10"
+	if rec := post("/runs/"+first+"/fixes/1/attempts", url.Values{"url": {pr2}, "state": {"accepted"}}); rec.Code != 303 {
+		t.Fatalf("second mark: %d", rec.Code)
+	}
+	if body := get("/api/quick-wins?status=open"); body != "[]\n" {
+		t.Errorf("work the fix list didn't know about should cover it:\n%s", limit(body))
+	}
+	if body := get("/api/quick-wins?status=accepted"); !strings.Contains(body, second) {
+		t.Errorf("the covered fix should be accepted:\n%s", limit(body))
+	}
+	if body := get("/runs/" + second); !strings.Contains(body, `class="chip st-accepted">accepted`) {
+		t.Errorf("run page doesn't show the covered fix as accepted:\n%s", limit(body))
 	}
 
 	// Accepted, then withdrawn; an unknown state is refused.
