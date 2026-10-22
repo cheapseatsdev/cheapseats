@@ -196,6 +196,18 @@ func (s *Server) mcpHandler() http.Handler {
 		func(ctx context.Context, a runArg) (any, error) {
 			return map[string]bool{"cancelled": s.App.Runs.Cancel(a.Run)}, nil
 		})
+	addTool(srv, "get_search_queries", "The web searches the assistants ran in a run's search-track answers: per prompt how many answers searched and with what queries, the top queries with whether their results reached the brand's sites or named competitors, names the assistants added to searches the prompt didn't have, the words they add, and queries worth adding as prompts (a TOML entry to paste). From stored answers; costs nothing.",
+		func(ctx context.Context, a struct {
+			Run   string `json:"run" jsonschema:"run id"`
+			Pool  bool   `json:"pool,omitempty" jsonschema:"also read the set's earlier finished runs asked and graded the same way (up to 7 runs)"`
+			Limit int    `json:"limit,omitempty" jsonschema:"rows per list (default 15)"`
+		}) (any, error) {
+			d, err := s.searchData(ctx, a.Run, a.Pool)
+			if err != nil {
+				return nil, err
+			}
+			return searchDigest(d, a.Limit), nil
+		})
 
 	h := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return srv }, nil)
 	if len(s.hosts) == 0 {
