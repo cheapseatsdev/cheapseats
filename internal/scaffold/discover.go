@@ -95,6 +95,8 @@ func Discover(ctx context.Context, f *audit.Fetcher, home string) (Site, error) 
 			break
 		}
 	}
+	// Everything here is the site's to say, and ends up in TOML and its comments: one line each.
+	s.Name, s.About, s.URL = Clean(s.Name), Clean(s.About), Clean(s.URL)
 	s.Sites = DetectSites(s.Host, s.Name, links)
 	s.Aliases = Aliases(s.Name, s.Host)
 	return s, nil
@@ -118,6 +120,18 @@ func Aliases(name, host string) []string {
 	add(host)
 	add(strings.Join(strings.Fields(name), ""))
 	return out
+}
+
+// Clean is text from a site as one line: control characters dropped, whitespace collapsed, so a
+// name can't break out of a TOML comment or string.
+func Clean(s string) string {
+	s = strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) || r == '\u2028' || r == '\u2029' {
+			return ' '
+		}
+		return r
+	}, s)
+	return strings.Join(strings.Fields(s), " ")
 }
 
 // head is what readHead takes from a page.
@@ -144,7 +158,7 @@ func readHead(body []byte, base *url.URL) head {
 			attr := func(k string) string {
 				for _, a := range t.Attr {
 					if a.Key == k {
-						return strings.Join(strings.Fields(a.Val), " ")
+						return Clean(a.Val)
 					}
 				}
 				return ""
@@ -189,7 +203,7 @@ func readHead(body []byte, base *url.URL) head {
 			switch string(name) {
 			case "title":
 				if inTitle {
-					h.title = strings.Join(strings.Fields(title.String()), " ")
+					h.title = Clean(title.String())
 					inTitle = false
 				}
 			case "script":
@@ -253,9 +267,9 @@ func ldOrg(s string) (name, desc string) {
 				}
 			}
 			if n, ok := x["name"].(string); match && ok && strings.TrimSpace(n) != "" {
-				name = strings.TrimSpace(n)
+				name = Clean(n)
 				desc, _ = x["description"].(string)
-				desc = strings.Join(strings.Fields(desc), " ")
+				desc = Clean(desc)
 				return true
 			}
 			keys := make([]string, 0, len(x))
@@ -354,9 +368,9 @@ func readLLMs(s string) (name, about string) {
 		line = strings.TrimSpace(line)
 		switch {
 		case name == "" && strings.HasPrefix(line, "# "):
-			name = strings.TrimSpace(line[2:])
+			name = Clean(line[2:])
 		case about == "" && strings.HasPrefix(line, ">"):
-			about = strings.TrimSpace(strings.TrimPrefix(line, ">"))
+			about = Clean(strings.TrimPrefix(line, ">"))
 		}
 	}
 	return name, about

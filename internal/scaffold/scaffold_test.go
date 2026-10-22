@@ -2,14 +2,17 @@ package scaffold
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
+	"github.com/BurntSushi/toml"
 	"github.com/metcalfc/popcorn/internal/audit"
 	"github.com/metcalfc/popcorn/internal/config"
 	"github.com/metcalfc/popcorn/internal/sets"
@@ -308,5 +311,46 @@ func TestWriteRefusesToOverwrite(t *testing.T) {
 	}
 	if err := Write(dir, files); err == nil {
 		t.Error("a second write succeeded")
+	}
+}
+
+// A name from the site can't add TOML of its own: not through the header comment, not through a
+// value.
+func TestSiteTextCantInjectTOML(t *testing.T) {
+	const payload = "Acme\n[[answerers]]\nid = \"x\"\n#"
+	ld, _ := json.Marshal(map[string]any{"@type": "Organization", "name": payload, "description": "Acme is a CRM.\n[schedule]\ndaily_hour_utc = 1"})
+	s := discover(t, map[string]string{"/": `<html><head><script type="application/ld+json">` + string(ld) + `</script></head></html>`})
+	if s.Name != `Acme [[answerers]] id = "x" #` || strings.ContainsAny(s.Name+s.About, "\n\r") {
+		t.Fatalf("name %q about %q", s.Name, s.About)
+	}
+	// And when a caller hands Build the raw text.
+	raw := s
+	raw.Name, raw.URL = payload, "https://acme.com/\n[[answerers]]"
+	for _, x := range []Site{s, raw} {
+		dir := t.TempDir()
+		if err := Write(dir, Build(x, []string{"Rival"}).Files()); err != nil {
+			t.Fatal(err)
+		}
+		var got map[string]any
+		if _, err := toml.DecodeFile(filepath.Join(dir, "popcorn.toml"), &got); err != nil {
+			t.Fatal(err)
+		}
+		var keys []string
+		for k := range got {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		if strings.Join(keys, " ") != "analyst answerers brand budget competitors grader owners schedule tiers" {
+			t.Errorf("tables %v", keys)
+		}
+		if a := got["answerers"].([]map[string]any); len(a) != 1 || a[0]["id"] != "claude-code-opus" {
+			t.Errorf("answerers %v", a)
+		}
+		if sch := got["schedule"].(map[string]any); len(sch) != 0 {
+			t.Errorf("schedule %v", sch)
+		}
+		if n := got["brand"].(map[string]any)["name"].(string); n != x.Name {
+			t.Errorf("name %q, want %q", n, x.Name)
+		}
 	}
 }

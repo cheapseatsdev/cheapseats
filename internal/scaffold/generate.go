@@ -346,7 +346,7 @@ func (s Starter) toml() string {
 func comment(text string) string {
 	var b strings.Builder
 	line := "#"
-	for _, w := range strings.Fields(text) {
+	for _, w := range strings.Fields(Clean(text)) {
 		if len(line)+1+len(w) > 100 && line != "#" {
 			b.WriteString(line + "\n")
 			line = "#"
@@ -389,7 +389,7 @@ func (p Plan) config() string {
 
 [brand]
 name = %s
-aliases = [`, s.Name, s.URL, q(s.Name))
+aliases = [`, Clean(s.Name), Clean(s.URL), q(s.Name))
 	for i, a := range s.Aliases {
 		if i > 0 {
 			b.WriteString(", ")

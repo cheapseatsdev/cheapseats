@@ -36,7 +36,7 @@ func initCmd(ctx context.Context, args []string) error {
 		return err
 	}
 	if *name != "" {
-		site.Name, site.NameFrom = strings.TrimSpace(*name), "-name"
+		site.Name, site.NameFrom = scaffold.Clean(*name), "-name"
 		site.Aliases = scaffold.Aliases(site.Name, site.Host)
 	}
 	var competitors []string
