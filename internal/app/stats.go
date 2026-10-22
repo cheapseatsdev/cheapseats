@@ -193,3 +193,79 @@ func (v VarianceSplit) Widening() float64 {
 	}
 	return math.Sqrt((v.Single + v.Between) / (v.Within + v.Between))
 }
+
+// Homogeneity is the χ² statistic for cells' run rates against one binomial rate per cell, summed
+// over the cells, with its degrees of freedom: per cell, Σ (h_r − n·p̂)² / (n·p̂(1−p̂)) over its runs,
+// with runs − 1 degrees of freedom, where p̂ is the cell's pooled rate. A cell seen in fewer than
+// two runs, with fewer than two answers a run, or at 0 or 1 throughout (nothing varied) adds
+// nothing.
+func Homogeneity(cells [][]Hits) (chi2 float64, df int) {
+	for _, runs := range cells {
+		if len(runs) < 2 || runs[0].N < 2 {
+			continue
+		}
+		var h, n float64
+		for _, c := range runs {
+			h, n = h+float64(c.Hits), n+float64(c.N)
+		}
+		p := h / n
+		if p <= 0 || p >= 1 {
+			continue
+		}
+		for _, c := range runs {
+			e := float64(c.N) * p
+			chi2 += (float64(c.Hits) - e) * (float64(c.Hits) - e) / (e * (1 - p))
+		}
+		df += len(runs) - 1
+	}
+	return chi2, df
+}
+
+// ChiSquareP is the upper tail of the χ² distribution with df degrees of freedom at x: the chance
+// of a statistic at least x by chance. 1 with no degrees of freedom.
+func ChiSquareP(x float64, df int) float64 {
+	if df <= 0 || x <= 0 {
+		return 1
+	}
+	return gammaQ(float64(df)/2, x/2)
+}
+
+// gammaQ is the regularised upper incomplete gamma function Q(a, x): a series below a+1, a
+// continued fraction above (Numerical Recipes, 6.2).
+func gammaQ(a, x float64) float64 {
+	lg, _ := math.Lgamma(a)
+	if x < a+1 {
+		sum, del := 1/a, 1/a
+		for n := 1; n < 500; n++ {
+			del *= x / (a + float64(n))
+			sum += del
+			if math.Abs(del) < math.Abs(sum)*1e-14 {
+				break
+			}
+		}
+		return math.Max(0, 1-sum*math.Exp(-x+a*math.Log(x)-lg))
+	}
+	const tiny = 1e-300
+	b := x + 1 - a
+	c, d := 1/tiny, 1/b
+	h := d
+	for i := 1; i < 500; i++ {
+		an := -float64(i) * (float64(i) - a)
+		b += 2
+		d = an*d + b
+		if math.Abs(d) < tiny {
+			d = tiny
+		}
+		c = b + an/c
+		if math.Abs(c) < tiny {
+			c = tiny
+		}
+		d = 1 / d
+		del := d * c
+		h *= del
+		if math.Abs(del-1) < 1e-14 {
+			break
+		}
+	}
+	return math.Min(1, math.Exp(-x+a*math.Log(x)-lg)*h)
+}

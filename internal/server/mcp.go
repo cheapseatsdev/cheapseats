@@ -255,6 +255,7 @@ func (s *Server) mcpHandler() http.Handler {
 			if err != nil {
 				return nil, err
 			}
+			s.App.MarkReviewed(ctx, rev.SetID)
 			if !a.Suggest {
 				return reviewDigest(rev, nil), nil
 			}

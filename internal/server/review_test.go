@@ -74,9 +74,19 @@ func TestPromptReview(t *testing.T) {
 		h.ServeHTTP(rec, httptest.NewRequest("GET", path, nil))
 		return rec.Code, rec.Body.String()
 	}
+	// Only reading the page (or the CLI, or MCP) is a review: not the JSON, not a HEAD.
+	get("/api/sets/" + set.ID + "/review")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("HEAD", "/sets/"+set.ID+"/review", nil))
+	if at := a.LastReview(ctx, set.ID); at != "" || rec.Code != 200 {
+		t.Errorf("the JSON or a HEAD recorded a review: %q %d", at, rec.Code)
+	}
 	// Three runs of one search and one recall answer a prompt: six answers, all absent.
 	if code, body := get("/sets/" + set.ID + "/review"); code != 200 || !strings.Contains(body, `<h2 id="flat">Flat`) || !strings.Contains(body, "always_absent") || !strings.Contains(body, "Propose rewrites") {
 		t.Errorf("page: %d %s", code, limit(body))
+	}
+	if a.LastReview(ctx, set.ID) == "" {
+		t.Error("reading the page didn't record a review")
 	}
 	if code, body := get("/sets/" + set.ID); code != 200 || !strings.Contains(body, `href="/sets/`+set.ID+`/review"`) {
 		t.Errorf("set page links the review: %d", code)
@@ -145,7 +155,7 @@ func TestPromptReview(t *testing.T) {
 		t.Errorf("suggest: %s", limit(text))
 	}
 	// The page's button: one more call, the diff on the page.
-	rec := httptest.NewRecorder()
+	rec = httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest("POST", "/sets/"+set.ID+"/review?days=30", nil))
 	if reviews.Load() != 2 || !strings.Contains(rec.Body.String(), "@@ rewrite geo-aeo-llm-seo-difference") {
 		t.Errorf("button: %d %s", reviews.Load(), limit(rec.Body.String()))

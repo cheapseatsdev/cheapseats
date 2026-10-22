@@ -3,11 +3,15 @@ package app
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	"log/slog"
 	"math"
 	"sort"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/metcalfc/popcorn/internal/answer"
 	"github.com/metcalfc/popcorn/internal/config"
@@ -37,19 +41,22 @@ const (
 
 // Flag thresholds. Rates are proportions (0.15 is 15 points).
 const (
-	// Noisy, drift: the between-run variance D (SplitVariance) is larger than the sampling variance
-	// S/n and its standard deviation is at least NoisyDriftSD. Disagreement: a single answer's
+	// Noisy, drift: the run rates differ more than one binomial rate per cell explains (a χ² test
+	// of homogeneity, summed over the prompt's cells, at p < NoisyDriftP) and the between-run
+	// variance D (SplitVariance) has a standard deviation of at least NoisyDriftSD. Disagreement: a single answer's
 	// within-run variance S is at least NoisySingle (answers to the same question in the same run
 	// split about 30/70 or closer) and the per-run sampling error sqrt(S/n) is still at least
 	// NoisySamplingSD.
+	NoisyDriftP     = 0.01
 	NoisyDriftSD    = 0.15
 	NoisySingle     = 0.20
 	NoisySamplingSD = 0.15
-	// Off target: with at least OffTargetMinCompetitors configured, under OffTargetKnownShare of the
-	// products named are the brand or a configured competitor; or one other product is named in at
+	// Off target: with at least OffTargetMinCompetitors configured and OffTargetMinMentions product
+	// mentions, under OffTargetKnownShare of them are the brand or a configured competitor; or one other product is named in at
 	// least OffTargetDominant of the answers and more than the brand and every competitor; or at
 	// least OffTargetOtherProduct of the answers use the brand's name for something else.
 	OffTargetMinCompetitors = 3
+	OffTargetMinMentions    = 5
 	OffTargetKnownShare     = 0.30
 	OffTargetDominant       = 0.50
 	OffTargetOtherProduct   = 0.25
@@ -133,6 +140,9 @@ type PromptReview struct {
 	// The split of its named rate's variance over answerer x track cells with two or more samples;
 	// nil when no cell has them.
 	Noise *VarianceSplit `json:"noise,omitempty"`
+	// The chance of run rates at least this uneven if every run drew from one binomial rate per
+	// cell (Homogeneity); 1 when there's nothing to test.
+	DriftP float64 `json:"drift_p,omitempty"`
 	// Products named, by answers naming them, the brand included; and the ones that are neither the
 	// brand nor a configured competitor.
 	Products   []report.Count `json:"products,omitempty"`
@@ -140,6 +150,7 @@ type PromptReview struct {
 	// Share of product mentions that are the brand or a configured competitor, how many of the
 	// configured competitors were named at all, and answers graded as about another product.
 	KnownShare      float64        `json:"known_share"`
+	MentionsN       int            `json:"mentions"` // product mentions KnownShare is out of
 	CompetitorsSeen int            `json:"competitors_seen"`
 	OtherProduct    int            `json:"other_product"`
 	Verdicts        map[string]int `json:"verdicts"`
@@ -217,7 +228,9 @@ func ReviewDays(days int) error {
 	return fmt.Errorf("days must be one of %v, not %d", ReviewWindows, days)
 }
 
-// Review reviews a set's prompts over the last days days, and records that it was reviewed.
+// Review reviews a set's prompts over the last days days. It reads each run's results as it goes,
+// keeping only grades and the searches and citations of answers, never their text, and drops a
+// run's data once it's counted. It records nothing: MarkReviewed does.
 func (a *App) Review(ctx context.Context, setID string, days int) (Review, error) {
 	if err := ReviewDays(days); err != nil {
 		return Review{}, err
@@ -234,34 +247,91 @@ func (a *App) Review(ctx context.Context, setID string, days int) (Review, error
 	var ids []string
 	for rows.Next() {
 		var id string
-		rows.Scan(&id)
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return Review{}, err
+		}
 		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return Review{}, err
 	}
 	rows.Close()
 	in := ReviewInput{Brand: a.Cfg.Brand, Set: s, Days: days, Since: since.Format("2006-01-02"), Taken: map[string]bool{}}
-	for _, id := range ids {
-		r, err := a.Runs.Get(ctx, id)
-		if err != nil {
-			return Review{}, err
-		}
-		res, err := a.Runs.Results(ctx, id)
-		if err != nil {
-			return Review{}, err
-		}
-		r.Intents(res)
-		in.Runs = append(in.Runs, ReviewRun{*r, res})
+	// Only attempts made in the window can explain a prompt not moving in it.
+	if in.Attempts, err = a.attempts(ctx, s.ID, since.Format(time.RFC3339)); err != nil {
+		return Review{}, err
 	}
-	in.Attempts, _ = a.Attempts(ctx, s.ID)
 	for _, st := range a.Sets() {
 		for _, p := range st.Prompts {
 			in.Taken[p.ID] = true
 		}
 	}
-	rev := BuildReview(in)
-	if _, err := a.DB.ExecContext(ctx, `INSERT INTO prompt_reviews (set_id, reviewed_at) VALUES (?, ?) ON CONFLICT (set_id) DO UPDATE SET reviewed_at=excluded.reviewed_at`, s.ID, store.Now()); err != nil {
-		return rev, err
+	b := newReviewBuilder(in)
+	for _, id := range ids {
+		r, err := a.Runs.Get(ctx, id)
+		if err != nil {
+			return Review{}, err
+		}
+		res, err := a.reviewResults(ctx, id)
+		if err != nil {
+			return Review{}, err
+		}
+		r.Intents(res)
+		b.add(ReviewRun{*r, res})
 	}
-	return rev, nil
+	return b.finish(), nil
+}
+
+// reviewResults are a run's results with what a review reads: the grade, and of the answer only
+// its searches and citations, decoded from just those parts of the stored JSON.
+func (a *App) reviewResults(ctx context.Context, runID string) ([]run.Result, error) {
+	rows, err := a.DB.QueryContext(ctx, `SELECT prompt_idx, prompt, prompt_id, prompt_sha, answerer, track, sample, status, grade,
+		json_extract(answer, '$.searches'), json_extract(answer, '$.citations'), answer IS NOT NULL
+		FROM results WHERE run_id=? AND status='done' AND grade IS NOT NULL`, runID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []run.Result
+	for rows.Next() {
+		var x run.Result
+		var t string
+		var g, searches, citations sql.NullString
+		var has bool
+		if err := rows.Scan(&x.PromptIdx, &x.Prompt, &x.PromptID, &x.PromptSHA, &x.Answerer, &t, &x.Sample, &x.Status, &g, &searches, &citations, &has); err != nil {
+			return nil, err
+		}
+		x.Track = answer.Track(t)
+		x.Grade = &grade.Grade{}
+		if err := json.Unmarshal([]byte(g.String), x.Grade); err != nil {
+			return nil, fmt.Errorf("result of run %s: grade: %w", runID, err)
+		}
+		if has {
+			x.Answer = &answer.Answer{}
+			if searches.Valid {
+				if err := json.Unmarshal([]byte(searches.String), &x.Answer.Searches); err != nil {
+					return nil, fmt.Errorf("result of run %s: searches: %w", runID, err)
+				}
+			}
+			if citations.Valid {
+				if err := json.Unmarshal([]byte(citations.String), &x.Answer.Citations); err != nil {
+					return nil, fmt.Errorf("result of run %s: citations: %w", runID, err)
+				}
+			}
+		}
+		out = append(out, x)
+	}
+	return out, rows.Err()
+}
+
+// MarkReviewed records that the set's prompts were reviewed now, for get_started's suggestion.
+// It's best effort: a review that can't be recorded is still a review.
+func (a *App) MarkReviewed(ctx context.Context, setID string) {
+	if _, err := a.DB.ExecContext(ctx, `INSERT INTO prompt_reviews (set_id, reviewed_at) VALUES (?, ?) ON CONFLICT (set_id) DO UPDATE SET reviewed_at=excluded.reviewed_at`, setID, store.Now()); err != nil {
+		slog.Warn("recording a prompt review", "set", setID, "err", err)
+	}
 }
 
 // LastReview is when the set's prompts were last reviewed, or "" if never.
@@ -278,174 +348,220 @@ func (a *App) FirstRun(ctx context.Context, setID string) string {
 	return at.String
 }
 
-// promptAcc gathers one prompt's answers, newest run first.
+// promptAcc gathers one prompt's answers, newest run first, as counts: no answer is kept but the
+// searches of search-track ones.
 type promptAcc struct {
 	PromptReview
 	sha     string
-	results []run.Result // graded, under one wording
-	search  []run.Result // search-track answers, graded or not
-	runs    []string     // run ids, newest first
-	perRun  []Hits       // named, newest first
+	search  []run.Result // search-track answers, only their searches
+	perRun  []Hits       // named, planned samples, newest first
 	cells   map[[2]string][]Hits
 	order   [][2]string
-	methods map[string]string // method -> its newest day
-	intents map[bool]string   // info -> its newest day
+	methods map[string]bool
+	intents map[bool]bool
+	stopped bool // reached a run that asked it in other words
+
+	tally    report.Tally
+	products map[string]int    // canonical key -> answers naming it
+	spell    map[string]string // canonical key -> display name
+	known    int               // mentions of the brand or a configured competitor
+	mentions int
+	comps    map[string]bool
+	cited    map[string]int // competitor -> answers citing a page on its site
+}
+
+// reviewBuilder is BuildReview run by run.
+type reviewBuilder struct {
+	in          ReviewInput
+	runs        int
+	accs        []*promptAcc
+	byID        map[string]*promptAcc
+	competitors map[string]string // name or alias, lowercase -> name
+	names       []queries.Name
+}
+
+func newReviewBuilder(in ReviewInput) *reviewBuilder {
+	b := &reviewBuilder{in: in, byID: map[string]*promptAcc{}, competitors: map[string]string{}, names: queries.Names(in.Brand, in.Set)}
+	for _, c := range in.Set.Competitors {
+		if isBrand(in.Brand, c.Name) {
+			continue
+		}
+		b.competitors[strings.ToLower(strings.TrimSpace(c.Name))] = c.Name
+		for _, al := range c.Aliases {
+			b.competitors[strings.ToLower(strings.TrimSpace(al))] = c.Name
+		}
+	}
+	for _, p := range in.Set.Prompts {
+		acc := &promptAcc{PromptReview: PromptReview{ID: p.ID, Text: p.Text, Info: p.Info(), Verdicts: map[string]int{}}, cells: map[[2]string][]Hits{},
+			methods: map[string]bool{}, intents: map[bool]bool{}, products: map[string]int{}, spell: map[string]string{}, comps: map[string]bool{}, cited: map[string]int{}}
+		b.accs = append(b.accs, acc)
+		b.byID[p.ID] = acc
+	}
+	return b
 }
 
 // BuildReview reviews in.Set's prompts from in.Runs.
 func BuildReview(in ReviewInput) Review {
-	rev := Review{SetID: in.Set.ID, SetName: in.Set.Name, File: in.Set.File, Days: in.Days, Since: in.Since, Runs: len(in.Runs),
-		Prompts: []PromptReview{}, Findings: []Finding{}, Gaps: []Gap{}, Healthy: []string{}, NotEnough: []string{}}
-	brand := in.Brand
-	competitors := map[string]string{} // name or alias, lowercase -> name
-	for _, c := range in.Set.Competitors {
-		if isBrand(brand, c.Name) {
+	b := newReviewBuilder(in)
+	for _, rr := range in.Runs {
+		b.add(rr)
+	}
+	return b.finish()
+}
+
+// add counts one run, newer runs before older ones.
+func (b *reviewBuilder) add(rr ReviewRun) {
+	b.runs++
+	brand := b.in.Brand
+	brandKey := strings.ToLower(brand.Name)
+	day := rr.Run.CreatedAt
+	if len(day) >= 10 {
+		day = day[:10]
+	}
+	byPrompt := map[string][]run.Result{}
+	for _, x := range rr.Results {
+		if x.PromptID != "" && b.byID[x.PromptID] != nil {
+			byPrompt[x.PromptID] = append(byPrompt[x.PromptID], x)
+		}
+	}
+	for pid, xs := range byPrompt {
+		p := b.byID[pid]
+		if p.stopped {
 			continue
 		}
-		competitors[strings.ToLower(strings.TrimSpace(c.Name))] = c.Name
-		for _, al := range c.Aliases {
-			competitors[strings.ToLower(strings.TrimSpace(al))] = c.Name
+		sha := xs[0].PromptSHA
+		if sha == "" {
+			sha = sets.Prompt{Text: xs[0].Prompt}.SHA()
 		}
-	}
-	brandKey := strings.ToLower(brand.Name)
-
-	accs := make([]*promptAcc, len(in.Set.Prompts))
-	byID := map[string]*promptAcc{}
-	for i, p := range in.Set.Prompts {
-		accs[i] = &promptAcc{PromptReview: PromptReview{ID: p.ID, Text: p.Text, Info: p.Info(), Verdicts: map[string]int{}}, cells: map[[2]string][]Hits{},
-			methods: map[string]string{}, intents: map[bool]string{}}
-		byID[p.ID] = accs[i]
-	}
-	stopped := map[string]bool{}
-	for _, rr := range in.Runs {
-		day := rr.Run.CreatedAt
-		if len(day) >= 10 {
-			day = day[:10]
-		}
-		byPrompt := map[string][]run.Result{}
-		for _, x := range rr.Results {
-			if x.PromptID != "" && byID[x.PromptID] != nil {
-				byPrompt[x.PromptID] = append(byPrompt[x.PromptID], x)
+		if p.sha == "" {
+			p.sha = sha
+			if cur, _ := b.in.Set.Prompt(pid); cur.SHA() != sha {
+				p.Notes = append(p.Notes, "reworded since it was last asked: these numbers are for the wording before")
 			}
+		} else if sha != p.sha {
+			p.stopped = true // asked in other words before this: a different question
+			p.Notes = append(p.Notes, "reworded by "+p.From+": the runs before asked it in other words and are left out")
+			continue
 		}
-		for pid, xs := range byPrompt {
-			p := byID[pid]
-			if stopped[pid] {
+		var named Hits
+		planned := map[[2]string]*Hits{}
+		for _, x := range xs {
+			if x.Status != "done" || x.Grade == nil {
 				continue
 			}
-			sha := xs[0].PromptSHA
-			if sha == "" {
-				sha = sets.Prompt{Text: xs[0].Prompt}.SHA()
+			if x.Track == answer.Search && x.Answer != nil {
+				p.search = append(p.search, run.Result{PromptIdx: x.PromptIdx, Prompt: x.Prompt, PromptID: x.PromptID, Track: x.Track, Status: x.Status,
+					Grade: &grade.Grade{Verdict: x.Grade.Verdict}, Answer: &answer.Answer{Searches: x.Answer.Searches}})
 			}
-			if p.sha == "" {
-				p.sha = sha
-				if cur, _ := in.Set.Prompt(pid); cur.SHA() != sha {
-					p.Notes = append(p.Notes, "reworded since it was last asked: these numbers are for the wording before")
-				}
-			} else if sha != p.sha {
-				stopped[pid] = true // asked in other words before this: a different question
-				p.Notes = append(p.Notes, "reworded by "+p.From+": the runs before asked it in other words and are left out")
-				continue
-			}
-			p.From = day
-			p.runs = append(p.runs, rr.Run.ID)
-			if _, ok := p.methods[rr.Run.Method]; !ok {
-				p.methods[rr.Run.Method] = day
-			}
-			info := xs[0].Info
-			if _, ok := p.intents[info]; !ok {
-				p.intents[info] = day
-			}
-			var named Hits
-			planned := map[[2]string]*Hits{}
-			for _, x := range xs {
-				if x.Track == answer.Search && x.Status == "done" && x.Answer != nil {
-					p.search = append(p.search, x)
-				}
-				if x.Status != "done" || x.Grade == nil {
-					continue
-				}
-				p.results = append(p.results, x)
-				hit := 0
-				if x.Grade.Verdict != grade.Absent {
-					hit = 1
-				}
-				named = named.Plus(Hits{hit, 1})
-				if !rr.Run.Snapshot.Sampling.IsExtra(x.PromptID, x.Answerer, x.Track, x.Sample) {
-					k := [2]string{x.Answerer, string(x.Track)}
-					if planned[k] == nil {
-						planned[k] = &Hits{}
+			p.count(x, brand, brandKey, b.competitors)
+			if x.Answer != nil {
+				for _, n := range b.names[1:] {
+					for _, l := range x.Answer.Citations {
+						if n.OnHost(l.URL) {
+							p.cited[n.Name]++
+							break
+						}
 					}
-					*planned[k] = planned[k].Plus(Hits{hit, 1})
 				}
 			}
-			if named.N > 0 {
-				p.perRun = append(p.perRun, named)
+			if rr.Run.Snapshot.Sampling.IsExtra(x.PromptID, x.Answerer, x.Track, x.Sample) {
+				continue
 			}
-			for k, h := range planned {
-				if p.cells[k] == nil {
-					p.order = append(p.order, k)
-				}
-				p.cells[k] = append(p.cells[k], *h)
+			hit := 0
+			if x.Grade.Verdict != grade.Absent {
+				hit = 1
 			}
+			named = named.Plus(Hits{hit, 1})
+			k := [2]string{x.Answerer, string(x.Track)}
+			if planned[k] == nil {
+				planned[k] = &Hits{}
+			}
+			*planned[k] = planned[k].Plus(Hits{hit, 1})
+		}
+		if named.N == 0 {
+			continue // every answer errored: the run didn't measure it
+		}
+		p.Runs++
+		p.From = day
+		p.methods[rr.Run.Method] = true
+		p.intents[xs[0].Info] = true
+		p.perRun = append(p.perRun, named)
+		for k, h := range planned {
+			if p.cells[k] == nil {
+				p.order = append(p.order, k)
+			}
+			p.cells[k] = append(p.cells[k], *h)
 		}
 	}
+}
 
+// count adds one graded answer's verdict and the products it names, each once, under its
+// canonical name (a competitor's aliases folded onto it).
+func (p *promptAcc) count(x run.Result, brand config.Brand, brandKey string, competitors map[string]string) {
+	p.tally.Add(x.Grade, brand.Name, x.Info)
+	p.Verdicts[string(x.Grade.Verdict)]++
+	if x.Grade.OtherProduct {
+		p.OtherProduct++
+	}
+	seen := map[string]bool{}
+	for _, n := range x.Grade.Named {
+		n = label(n)
+		k := strings.ToLower(n)
+		if k == "" || isBrand(brand, n) {
+			continue
+		}
+		c, comp := competitors[k]
+		if comp {
+			k, n = strings.ToLower(c), c
+		}
+		if seen[k] {
+			continue
+		}
+		seen[k] = true
+		p.mentions++
+		if comp {
+			p.known++
+			p.comps[c] = true
+		}
+		if _, ok := p.spell[k]; !ok {
+			p.spell[k] = n
+		}
+		p.products[k]++
+	}
+	if x.Grade.Verdict != grade.Absent {
+		p.mentions++
+		p.known++
+		p.products[brandKey]++
+		p.spell[brandKey] = brand.Name
+	}
+}
+
+// finish works out the flags from the runs added.
+func (b *reviewBuilder) finish() Review {
+	in, accs, byID, competitors, names := b.in, b.accs, b.byID, b.competitors, b.names
+	rev := Review{SetID: in.Set.ID, SetName: in.Set.Name, File: in.Set.File, Days: in.Days, Since: in.Since, Runs: b.runs,
+		Prompts: []PromptReview{}, Findings: []Finding{}, Gaps: []Gap{}, Healthy: []string{}, NotEnough: []string{}}
+	brand := in.Brand
+	brandKey := strings.ToLower(brand.Name)
 	for _, p := range accs {
-		p.Runs = len(p.runs)
 		if len(p.methods) > 1 {
 			p.Notes = append(p.Notes, fmt.Sprintf("asked or graded %d ways in this window (a method change): the rates pool them", len(p.methods)))
 		}
 		if len(p.intents) > 1 {
 			p.Notes = append(p.Notes, "its intent changed in this window: recommended counts only the answers asked as a choice")
 		}
-		var t report.Tally
-		products := map[string]int{}
-		spell := map[string]string{}
-		known, mentions := 0, 0
-		seenComp := map[string]bool{}
-		for _, x := range p.results {
-			t.Add(x.Grade, brand.Name, x.Info)
-			p.Verdicts[string(x.Grade.Verdict)]++
-			if x.Grade.OtherProduct {
-				p.OtherProduct++
-			}
-			seen := map[string]bool{}
-			for _, n := range x.Grade.Named {
-				k := strings.ToLower(strings.TrimSpace(n))
-				if k == "" || isBrand(brand, n) || seen[k] {
-					continue
-				}
-				seen[k] = true
-				mentions++
-				if c, ok := competitors[k]; ok {
-					known++
-					seenComp[c] = true
-					k = strings.ToLower(c)
-					n = c
-				}
-				if _, ok := spell[k]; !ok {
-					spell[k] = n
-				}
-				products[k]++
-			}
-			if x.Grade.Verdict != grade.Absent {
-				mentions++
-				known++
-				products[brandKey]++
-				spell[brandKey] = brand.Name
-			}
-		}
+		t := p.tally
 		p.Answers = t.N
 		p.Named, p.Recommended = report.NewRate(t.Vis, t.N), report.NewRate(t.Rec, t.Sel)
 		p.Enough = p.Runs >= ReviewMinRuns && p.Answers >= ReviewMinAnswers
-		if mentions > 0 {
-			p.KnownShare = float64(known) / float64(mentions)
+		p.MentionsN = p.mentions
+		if p.mentions > 0 {
+			p.KnownShare = round3(float64(p.known) / float64(p.mentions))
 		}
-		p.CompetitorsSeen = len(seenComp)
+		p.CompetitorsSeen = len(p.comps)
 		p.shares = map[string]float64{}
-		for k, n := range products {
-			c := report.Count{Name: spell[k], N: n}
+		for k, n := range p.products {
+			c := report.Count{Name: p.spell[k], N: n}
 			p.Products = append(p.Products, c)
 			if t.N > 0 {
 				p.shares[k] = float64(n) / float64(t.N)
@@ -474,6 +590,8 @@ func BuildReview(in ReviewInput) Review {
 		}
 		if v := SplitVariance(cells); v.Cells > 0 {
 			p.Noise = &v
+			chi, df := Homogeneity(cells)
+			p.DriftP = round4(ChiSquareP(chi, df))
 		}
 		rev.Answers += p.Answers
 	}
@@ -484,7 +602,6 @@ func BuildReview(in ReviewInput) Review {
 		search = append(search, p.search...)
 	}
 	qs := queries.Build(queries.Input{Brand: brand, Set: in.Set, Results: search, Taken: in.Taken})
-	names := queries.Names(brand, in.Set)
 	for _, qp := range qs.Prompts {
 		p := byID[qp.ID]
 		if p == nil {
@@ -493,7 +610,7 @@ func BuildReview(in ReviewInput) Review {
 		p.Searches = int(math.Round(qp.PerAnswer * float64(qp.Answers)))
 		p.FromPrompt, p.PromptKept = round3(qp.FromPrompt), round3(qp.PromptKept)
 		for _, w := range qp.Added {
-			p.Added = append(p.Added, w.Word)
+			p.Added = append(p.Added, label(w.Word))
 		}
 	}
 	for _, p := range accs {
@@ -508,6 +625,8 @@ func BuildReview(in ReviewInput) Review {
 		}
 	}
 
+	// Fix attempts on each prompt: a prompt moved up by one isn't flat, whatever the others in
+	// the same fix did.
 	moved := map[string]bool{}
 	awaiting := map[string]int{}
 	tried := map[string]int{}
@@ -519,10 +638,13 @@ func BuildReview(in ReviewInput) Review {
 		for _, id := range at.Fix.PromptIDs {
 			tried[id]++
 			switch st {
-			case OutcomeMoved, OutcomeMixed:
-				moved[id] = true
 			case OutcomePending, OutcomeTooEarly:
 				awaiting[id]++
+			case OutcomeIncomparable:
+			default:
+				if promptMovedUp(at.Outcome, id) {
+					moved[id] = true
+				}
 			}
 		}
 	}
@@ -553,9 +675,13 @@ func BuildReview(in ReviewInput) Review {
 		}
 		if p.Searches >= RewriteMinSearches && p.FromPrompt < RewriteOverlap && p.PromptKept < RewriteOverlap {
 			words := p.Added[:min(len(p.Added), 5)]
+			sugg := "buyers' assistants search for this in other words; consider phrasing the prompt the way they search"
+			if len(words) > 0 {
+				sugg = fmt.Sprintf("buyers' assistants search for different words: %s; consider phrasing the prompt that way", quoted(words))
+			}
 			add(p, Finding{Kind: Rewritten, Words: words,
 				Numbers:    fmt.Sprintf("%.0f%% of a search's words come from the prompt and it keeps %.0f%% of the prompt's, over %d searches", 100*p.FromPrompt, 100*p.PromptKept, p.Searches),
-				Suggestion: fmt.Sprintf("buyers' assistants search for different words: %s; consider phrasing the prompt that way", strings.Join(words, ", "))})
+				Suggestion: sugg})
 		}
 		if !h2h && p.BrandSearches >= BrandedMinSearches && float64(p.BrandSearches) >= BrandedSearchShare*float64(p.Searches) {
 			add(p, Finding{Kind: Branded, Variant: "searches",
@@ -592,6 +718,20 @@ func BuildReview(in ReviewInput) Review {
 	}
 	rev.Gaps = gaps(in, accs, qs, names, competitors, rev.Answers)
 	return rev
+}
+
+// promptMovedUp reports whether an attempt's outcome shows prompt id's named or recommended rate
+// rising beyond its 95% margin, on that prompt's answers alone.
+func promptMovedUp(o Outcome, id string) bool {
+	for _, p := range o.Prompts {
+		if p.PromptID != id {
+			continue
+		}
+		named := PairedDiff([]Hits{{p.Before.Named, p.Before.N}}, []Hits{{p.After.Named, p.After.N}})
+		rec := PairedDiff([]Hits{{p.Before.Recommended, p.Before.Choice}}, []Hits{{p.After.Recommended, p.After.Choice}})
+		return named.Sign() > 0 || rec.Sign() > 0
+	}
+	return false
 }
 
 // flat is a prompt whose answers never varied: never named, or always recommended (named, for
@@ -637,9 +777,9 @@ func noisy(p *promptAcc) (Finding, bool) {
 	}
 	spread := fmt.Sprintf("named %.0f%%–%.0f%% run to run over %d runs", 100*lo, 100*hi, p.Runs)
 	switch {
-	case v.Between > v.Within && math.Sqrt(v.Between) >= NoisyDriftSD:
+	case p.DriftP < NoisyDriftP && math.Sqrt(v.Between) >= NoisyDriftSD:
 		return Finding{Kind: Noisy, Variant: "drift",
-			Numbers:    fmt.Sprintf("%s; drift between runs ±%.0f pts (1 SD) against ±%.0f pts from sampling", spread, 100*math.Sqrt(v.Between), 100*math.Sqrt(v.Within)),
+			Numbers:    fmt.Sprintf("%s; drift between runs ±%.0f pts (1 SD) against ±%.0f pts from sampling, p = %.3f that sampling alone spreads them this much", spread, 100*math.Sqrt(v.Between), 100*math.Sqrt(v.Within), p.DriftP),
 			Suggestion: "reword it to be more specific (who is asking, for what): more samples won't steady drift between runs"}, true
 	case v.Single >= NoisySingle && math.Sqrt(v.Within) >= NoisySamplingSD:
 		return Finding{Kind: Noisy, Variant: "disagreement",
@@ -652,8 +792,8 @@ func noisy(p *promptAcc) (Finding, bool) {
 // offTarget is a prompt whose answers are mostly about other products.
 func offTarget(p *promptAcc, brand string, configured int) (Finding, bool) {
 	var why []string
-	if configured >= OffTargetMinCompetitors && p.KnownShare < OffTargetKnownShare {
-		why = append(why, fmt.Sprintf("%.0f%% of the products named are %s or a configured competitor (%d of %d competitors named at all)", 100*p.KnownShare, brand, p.CompetitorsSeen, configured))
+	if configured >= OffTargetMinCompetitors && p.MentionsN >= OffTargetMinMentions && p.KnownShare < OffTargetKnownShare {
+		why = append(why, fmt.Sprintf("%.0f%% of %d product mentions are %s or a configured competitor (%d of %d competitors named at all)", 100*p.KnownShare, p.MentionsN, brand, p.CompetitorsSeen, configured))
 	}
 	if len(p.Unexpected) > 0 {
 		top := p.Unexpected[0]
@@ -664,7 +804,7 @@ func offTarget(p *promptAcc, brand string, configured int) (Finding, bool) {
 			}
 		}
 		if lead && float64(top.N) >= OffTargetDominant*float64(p.Answers) {
-			why = append(why, fmt.Sprintf("%s, not a configured competitor, is named in %d of %d answers, more than %s or any competitor", top.Name, top.N, p.Answers, brand))
+			why = append(why, fmt.Sprintf("%q, not a configured competitor, is named in %d of %d answers, more than %s or any competitor", top.Name, top.N, p.Answers, brand))
 		}
 	}
 	if p.Answers > 0 && float64(p.OtherProduct) >= OffTargetOtherProduct*float64(p.Answers) {
@@ -680,7 +820,7 @@ func offTarget(p *promptAcc, brand string, configured int) (Finding, bool) {
 	}
 	sugg := "add context to the prompt (the category, who is asking) so it's answered about the products you compete with"
 	if len(names) > 0 {
-		sugg += fmt.Sprintf(", or add %s to the competitors if they are in fact competitors", names[0])
+		sugg += fmt.Sprintf(", or add %q to the competitors if it is in fact one", names[0])
 	}
 	return Finding{Kind: OffTarget, Numbers: strings.Join(why, "; "), Suggestion: sugg, Products: top}, true
 }
@@ -746,18 +886,8 @@ func gaps(in ReviewInput, accs []*promptAcc, qs queries.Report, names []queries.
 	}
 	cited := map[string]int{}
 	for _, p := range accs {
-		for _, x := range p.results {
-			if x.Answer == nil {
-				continue
-			}
-			for _, n := range names[1:] {
-				for _, l := range x.Answer.Citations {
-					if n.OnHost(l.URL) {
-						cited[n.Name]++
-						break
-					}
-				}
-			}
+		for n, c := range p.cited {
+			cited[n] += c
 		}
 	}
 	var comp, prod []Gap
@@ -811,7 +941,7 @@ func gaps(in ReviewInput, accs []*promptAcc, qs queries.Report, names []queries.
 		if from, _, _, _ := queries.Overlap(all, w.Word); from > 0 {
 			continue
 		}
-		g := Gap{Kind: "topic", Name: w.Word, Searches: w.Searches, Prompts: w.Prompts,
+		g := Gap{Kind: "topic", Name: label(w.Word), Searches: w.Searches, Prompts: w.Prompts,
 			Numbers: fmt.Sprintf("added to %d searches across %d prompts; no prompt uses the word", w.Searches, w.Prompts)}
 		for _, q := range qs.Queries {
 			for _, part := range strings.Split(q.Query, " | ") {
@@ -846,7 +976,8 @@ func question(q string) string {
 	if q == "" {
 		return q
 	}
-	return strings.ToUpper(q[:1]) + q[1:] + "?"
+	r, n := utf8.DecodeRuneInString(q)
+	return string(unicode.ToUpper(r)) + q[n:] + "?"
 }
 
 // weightedJaccard is Σ min / Σ max over two weightings: 1 when they're the same, 0 when they
@@ -945,10 +1076,18 @@ func (r Review) Brief() string {
 		if f.Other != "" {
 			fmt.Fprintf(&b, " and %s: %q", f.Other, f.OtherText)
 		}
-		fmt.Fprintf(&b, ". %s. Suggestion: %s.\n", f.Numbers, f.Suggestion)
+		fmt.Fprintf(&b, ". %s. Suggestion: %s.", oneLine(f.Numbers), oneLine(f.Suggestion))
+		if len(f.Products) > 0 {
+			var ns []string
+			for _, c := range f.Products {
+				ns = append(ns, fmt.Sprintf("%q x%d", c.Name, c.N))
+			}
+			fmt.Fprintf(&b, " Products: %s.", strings.Join(ns, ", "))
+		}
+		b.WriteString("\n")
 	}
 	for _, g := range r.Gaps {
-		fmt.Fprintf(&b, "- gap (%s) %s: %s.\n", g.Kind, g.Name, g.Numbers)
+		fmt.Fprintf(&b, "- gap (%s) %q: %s.\n", g.Kind, g.Name, g.Numbers)
 	}
 	return strings.TrimSpace(b.String())
 }
@@ -984,3 +1123,37 @@ func ReviewDue(first, reviewed string, now time.Time) bool {
 	r, err := time.Parse(time.RFC3339, reviewed)
 	return err != nil || now.Sub(r) >= 30*24*time.Hour
 }
+
+// label is a product name or word from an answer or a search, which come from the web: one
+// line, no control characters, at most 60 characters.
+func label(s string) string {
+	s = clean(s)
+	if utf8.RuneCountInString(s) > 60 {
+		s = string([]rune(s)[:60])
+	}
+	return s
+}
+
+// clean is s on one line, control characters replaced with spaces.
+func clean(s string) string {
+	s = strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) || r == '\u2028' || r == '\u2029' {
+			return ' '
+		}
+		return r
+	}, s)
+	return strings.Join(strings.Fields(s), " ")
+}
+
+// quoted is words quoted and joined: "a", "b".
+func quoted(ws []string) string {
+	var out []string
+	for _, w := range ws {
+		out = append(out, fmt.Sprintf("%q", w))
+	}
+	return strings.Join(out, ", ")
+}
+
+func oneLine(s string) string { return clean(s) }
+
+func round4(f float64) float64 { return math.Round(f*10000) / 10000 }

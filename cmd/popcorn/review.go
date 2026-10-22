@@ -31,6 +31,7 @@ func reviewCmd(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
+	a.MarkReviewed(ctx, rev.SetID)
 	var edits any
 	if *sg {
 		e, err := a.SuggestReview(ctx, rev)
