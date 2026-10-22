@@ -64,6 +64,8 @@ type Run struct {
 	StartedAt  *string  `json:"started_at"`
 	FinishedAt *string  `json:"finished_at"`
 	Error      *string  `json:"error"`
+	// Each time its answers were graded again (see Regrade), newest last; the method is the latest.
+	Regrades []Regrade `json:"regrades,omitempty"`
 }
 
 type Result struct {
@@ -569,13 +571,19 @@ func Method(s Snapshot) string {
 func (e *Engine) Get(ctx context.Context, id string) (*Run, error) {
 	var r Run
 	var snap string
-	err := e.DB.QueryRowContext(ctx, `SELECT id, set_id, set_version, name, trigger, status, snapshot, created_at, started_at, finished_at, error, design, profile, method, config_rev, app_version FROM runs WHERE id=?`, id).
-		Scan(&r.ID, &r.SetID, &r.SetVersion, &r.Name, &r.Trigger, &r.Status, &snap, &r.CreatedAt, &r.StartedAt, &r.FinishedAt, &r.Error, &r.Design, &r.Profile, &r.Method, &r.ConfigRev, &r.AppVersion)
+	var regrades sql.NullString
+	err := e.DB.QueryRowContext(ctx, `SELECT id, set_id, set_version, name, trigger, status, snapshot, created_at, started_at, finished_at, error, design, profile, method, config_rev, app_version, regrades FROM runs WHERE id=?`, id).
+		Scan(&r.ID, &r.SetID, &r.SetVersion, &r.Name, &r.Trigger, &r.Status, &snap, &r.CreatedAt, &r.StartedAt, &r.FinishedAt, &r.Error, &r.Design, &r.Profile, &r.Method, &r.ConfigRev, &r.AppVersion, &regrades)
 	if err != nil {
 		return nil, err
 	}
 	if err := json.Unmarshal([]byte(snap), &r.Snapshot); err != nil {
 		return nil, err
+	}
+	if regrades.Valid {
+		if err := json.Unmarshal([]byte(regrades.String), &r.Regrades); err != nil {
+			return nil, stored(fmt.Errorf("run %s: regrades: %w", id, err))
+		}
 	}
 	return &r, nil
 }

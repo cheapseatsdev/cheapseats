@@ -14,6 +14,13 @@ called to build it. The same numbers are in the JSON export (`/runs/<id>/export.
   without them (`unbranded` in JSON) and show the rates with them underneath. The prompt list marks
   each branded prompt. Rankings and trends still use the overall rates.
 
+Each grade carries **evidence**: the sentence of the answer that most supports its verdict. The
+grader is asked to copy it; Popcorn then looks for it in the answer, ignoring case, spacing,
+markdown emphasis and curly quotes, and keeps the answer's own span of text, or nothing if it isn't
+there, so a quote shown is always one the answer contains. The run page highlights it in the
+answer; it's `evidence` in the grade (JSON, CSV export, MCP `get_result`). Absent answers have
+none, nor do grades from before it.
+
 ## Share of voice
 
 | Column | What it is | JSON |
@@ -66,6 +73,28 @@ ranked by distinct competitors named × answers citing it: where to get the bran
 
 **Found but not cited** (`found_not_cited`) lists the brand's pages that searches returned and no
 answer linked.
+
+### Page types
+
+The kind of site says whose page it is; the **page type** (`page_type` on each page, rolled up in
+`page_types` with cited, retrieved, pages and share of citations) says what the page does, from its
+URL and the title the search result or citation gave it. The first rule that matches wins:
+
+| Type | When |
+| --- | --- |
+| `forum` | Reddit, Quora, Lobsters, Discord; Hacker News items; Stack Overflow and Stack Exchange questions; GitHub or GitLab issues, pull requests and discussions; forum.*, community.*, discuss.* hosts |
+| `repo` | a repository's front page: github.com/owner/repo (and GitLab, Codeberg, Bitbucket) |
+| `docs` | docs.* hosts, a `/docs/`, `/documentation/` or `/reference/` path, Read the Docs, pkg.go.dev, docs.rs, MDN, Microsoft Learn |
+| `comparison` | the path or title says vs, versus, compare or comparison, or "alternative to" |
+| `review` | G2, Capterra, TrustRadius, GetApp, Software Advice, Trustpilot, PeerSpot, Gartner reviews; after the listicle rule, any page whose path or title says review |
+| `listicle` | best (not "best practices"), top N, N best, alternatives, tools/apps/software/platforms for |
+| `article` | a `/blog/`, `/news/`, `/articles/`, `/posts/` path, a dated path (`/2026/05/`), blog.* and news.* hosts, Medium, dev.to, Substack, Hashnode |
+| `product` | the home page, `/pricing`, `/plans`, `/features`, `/product`, `/solutions`, `/integrations` |
+| `other` | everything else (Wikipedia, a repository's files) |
+
+So `/blog/notion-vs-obsidian` is a comparison and `/blog/best-note-apps` a listicle: what the page
+is beats where it's filed. The run page lists the types after the kinds of site; MCP `get_run`
+carries `page_types` and each top page's `page_type`.
 
 ## Configuring it
 

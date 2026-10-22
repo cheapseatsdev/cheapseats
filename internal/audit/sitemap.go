@@ -73,3 +73,16 @@ func lastMod(s string) time.Time {
 	}
 	return time.Time{}
 }
+
+// ParseSitemap reads a sitemap (gzipped or not): the pages of a urlset, or the sitemaps an index
+// lists.
+func ParseSitemap(body []byte) (pages, sitemaps []string, err error) {
+	urls, children, err := parseSitemap(body)
+	for _, u := range urls {
+		pages = append(pages, u.Loc)
+	}
+	for _, c := range children {
+		sitemaps = append(sitemaps, c.Loc)
+	}
+	return pages, sitemaps, err
+}

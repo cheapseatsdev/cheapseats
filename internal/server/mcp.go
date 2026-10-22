@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net"
 	"net/http"
 	"slices"
@@ -99,7 +100,7 @@ func (s *Server) mcpHandler() http.Handler {
 			}
 			return out, nil
 		})
-	addTool(srv, "get_run", "One run: rates per answerer and track (and without branded prompts), share of voice with positions, head to head, objections, sources by kind and host, an outreach list of hosts cited without the brand, the brand's pages found but not cited, the fix list, net sentiment with top praise and objections, the run's themes, and one line per prompt. Use get_result for a full answer.",
+	addTool(srv, "get_run", "One run: rates per answerer and track (and without branded prompts), share of voice with positions, head to head, objections, sources by kind and host, cited pages by type (listicle, comparison, review, docs, forum...), an outreach list of hosts cited without the brand, the brand's pages found but not cited, the fix list, net sentiment with top praise and objections, the run's themes, and one line per prompt. Use get_result for a full answer.",
 		func(ctx context.Context, a runArg) (any, error) {
 			d, err := s.runData(ctx, a.Run)
 			if err != nil {
@@ -107,7 +108,7 @@ func (s *Server) mcpHandler() http.Handler {
 			}
 			return runDigest(d), nil
 		})
-	addTool(srv, "get_result", "One answer in full: the text, its grade, every search, result URL and citation.",
+	addTool(srv, "get_result", "One answer in full: the text, its grade (with evidence, the sentence of the answer that most supports the verdict, checked to be in the text), every search, result URL and citation.",
 		func(ctx context.Context, a struct {
 			Run    string `json:"run" jsonschema:"run id"`
 			Result int64  `json:"result" jsonschema:"result id, from get_run"`
@@ -209,6 +210,28 @@ func (s *Server) mcpHandler() http.Handler {
 			}
 			return rankingsDigest(rk), nil
 		})
+	addTool(srv, "get_citation_stability", "How much the hosts a prompt set's answers cite move from run to run: Bray–Curtis similarity (×100) of consecutive runs' host citation shares and Jaccard overlap (×100) of the hosts cited, with a headline score once there are 3 transitions of the same method, and the hosts new and gone in the newest. From stored answers; costs nothing.",
+		func(ctx context.Context, a struct {
+			Set      string `json:"set" jsonschema:"prompt set id, from list_prompt_sets"`
+			Track    string `json:"track,omitempty" jsonschema:"search (default) or recall"`
+			LastDays int    `json:"last_days,omitempty" jsonschema:"default 30"`
+		}) (any, error) {
+			st, ok := s.App.Set(a.Set)
+			if !ok {
+				return nil, fmt.Errorf("no prompt set %q", a.Set)
+			}
+			if a.LastDays <= 0 {
+				a.LastDays = 30
+			}
+			if a.Track != "recall" {
+				a.Track = "search"
+			}
+			cs, err := s.App.CitationStability(ctx, st, a.Track, a.LastDays)
+			if err != nil {
+				return nil, err
+			}
+			return stabilityDigest(cs), nil
+		})
 	addTool(srv, "suggest_prompts", "Draft new buyer questions for a prompt set, across funnel stages, as a TOML snippet in the set file's format, with repeats of existing prompts dropped. Costs one analyst model call (nothing on the claude-code provider). Writes nothing: paste the snippet into the set's file by pull request.",
 		func(ctx context.Context, a struct {
 			Set string `json:"set" jsonschema:"prompt set id, from list_prompt_sets"`
@@ -218,6 +241,29 @@ func (s *Server) mcpHandler() http.Handler {
 				a.N = 10
 			}
 			return s.App.SuggestPrompts(ctx, a.Set, a.N)
+		})
+	addTool(srv, "regrade", "Grade a set's (or one run's) stored answers again with today's grader prompt and model, brand and competitors, so older runs join the current method's trend; answers are not asked again, and runs already graded that way are skipped. dry_run (the default) only says how many answers it would grade and the estimated cost. With dry_run false it costs one grader call per answer (nothing on the claude-code provider), within the daily budget, and runs in the background.",
+		func(ctx context.Context, a struct {
+			Target    string `json:"target" jsonschema:"prompt set id, or a run id"`
+			SinceDays *int   `json:"since_days,omitempty" jsonschema:"for a set, only runs from the last N days (default 28; 0 for all)"`
+			DryRun    *bool  `json:"dry_run,omitempty" jsonschema:"only plan it, grading nothing (default true)"`
+		}) (any, error) {
+			since := 28
+			if a.SinceDays != nil {
+				since = *a.SinceDays
+			}
+			if since < 0 {
+				return nil, fmt.Errorf("since_days %d: want 0 (all) or more", since)
+			}
+			if a.DryRun == nil || *a.DryRun {
+				p, err := s.App.PlanRegrade(ctx, a.Target, since)
+				return regradeDigest(p, false), err
+			}
+			p, err := s.App.StartRegrade(a.Target, since)
+			if err != nil {
+				return nil, err
+			}
+			return regradeDigest(p, len(p.Runs) > 0), nil
 		})
 	addTool(srv, "cancel_run", "Stop an in-progress run. Finished answers are kept; retry from the web UI to finish it.",
 		func(ctx context.Context, a runArg) (any, error) {
@@ -364,6 +410,17 @@ func (s *Server) mcpHandler() http.Handler {
 	})
 }
 
+// regradeDigest is a re-grade plan with its runs cut to the first 20, and whether it started.
+func regradeDigest(p run.RegradePlan, started bool) any {
+	more := len(p.Runs) - len(head(p.Runs, 20))
+	p.Runs = head(p.Runs, 20)
+	return struct {
+		run.RegradePlan
+		MoreRuns int  `json:"more_runs,omitempty"`
+		Started  bool `json:"started"`
+	}{p, more, started}
+}
+
 // briefAttempts drops the Claude Code prompt from each attempt's copy of its fix: the caller has
 // the fix already, and the prompt is most of its size.
 func briefAttempts(at []app.Attempt) []app.Attempt {
@@ -483,6 +540,7 @@ func runDigest(d *RunData) any {
 		HeadToHead     []report.HeadToHead `json:"head_to_head"`
 		Objections     []report.Objection  `json:"top_objections"`
 		Classes        []report.ClassUse   `json:"source_classes"`
+		PageTypes      []report.TypeUse    `json:"page_types"`
 		Hosts          []report.HostUse    `json:"top_hosts"`
 		Outreach       []report.Outreach   `json:"outreach"`
 		Uncited        []string            `json:"found_not_cited"`
@@ -492,7 +550,7 @@ func runDigest(d *RunData) any {
 		Opinion        opinion.Report      `json:"opinion"`
 		Prompts        []prompt            `json:"prompts"`
 	}{&r, sum.Overall, sum.Slices, sum.Unbranded, sum.BrandedPrompts, sum.BrandRank(), voice, head(sum.HeadToHead, 10), head(sum.Objections, 10),
-		sum.Classes, head(sum.Hosts, 10), head(sum.Outreach, 10), uncited, pages, fixes, d.Insights, d.Opinion, prompts}
+		sum.Classes, sum.PageTypes, head(sum.Hosts, 10), head(sum.Outreach, 10), uncited, pages, fixes, d.Insights, d.Opinion, prompts}
 }
 
 // auditDigest is audit_sites' answer: each site in a line or two, and the findings without info
@@ -574,6 +632,45 @@ func rankingsDigest(rk []app.Ranking) []rankingDigest {
 			}
 			out[i].Days = append(out[i].Days, dd)
 		}
+	}
+	return out
+}
+
+// stabilityDigest is get_citation_stability's answer: the score, every transition's two numbers,
+// and the hosts new and gone in the newest only, ten of each. /api/sets/{id}/citation-stability
+// has every transition's hosts.
+func stabilityDigest(cs app.CitationStability) any {
+	type step struct {
+		From           string  `json:"from"`
+		To             string  `json:"to"`
+		Similarity     float64 `json:"similarity"`
+		Overlap        float64 `json:"overlap"`
+		New            int     `json:"new"`
+		Gone           int     `json:"gone"`
+		PromptsChanged bool    `json:"prompts_changed,omitempty"`
+	}
+	round := func(x float64) float64 { return math.Round(x*10) / 10 }
+	out := struct {
+		Set         string   `json:"set"`
+		Track       string   `json:"track"`
+		LastDays    int      `json:"last_days"`
+		Runs        int      `json:"runs"`
+		Score       *float64 `json:"score,omitempty"`
+		Overlap     *float64 `json:"overlap,omitempty"`
+		Note        string   `json:"note,omitempty"`
+		NewestNew   []string `json:"newest_new"`
+		NewestGone  []string `json:"newest_gone"`
+		Transitions []step   `json:"transitions"` // newest first
+	}{Set: cs.SetID, Track: cs.Track, LastDays: cs.LastDays, Runs: cs.Runs, Note: cs.Note, NewestNew: []string{}, NewestGone: []string{}, Transitions: []step{}}
+	if cs.Score != nil {
+		sc, ov := round(*cs.Score), round(*cs.MeanOverlap)
+		out.Score, out.Overlap = &sc, &ov
+	}
+	for i, t := range cs.Transitions {
+		if i == 0 {
+			out.NewestNew, out.NewestGone = head(t.New, 10), head(t.Gone, 10)
+		}
+		out.Transitions = append(out.Transitions, step{t.From, t.To, round(t.Similarity), round(t.Overlap), len(t.New), len(t.Gone), t.PromptsChanged})
 	}
 	return out
 }

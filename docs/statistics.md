@@ -29,7 +29,8 @@ with more answers doesn't count for more. A cell is one prompt's `h` hits out of
   covariance between the two products is ignored. If no crossing is significant in the direction
   the rank moved, the table says **within noise** and draws no arrow.
 - **Rolling window**: 7 days by default, or 14 or 28 (`?window=` on the page,
-  `/api/rankings?window=`, MCP `get_rankings` `window`). The window stops at a change of method.
+  `/api/rankings?window=`, MCP `get_rankings` `window`). The window stops at a change of method;
+  a [re-graded](regrading.md) run counts as the method it was re-graded under.
 - **Two intervals**, for named, recommended and top pick:
   - *Band, across prompts* (the shaded band): the rolling mean ± 1.96 · s / √m, where s is the
     standard deviation of the m prompt-day rates in the window. It answers "questions like
@@ -62,6 +63,35 @@ widen a run's interval by `w = √((S + D) / (S/n + D))`.
 
 The line needs at least 4 runs and 6 cells.
 
+## Citation stability
+
+How much the hosts a set's answers cite move from one run to the next, per track, over the same
+daily runs the trends use (each day's newest finished run, the last 30 days). A run's citations are
+a vector of host **citation shares** `s_h` (a host's citations over all the run's citations, so
+`Σ s_h = 1`). For each run against the one before it:
+
+- **Similarity** (Bray–Curtis × 100): `100 · (1 − Σ|a_h − b_h| / Σ(a_h + b_h))`, which for shares
+  is `100 · Σ min(a_h, b_h)`, the share of citations the two runs have in common by host. 100 when
+  every host kept its share; 0 when no host was cited in both.
+- **Overlap** (Jaccard × 100): hosts cited in both over hosts cited in either.
+- **New** and **gone**: hosts cited this run and not the one before, and the other way round,
+  largest share first.
+
+The chain goes back to a change of method (the run that changed it is the oldest compared). A run
+that cited nothing (an outage, or the recall track, which has no search) is skipped rather than
+read as every host leaving. A transition across a change of prompts is flagged `prompts_changed`:
+some of its churn is the questions.
+
+The headline **stability score** is the mean similarity over the transitions (with the mean
+overlap beside it), shown only once there are **3 transitions**: one or two can be a fluke. A high
+score says the answers lean on the same sources run after run, so a host entering or leaving
+means something. A low one says each run's sources table is a sample.
+
+Where it shows: the set page (the score, the newest transition's new and gone hosts, and each
+transition's similarity), `GET /api/sets/{id}/citation-stability?track=&lastDays=` (every
+transition in full) and MCP `get_citation_stability` (`set`, optional `track`, `last_days`; the
+newest transition's hosts only, ten of each).
+
 ## Fix outcomes
 
 An attempt's outcome pools answers on each side, per target prompt, and only counts runs asked
@@ -87,8 +117,10 @@ these statuses:
 
 The fix's page appearing in searches, fetches or citations after the attempt, when it didn't
 before, is shown as *newly surfaced*. That's supporting evidence and not by itself "moved". The
-same one-line summary goes to the analyst who writes the next fix list. The analyst also sees each
-prompt's `named h/n, recommended h/n` and is told that counts this small are noisy.
+same goes for the target's host: `host h cited→not cited (left the cited set)` or `not
+cited→cited (entered the cited set)`, from whether any answer on each side cited a page on it
+(`target_host`, `host_cited_before`, `host_cited_after`). The same one-line summary goes to the
+analyst who writes the next fix list. The analyst also sees each prompt's `named h/n, recommended h/n` and is told that counts this small are noisy.
 
 The API's attempt `outcome` keeps `run_id`, `prompts` (now pooled, with `choice`, the recommended
 denominator), `target_seen_before` and `target_seen_after`. It adds `status`, `summary`, `named` and

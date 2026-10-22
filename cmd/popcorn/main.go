@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"text/tabwriter"
@@ -25,6 +26,7 @@ import (
 	"github.com/metcalfc/popcorn/internal/opinion"
 	"github.com/metcalfc/popcorn/internal/plan"
 	"github.com/metcalfc/popcorn/internal/report"
+	"github.com/metcalfc/popcorn/internal/run"
 	"github.com/metcalfc/popcorn/internal/server"
 	"github.com/metcalfc/popcorn/internal/sets"
 	"github.com/metcalfc/popcorn/internal/store"
@@ -33,6 +35,8 @@ import (
 
 const usage = `popcorn: how AI assistants answer your buyers' questions.
 
+  popcorn init <url> [dir]               a new config repo from the brand's website (-dry-run,
+                                         -name, -competitors a,b, -suggest)
   popcorn serve [-addr 127.0.0.1:3000]   web UI, JSON API and the daily schedule
   popcorn sets                           list prompt sets
   popcorn version                        this build's version
@@ -44,6 +48,9 @@ const usage = `popcorn: how AI assistants answer your buyers' questions.
   popcorn report <run-id> [-json]        rates, share of voice and top pages for a run
   popcorn fixes <run-id> [-rebuild]      the run's fix list as markdown
   popcorn themes <run-id> [-rebuild]     what the run's answers praise and object to, grouped
+  popcorn regrade <set-id|run-id> [-since 28d] [-dry-run=false]
+                                         grade stored answers again with today's grader, brand
+                                         and competitors (a dry run, its cost, unless -dry-run=false)
   popcorn suggest-prompts <set-id> [-n 10]  new buyer questions for a set, as TOML to paste
                                          (one analyst call; writes nothing)
   popcorn audit [site...]                what AI crawlers can read on the brand's sites (free)
@@ -351,6 +358,8 @@ func dispatch(ctx context.Context, cmd string, args []string) error {
 			return errors.New("this run has no themes; -rebuild makes them")
 		}
 		return printThemes(a, fs.Arg(0), *t)
+	case "regrade":
+		return regradeCmd(ctx, args)
 	case "suggest-prompts":
 		fs := flag.NewFlagSet("suggest-prompts", flag.ExitOnError)
 		n := fs.Int("n", 10, "how many prompts")
@@ -369,6 +378,8 @@ func dispatch(ctx context.Context, cmd string, args []string) error {
 		fmt.Print(res.Snippet)
 		fmt.Fprintf(os.Stderr, "%d prompts for %s (%d dropped as repeats), $%.3f. Paste into its file and open a pull request.\n", len(res.Prompts), fs.Arg(0), res.Dropped, res.CostUSD)
 		return nil
+	case "init":
+		return initCmd(ctx, args)
 	case "audit":
 		return auditCmd(ctx, args)
 	case "check-citations":
@@ -422,6 +433,115 @@ func printThemes(a *app.App, id string, t opinion.Themes) error {
 		fmt.Printf("\n%-11s %s (%d answers%s)\n            “%s”\n", th.Kind, th.Name, th.Answers, who, th.Quote)
 	}
 	return nil
+}
+
+func regradeCmd(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("regrade", flag.ExitOnError)
+	sinceFlag := fs.String("since", "28d", "for a set, only runs from this long ago on: 28d, 72h, or all")
+	dry := fs.Bool("dry-run", true, "say what would be re-graded and what it would cost, and grade nothing")
+	fs.Parse(positionalLast(args))
+	if fs.NArg() != 1 {
+		return errors.New("usage: popcorn regrade <set-id|run-id> [-since 28d] [-dry-run=false]")
+	}
+	since, err := parseSince(*sinceFlag)
+	if err != nil {
+		return err
+	}
+	a, err := open()
+	if err != nil {
+		return err
+	}
+	p, err := a.PlanRegrade(ctx, fs.Arg(0), since)
+	if err != nil {
+		return err
+	}
+	printRegradePlan(p)
+	if *dry || len(p.Runs) == 0 {
+		if len(p.Runs) > 0 {
+			fmt.Println("\nDry run: nothing graded. Run again with -dry-run=false to re-grade.")
+		}
+		return nil
+	}
+	rep, err := a.Regrade(ctx, fs.Arg(0), since)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("\nRe-graded %d runs, %d answers, $%.2f.\n", len(rep.Regraded), rep.Answers, rep.CostUSD)
+	for id, why := range rep.Failed {
+		fmt.Printf("  %s left as it was: %s\n", id, why)
+	}
+	if rep.Stopped != "" {
+		return fmt.Errorf("stopped: %s", rep.Stopped)
+	}
+	if len(rep.Failed) > 0 {
+		return fmt.Errorf("%d runs failed to re-grade", len(rep.Failed))
+	}
+	return nil
+}
+
+// parseSince reads -since: days ("28d"), a duration ("72h", rounded up to days), or "all" (0).
+func parseSince(s string) (int, error) {
+	switch {
+	case s == "all" || s == "0":
+		return 0, nil
+	case strings.HasSuffix(s, "d"):
+		n, err := strconv.Atoi(strings.TrimSuffix(s, "d"))
+		if err != nil || n < 0 {
+			return 0, fmt.Errorf("-since %q: want days like 28d, a duration like 72h, or all", s)
+		}
+		return n, nil
+	}
+	d, err := time.ParseDuration(s)
+	if err != nil || d < 0 {
+		return 0, fmt.Errorf("-since %q: want days like 28d, a duration like 72h, or all", s)
+	}
+	return int((d + 24*time.Hour - 1) / (24 * time.Hour)), nil
+}
+
+func printRegradePlan(p run.RegradePlan) {
+	how := "through the API"
+	if p.Subscription {
+		how = "on the claude CLI (subscription)"
+	}
+	fmt.Printf("Re-grading with %s, %s.\n", p.Grader, how)
+	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+	if len(p.Runs) > 0 {
+		fmt.Fprintln(w, "\nRUN\tCREATED\tANSWERS\tMETHOD\tEST. COST")
+	}
+	for _, r := range p.Runs {
+		method := "unchanged"
+		if r.FromMethod != r.ToMethod {
+			method = shortHash(r.FromMethod) + " → " + shortHash(r.ToMethod)
+		}
+		fmt.Fprintf(w, "%s\t%s\t%d\t%s\t$%.2f\n", r.ID, r.CreatedAt[:10], r.Answers, method, r.EstimatedUSD)
+	}
+	w.Flush()
+	fmt.Printf("\n%d runs to re-grade, %d answers.", len(p.Runs), p.Answers)
+	if p.Current > 0 {
+		fmt.Printf(" %d runs (%d answers) already graded with today's inputs: skipped.", p.Current, p.CurrentAnswers)
+	}
+	if p.Unfinished > 0 {
+		fmt.Printf(" %d unfinished or running: left alone.", p.Unfinished)
+	}
+	if p.AskedDifferently > 0 {
+		fmt.Printf(" %d asked differently (another answer prompt or search policy): re-grading can't join them to today's trend, skipped.", p.AskedDifferently)
+	}
+	fmt.Println()
+	switch {
+	case p.Subscription:
+		fmt.Println("Cost: $0 (the claude CLI runs on your subscription).")
+	case p.Unpriced:
+		fmt.Println("Cost: unknown, the grader's model has no [pricing]; add it before re-grading.")
+	default:
+		fmt.Printf("Estimated cost: $%.2f (from token counts and [pricing]), within the daily budget.\n", p.EstimatedUSD)
+	}
+}
+
+func shortHash(h string) string {
+	if len(h) > 8 {
+		return h[:8]
+	}
+	return h
 }
 
 func answererIDs(as []config.Answerer) []string {
