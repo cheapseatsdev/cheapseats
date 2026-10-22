@@ -83,6 +83,9 @@ func (a *App) StartRegrade(target string, sinceDays int) (run.RegradePlan, error
 			slog.Error("re-grade", "target", target, "err", err)
 			return
 		}
+		for id, why := range rep.Failed {
+			slog.Warn("re-grade failed", "target", target, "run", id, "err", why)
+		}
 		slog.Info("re-grade done", "target", target, "runs", len(rep.Regraded), "answers", rep.Answers, "cost", rep.CostUSD, "failed", len(rep.Failed), "stopped", rep.Stopped)
 	}()
 	return p, nil

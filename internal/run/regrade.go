@@ -249,6 +249,9 @@ func (e *Engine) Regrade(ctx context.Context, runs []Run, set sets.Set) (Regrade
 	return rep, nil
 }
 
+// regradeTries is how many times re-grading tries one answer before the run is given up.
+const regradeTries = 3
+
 // regradeRun grades one run's answers again, then writes them all, or nothing if any failed.
 func (e *Engine) regradeRun(ctx context.Context, r Run, set sets.Set) (int, float64, error) {
 	e.mu.Lock()
@@ -281,7 +284,17 @@ func (e *Engine) regradeRun(ctx context.Context, r Run, set sets.Set) (int, floa
 		go func() {
 			defer wg.Done()
 			for i := range work {
-				grades[i], costs[i], errs[i] = grade.Answer(ctx, &cfg, now.Set, gs[i].prompt, gs[i].answer)
+				// A run is written all or nothing, so one flaky call would waste the rest:
+				// try each answer a few times before giving the run up.
+				for try := 0; try < regradeTries; try++ {
+					var c float64
+					grades[i], c, errs[i] = grade.Answer(ctx, &cfg, now.Set, gs[i].prompt, gs[i].answer)
+					costs[i] += c
+					if errs[i] == nil || ctx.Err() != nil || errors.Is(errs[i], errBudget) {
+						break
+					}
+					slog.Warn("re-grade: grading failed, trying again", "run", r.ID, "result", gs[i].id, "try", try+1, "err", errs[i])
+				}
 				if errs[i] != nil {
 					cancel() // the run can't be written, so the rest would be wasted
 				}

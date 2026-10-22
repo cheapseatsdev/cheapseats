@@ -4,9 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/cheapseatsdev/cheapseats/internal/config"
@@ -208,5 +210,52 @@ func TestRegradeSkipsRunsAskedDifferently(t *testing.T) {
 	e.Cfg.Brand.Audience = "an HR lead" // today's answer prompt differs from the run's
 	if p, _ := e.PlanRegrade(ctx, runs, set); len(p.Runs) != 0 || p.AskedDifferently != 1 || p.Answers != 0 {
 		t.Fatalf("asked differently: %+v", p)
+	}
+}
+
+// One flaky grading call doesn't throw away the run: the answer is tried again.
+func TestRegradeRetriesAFlakyAnswer(t *testing.T) {
+	e, set, _ := setup(t, 0)
+	e.Cfg.Answerers = e.Cfg.Answerers[:1]
+	ctx := context.Background()
+	r, err := e.Create(ctx, set, "manual")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.Execute(ctx, r.ID); err != nil {
+		t.Fatal(err)
+	}
+	set.Competitors = []sets.Competitor{{Name: "Coder"}}
+	runs, _ := e.Since(ctx, set.ID, "")
+
+	good := llm.AnthropicURL
+	var n atomic.Int32
+	flaky := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if n.Add(1) == 1 {
+			http.Error(w, "bad request", 400) // not retried by the client, only by the re-grade
+			return
+		}
+		out, err := http.NewRequest(req.Method, good, req.Body)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		out.Header = req.Header.Clone()
+		res, err := http.DefaultClient.Do(out)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		defer res.Body.Close()
+		w.WriteHeader(res.StatusCode)
+		io.Copy(w, res.Body)
+	}))
+	defer flaky.Close()
+	llm.AnthropicURL = flaky.URL
+	defer func() { llm.AnthropicURL = good }()
+
+	rep, err := e.Regrade(ctx, runs, set)
+	if err != nil || len(rep.Regraded) != 1 || len(rep.Failed) != 0 {
+		t.Fatalf("a flaky answer lost the run: %+v %v", rep, err)
 	}
 }
