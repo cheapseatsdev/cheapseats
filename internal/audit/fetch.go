@@ -9,20 +9,24 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/metcalfc/popcorn/internal/version"
+	"github.com/cheapseatsdev/cheapseats/internal/version"
 )
 
 // MaxBody is the most of any response read: a page, robots.txt or a sitemap.
 const MaxBody = 2 << 20
 
-// UA is how Popcorn identifies itself: a Mozilla-style string, so a firewall treats it as it would
+// UA is how Cheap Seats identifies itself: a Mozilla-style string, so a firewall treats it as it would
 // a person's browser, that still says who it is.
 func UA() string {
-	return "Mozilla/5.0 (compatible; Popcorn-Audit/" + version.String() + "; +https://popcorn.zone)"
+	return "Mozilla/5.0 (compatible; CheapSeats-Audit/" + version.String() + "; +https://cheapseats.dev)"
 }
 
-// Token is Popcorn's robots.txt product token.
-const Token = "Popcorn-Audit"
+// Token is Cheap Seats' robots.txt product token. OldToken is the one from before the rename: a
+// robots.txt that names only it still applies.
+const (
+	Token    = "CheapSeats-Audit"
+	OldToken = "Popcorn-Audit"
+)
 
 // Fetcher makes polite requests: one user agent, a timeout, a size cap and a few at a time.
 type Fetcher struct {
@@ -59,7 +63,7 @@ func (r *Response) ContentType() string {
 	return strings.ToLower(r.Header.Get("content-type"))
 }
 
-// Get fetches a URL as Popcorn, or as the user agent given.
+// Get fetches a URL as Cheap Seats, or as the user agent given.
 func (f *Fetcher) Get(ctx context.Context, url string, ua ...string) (*Response, error) {
 	select {
 	case f.limit <- struct{}{}:

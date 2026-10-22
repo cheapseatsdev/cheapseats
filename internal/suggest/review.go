@@ -11,9 +11,9 @@ import (
 
 	"github.com/BurntSushi/toml"
 
-	"github.com/metcalfc/popcorn/internal/config"
-	"github.com/metcalfc/popcorn/internal/llm"
-	"github.com/metcalfc/popcorn/internal/sets"
+	"github.com/cheapseatsdev/cheapseats/internal/config"
+	"github.com/cheapseatsdev/cheapseats/internal/llm"
+	"github.com/cheapseatsdev/cheapseats/internal/sets"
 )
 
 // Edits are an analyst's proposed changes to a set after a prompt review: rewrites (which keep the
@@ -27,7 +27,7 @@ type Edits struct {
 	// Proposals dropped, and why: a rewrite or retirement of a prompt the set doesn't have, a
 	// rewrite that changes nothing, text that repeats a prompt in any set, has search operators or
 	// a link, runs too long, names the brand outside head-to-heads (or doesn't, in it), or that
-	// popcorn check would refuse.
+	// cheapseats check would refuse.
 	Dropped    int      `json:"dropped"`
 	DroppedWhy []string `json:"dropped_why,omitempty"`
 	CostUSD    float64  `json:"cost_usd"`
@@ -217,11 +217,11 @@ func Review(ctx context.Context, cfg *config.Config, set sets.Set, all []sets.Se
 // maxQuestion is the longest proposed question kept, in characters.
 const maxQuestion = 300
 
-// checked keeps the edits popcorn check accepts: each is applied in turn to a copy of the sets in
+// checked keeps the edits cheapseats check accepts: each is applied in turn to a copy of the sets in
 // a temporary directory, and one that adds an error (a repeat, a bad id, the brand where it may
 // not be) is dropped with the error.
 func checked(set sets.Set, all []sets.Set, brand []string, e Edits) Edits {
-	dir, err := os.MkdirTemp("", "popcorn-review-")
+	dir, err := os.MkdirTemp("", "cheapseats-review-")
 	if err != nil {
 		return e // can't check: keep what passed the rules above
 	}
@@ -262,7 +262,7 @@ func checked(set sets.Set, all []sets.Set, brand []string, e Edits) Edits {
 	try := func(next sets.Set, what string) bool {
 		for msg := range errs(next) {
 			if !base[msg] {
-				drop("%s: popcorn check would refuse it: %s", what, msg)
+				drop("%s: cheapseats check would refuse it: %s", what, msg)
 				return false
 			}
 		}
@@ -306,7 +306,7 @@ func checked(set sets.Set, all []sets.Set, brand []string, e Edits) Edits {
 func Diff(set sets.Set, e Edits) string {
 	var b strings.Builder
 	file := "prompt-sets/" + set.File
-	fmt.Fprintf(&b, "# Proposed by popcorn review -suggest. Nothing is written: check each change, then edit\n# %s by pull request. Rewrites keep the id (ids are permanent).\n--- %s\n+++ %s\n", file, file, file)
+	fmt.Fprintf(&b, "# Proposed by cheapseats review -suggest. Nothing is written: check each change, then edit\n# %s by pull request. Rewrites keep the id (ids are permanent).\n--- %s\n+++ %s\n", file, file, file)
 	for _, x := range e.Rewrites {
 		cur, _ := set.Prompt(x.ID)
 		fmt.Fprintf(&b, "@@ rewrite %s: %s\n [[prompts]]\n id = %s\n-text = %s\n+text = %s\n", x.ID, oneLine(x.Why), tomlString(x.ID), tomlString(cur.Text), tomlString(x.Text))

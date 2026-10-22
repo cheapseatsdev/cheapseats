@@ -1,7 +1,7 @@
 name: release
 
-# Push a tag like v1.2.3 to release: the image goes to ghcr.io/<owner>/popcorn:1.2.3 (and :1.2),
-# the Helm chart to oci://ghcr.io/<owner>/charts/popcorn at the same version, and a GitHub
+# Push a tag like v1.2.3 to release: the image goes to ghcr.io/<owner>/cheapseats:1.2.3 (and :1.2),
+# the Helm chart to oci://ghcr.io/<owner>/charts/cheapseats at the same version, and a GitHub
 # release is drafted from the commits since the last tag. Run it by hand to build without
 # publishing.
 on:
@@ -31,7 +31,7 @@ jobs:
           {
             echo "version=$v"
             echo "semver=${v#v}"
-            echo "image=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/popcorn"
+            echo "image=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/cheapseats"
           } >>"$GITHUB_OUTPUT"
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
@@ -62,13 +62,13 @@ jobs:
           version: v4.3.0
       - name: chart
         run: |
-          helm package charts/popcorn --version "${{ steps.v.outputs.semver }}" --app-version "${{ steps.v.outputs.version }}" -d dist
+          helm package charts/cheapseats --version "${{ steps.v.outputs.semver }}" --app-version "${{ steps.v.outputs.version }}" -d dist
           if [ "$PUBLISH" = true ]; then
             echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
-            helm push dist/popcorn-*.tgz "oci://ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/charts"
+            helm push dist/cheapseats-*.tgz "oci://ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/charts"
           fi
       - name: draft the release
         if: env.PUBLISH == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release create "$GITHUB_REF_NAME" --draft --generate-notes dist/popcorn-*.tgz
+        run: gh release create "$GITHUB_REF_NAME" --draft --generate-notes dist/cheapseats-*.tgz

@@ -3,18 +3,18 @@ package report
 import (
 	"testing"
 
-	"github.com/metcalfc/popcorn/internal/answer"
-	"github.com/metcalfc/popcorn/internal/config"
-	"github.com/metcalfc/popcorn/internal/grade"
-	"github.com/metcalfc/popcorn/internal/run"
+	"github.com/cheapseatsdev/cheapseats/internal/answer"
+	"github.com/cheapseatsdev/cheapseats/internal/config"
+	"github.com/cheapseatsdev/cheapseats/internal/grade"
+	"github.com/cheapseatsdev/cheapseats/internal/run"
 )
 
 // An info prompt's answers count toward named, and not toward recommended or top pick: a good
 // explanation that recommends nothing isn't a loss.
 func TestInfoPromptsCountOnlyTowardNamed(t *testing.T) {
-	brand := config.Brand{Name: "Popcorn"}
+	brand := config.Brand{Name: "Cheap Seats"}
 	res := []run.Result{
-		{PromptIdx: 0, Answerer: "a", Track: answer.Search, Status: "done", Grade: &grade.Grade{Verdict: grade.Recommended, TopPick: ptr("Popcorn")}},
+		{PromptIdx: 0, Answerer: "a", Track: answer.Search, Status: "done", Grade: &grade.Grade{Verdict: grade.Recommended, TopPick: ptr("Cheap Seats")}},
 		{PromptIdx: 1, Answerer: "a", Track: answer.Search, Status: "done", Info: true, Grade: &grade.Grade{Verdict: grade.Mentioned}},
 		{PromptIdx: 2, Answerer: "a", Track: answer.Search, Status: "done", Info: true, Grade: &grade.Grade{Verdict: grade.Absent}},
 	}

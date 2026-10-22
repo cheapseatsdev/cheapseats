@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/metcalfc/popcorn/internal/store"
+	"github.com/cheapseatsdev/cheapseats/internal/store"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -32,7 +32,7 @@ func TestFrontDoor(t *testing.T) {
 	ctx := context.Background()
 
 	fd := s.frontDoor(ctx)
-	if fd.DataState != NoRuns || fd.Brand != "Popcorn" || len(fd.Sets) != len(a.Sets()) || !fd.Readiness.CanRun || fd.Audit != nil || len(fd.Prompts) != 3 {
+	if fd.DataState != NoRuns || fd.Brand != "Cheap Seats" || len(fd.Sets) != len(a.Sets()) || !fd.Readiness.CanRun || fd.Audit != nil || len(fd.Prompts) != 3 {
 		t.Fatalf("no runs: %+v", fd)
 	}
 	if st := stepTo(fd, "start_run"); st == nil || st.Args["dry_run"] != true || st.Args["set"] != a.Sets()[0].ID {

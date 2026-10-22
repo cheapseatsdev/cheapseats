@@ -9,22 +9,22 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/metcalfc/popcorn/internal/config"
-	"github.com/metcalfc/popcorn/internal/llm"
-	"github.com/metcalfc/popcorn/internal/sets"
+	"github.com/cheapseatsdev/cheapseats/internal/config"
+	"github.com/cheapseatsdev/cheapseats/internal/llm"
+	"github.com/cheapseatsdev/cheapseats/internal/sets"
 )
 
 // The fingerprint covers what the grader reads besides the answer, and nothing else: a change of
 // brand, competitors, grader prompt or model changes it; a new answerer or prompt doesn't.
 func TestGradeInputs(t *testing.T) {
-	base := Snapshot{GraderPrompt: "g", Grader: "m", Brand: config.Brand{Name: "Popcorn", Aliases: []string{"pc"}, About: "a"},
+	base := Snapshot{GraderPrompt: "g", Grader: "m", Brand: config.Brand{Name: "Cheap Seats", Aliases: []string{"pc"}, About: "a"},
 		Set: sets.Set{Competitors: []sets.Competitor{{Name: "Gauge"}}, Prompts: []sets.Prompt{{ID: "p", Text: "p"}}}}
 	fp := GradeInputs(base)
 	same := base
 	same.Answerers = []config.Answerer{{ID: "x"}}
 	same.Set.Prompts = nil
 	same.Brand.Facts = []string{"new fact"}
-	same.Brand.Sites = []config.Site{{URL: "popcorn.zone"}}
+	same.Brand.Sites = []config.Site{{URL: "cheapseats.dev"}}
 	same.AnswerPrompt = "asked differently" // a re-grade can't change how answers were asked
 	if GradeInputs(same) != fp {
 		t.Error("only grading inputs count")
@@ -33,7 +33,7 @@ func TestGradeInputs(t *testing.T) {
 		"grader prompt": func(s *Snapshot) { s.GraderPrompt = "g2" },
 		"grader model":  func(s *Snapshot) { s.Grader = "claude-code:m" },
 		"brand name":    func(s *Snapshot) { s.Brand.Name = "Kernel" },
-		"aliases":       func(s *Snapshot) { s.Brand.Aliases = []string{"pc", "popcorn.zone"} },
+		"aliases":       func(s *Snapshot) { s.Brand.Aliases = []string{"pc", "cheapseats.dev"} },
 		"about":         func(s *Snapshot) { s.Brand.About = "b" },
 		"competitor":    func(s *Snapshot) { s.Set.Competitors = []sets.Competitor{{Name: "Gauge"}, {Name: "Peec AI"}} },
 		"its aliases": func(s *Snapshot) {
@@ -129,7 +129,7 @@ func TestRegrade(t *testing.T) {
 	if len(got.Regrades) != 1 || got.Regrades[0].FromMethod != r.Method || got.Regrades[0].ToMethod != got.Method || got.Regrades[0].Answers != 6 {
 		t.Fatalf("regrades: %+v", got.Regrades)
 	}
-	if got.Snapshot.AnswerPrompt != r.Snapshot.AnswerPrompt || got.Snapshot.Brand.Domains[0] != "popcorn.example" {
+	if got.Snapshot.AnswerPrompt != r.Snapshot.AnswerPrompt || got.Snapshot.Brand.Domains[0] != "cheapseats.example" {
 		t.Fatal("how answers were asked is kept")
 	}
 	rows, _ := e.DB.Query(`SELECT grade_history, verdict FROM results WHERE run_id=?`, r.ID)
@@ -158,7 +158,7 @@ func TestRegrade(t *testing.T) {
 	}
 }
 
-// A run that changes between being graded and being written (popcorn regrade beside popcorn
+// A run that changes between being graded and being written (cheapseats regrade beside cheapseats
 // serve, a retry from another process) is left as the other writer left it; in this process a
 // retry can't start while the re-grade holds the run.
 func TestRegradeWritesOnlyOverTheRunItRead(t *testing.T) {

@@ -9,11 +9,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/metcalfc/popcorn/internal/answer"
-	"github.com/metcalfc/popcorn/internal/config"
-	"github.com/metcalfc/popcorn/internal/grade"
-	"github.com/metcalfc/popcorn/internal/sets"
-	"github.com/metcalfc/popcorn/internal/store"
+	"github.com/cheapseatsdev/cheapseats/internal/answer"
+	"github.com/cheapseatsdev/cheapseats/internal/config"
+	"github.com/cheapseatsdev/cheapseats/internal/grade"
+	"github.com/cheapseatsdev/cheapseats/internal/sets"
+	"github.com/cheapseatsdev/cheapseats/internal/store"
 )
 
 // A database as the first release left it: runs whose snapshots list prompts as plain strings and
@@ -38,10 +38,10 @@ func TestUpgradeFromSchema1KeepsHistory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(data, "popcorn.db.bak-v1")); err != nil {
+	if _, err := os.Stat(filepath.Join(data, "cheapseats.db.bak-v1")); err != nil {
 		t.Fatalf("no backup before migrating: %v", err)
 	}
-	cfg, err := config.Load(filepath.Join(cfgDir, "popcorn.toml"))
+	cfg, err := config.Load(filepath.Join(cfgDir, "cheapseats.toml"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,8 +134,8 @@ text = "Which tools track AI answers today?"
 func writeConfig(t *testing.T, dir, prompts string) {
 	t.Helper()
 	os.MkdirAll(filepath.Join(dir, "prompt-sets"), 0o755)
-	os.WriteFile(filepath.Join(dir, "popcorn.toml"), []byte(`[brand]
-name = "Popcorn"
+	os.WriteFile(filepath.Join(dir, "cheapseats.toml"), []byte(`[brand]
+name = "Cheap Seats"
 audience = "a software developer"
 
 [[answerers]]
@@ -162,7 +162,7 @@ func legacyRun(t *testing.T, db *store.DB, id, day string, prompts []string, fix
 		"search_policy": answer.SearchPolicy,
 		"grader_prompt": grade.System,
 		"set":           map[string]any{"id": "s", "name": "S", "tier": "core", "prompts": prompts, "competitors": []any{}, "version": "v", "file": "s.toml"},
-		"brand":         map[string]any{"Name": "Popcorn", "Aliases": nil, "Domains": nil, "About": "", "Facts": nil},
+		"brand":         map[string]any{"Name": "Cheap Seats", "Aliases": nil, "Domains": nil, "About": "", "Facts": nil},
 		"answerers":     []any{map[string]any{"ID": "claude", "Provider": "anthropic", "Model": "m", "Samples": map[string]any{"Search": 1, "Recall": 1}}},
 		"grader":        "g",
 	}

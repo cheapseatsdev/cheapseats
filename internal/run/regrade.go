@@ -9,12 +9,12 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/metcalfc/popcorn/internal/answer"
-	"github.com/metcalfc/popcorn/internal/config"
-	"github.com/metcalfc/popcorn/internal/grade"
-	"github.com/metcalfc/popcorn/internal/llm"
-	"github.com/metcalfc/popcorn/internal/sets"
-	"github.com/metcalfc/popcorn/internal/store"
+	"github.com/cheapseatsdev/cheapseats/internal/answer"
+	"github.com/cheapseatsdev/cheapseats/internal/config"
+	"github.com/cheapseatsdev/cheapseats/internal/grade"
+	"github.com/cheapseatsdev/cheapseats/internal/llm"
+	"github.com/cheapseatsdev/cheapseats/internal/sets"
+	"github.com/cheapseatsdev/cheapseats/internal/store"
 )
 
 // Re-grading grades a finished run's stored answers again under today's grader prompt and model,
@@ -319,7 +319,7 @@ func (e *Engine) regradeRun(ctx context.Context, r Run, set sets.Set) (int, floa
 		return 0, cost, stored(err)
 	}
 	defer tx.Rollback()
-	// Another process (popcorn regrade beside popcorn serve, a retry) may have changed the run
+	// Another process (cheapseats regrade beside cheapseats serve, a retry) may have changed the run
 	// while it was being graded: write only over the run as it was read, else nothing.
 	var snapJS, method, status string
 	var prior sql.NullString

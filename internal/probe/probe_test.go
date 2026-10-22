@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/metcalfc/popcorn/internal/config"
-	"github.com/metcalfc/popcorn/internal/llm"
+	"github.com/cheapseatsdev/cheapseats/internal/config"
+	"github.com/cheapseatsdev/cheapseats/internal/llm"
 )
 
 func TestProbeReturnsTheToolResultVerbatim(t *testing.T) {
@@ -22,7 +22,7 @@ func TestProbeReturnsTheToolResultVerbatim(t *testing.T) {
 		if d := llm.List(tool["blocked_domains"]); len(d) != 1 || d[0] != "example.com" || tool["max_uses"] != float64(1) {
 			t.Errorf("tool: %v", tool)
 		}
-		w.Write([]byte(`{"model":"m-1","content":[{"type":"server_tool_use","id":"s1","name":"web_search","input":{"query":"sandbox claude code"}},{"type":"web_search_tool_result","tool_use_id":"s1","content":[{"type":"web_search_result","url":"https://docs.popcorn.example/a","title":"A","page_age":"2026"},{"type":"web_search_result","url":"https://b.dev/","title":"B"}]},{"type":"text","text":"done"}],"usage":{"input_tokens":1000,"output_tokens":5,"server_tool_use":{"web_search_requests":1}}}`))
+		w.Write([]byte(`{"model":"m-1","content":[{"type":"server_tool_use","id":"s1","name":"web_search","input":{"query":"sandbox claude code"}},{"type":"web_search_tool_result","tool_use_id":"s1","content":[{"type":"web_search_result","url":"https://docs.cheapseats.example/a","title":"A","page_age":"2026"},{"type":"web_search_result","url":"https://b.dev/","title":"B"}]},{"type":"text","text":"done"}],"usage":{"input_tokens":1000,"output_tokens":5,"server_tool_use":{"web_search_requests":1}}}`))
 	}))
 	defer srv.Close()
 	old := llm.AnthropicURL
@@ -37,7 +37,7 @@ func TestProbeReturnsTheToolResultVerbatim(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Query != "sandbox claude code" || res.Model != "m-1" || len(res.Links) != 2 || res.Links[0].URL != "https://docs.popcorn.example/a" {
+	if res.Query != "sandbox claude code" || res.Model != "m-1" || len(res.Links) != 2 || res.Links[0].URL != "https://docs.cheapseats.example/a" {
 		t.Fatalf("%+v", res)
 	}
 	if !strings.Contains(string(res.Output), `"page_age":"2026"`) || res.ToolInput["query"] != "sandbox claude code" {

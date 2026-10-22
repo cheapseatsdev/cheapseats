@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/metcalfc/popcorn/internal/llm"
-	"github.com/metcalfc/popcorn/internal/suggest"
+	"github.com/cheapseatsdev/cheapseats/internal/llm"
+	"github.com/cheapseatsdev/cheapseats/internal/suggest"
 )
 
 // SuggestPrompts drafts n new prompts for a set (one analyst call, within the daily budget) as a

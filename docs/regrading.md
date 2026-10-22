@@ -6,8 +6,8 @@ answers older runs already have again, as they would be graded today, so those r
 method's trend from their own dates on. Answers are never asked again.
 
 ```bash
-popcorn regrade <set-id|run-id> [-since 28d]          # a dry run: what it would do and cost
-popcorn regrade <set-id|run-id> -since 90d -dry-run=false
+cheapseats regrade <set-id|run-id> [-since 28d]          # a dry run: what it would do and cost
+cheapseats regrade <set-id|run-id> -since 90d -dry-run=false
 ```
 
 - **What's re-graded**: a set's finished runs from the last `-since` (`28d`, `72h`, or `all`;
@@ -23,7 +23,7 @@ popcorn regrade <set-id|run-id> -since 90d -dry-run=false
   as runs, and a run the day's remaining budget can't cover isn't started.
 - **All or nothing per run**: every answer of a run is graded first, then the new grades are
   written together, only over the run as it was read: if something else changed it meanwhile
-  (another `popcorn regrade`, a retry), nothing is written. A run whose grading fails, or is cut
+  (another `cheapseats regrade`, a retry), nothing is written. A run whose grading fails, or is cut
   off, is left exactly as it was.
 - **History stays honest**: the run's snapshot takes today's grading inputs (how its answers were
   asked stays as it was), so its method is recomputed from it like any run's and it trends with
@@ -32,7 +32,7 @@ popcorn regrade <set-id|run-id> -since 90d -dry-run=false
   the method and grader it had before. The run page says "re-graded <date> (was method X)".
   Re-grading only some of a set's runs moves the trend's break to before the oldest re-graded run.
 - **Not rebuilt**: the run's fix list and themes stay as they were; rebuild them with
-  `popcorn fixes <run-id> -rebuild` and `popcorn themes <run-id> -rebuild` if you want them to
+  `cheapseats fixes <run-id> -rebuild` and `cheapseats themes <run-id> -rebuild` if you want them to
   follow the new grades.
 
 In the web UI, a set's page links to **Re-grade stored answers**, which shows the dry run (runs,

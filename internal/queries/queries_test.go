@@ -7,11 +7,11 @@ import (
 	"testing"
 
 	"github.com/BurntSushi/toml"
-	"github.com/metcalfc/popcorn/internal/answer"
-	"github.com/metcalfc/popcorn/internal/config"
-	"github.com/metcalfc/popcorn/internal/grade"
-	"github.com/metcalfc/popcorn/internal/run"
-	"github.com/metcalfc/popcorn/internal/sets"
+	"github.com/cheapseatsdev/cheapseats/internal/answer"
+	"github.com/cheapseatsdev/cheapseats/internal/config"
+	"github.com/cheapseatsdev/cheapseats/internal/grade"
+	"github.com/cheapseatsdev/cheapseats/internal/run"
+	"github.com/cheapseatsdev/cheapseats/internal/sets"
 )
 
 func TestNormalize(t *testing.T) {
@@ -52,7 +52,7 @@ func TestOverlap(t *testing.T) {
 }
 
 var (
-	brand = config.Brand{Name: "Popcorn", Aliases: []string{"popcorn-cli"}, Domains: []string{"popcorn.example"}}
+	brand = config.Brand{Name: "Cheap Seats", Aliases: []string{"cheapseats-cli"}, Domains: []string{"cheapseats.example"}}
 	set   = sets.Set{ID: "ai-search-visibility", File: "ai-search-visibility.toml",
 		Prompts:     []sets.Prompt{{ID: "tools-track", Text: "What tools track AI mentions of a brand?"}},
 		Competitors: []sets.Competitor{{Name: "Peec AI", Aliases: []string{"Peec"}}, {Name: "Profound"}, {Name: "RL"}}}
@@ -75,7 +75,7 @@ func TestInjected(t *testing.T) {
 		t.Errorf("already in prompt: %q", g)
 	}
 	// The brand, by its alias; a short name only as a whole word ("rl" isn't in "url").
-	if g := got("How do I check AI answers?", "popcorn-cli url checker"); !reflect.DeepEqual(g, []string{"Popcorn"}) {
+	if g := got("How do I check AI answers?", "cheapseats-cli url checker"); !reflect.DeepEqual(g, []string{"Cheap Seats"}) {
 		t.Errorf("brand alias: %q", g)
 	}
 }
@@ -103,7 +103,7 @@ func TestBuild(t *testing.T) {
 			Answer: &answer.Answer{Searches: searches}, Grade: &grade.Grade{Verdict: v}}
 	}
 	competitor := answer.Query{Query: "Peec AI vs Profound", Completed: true, Results: []answer.Link{{URL: "https://peec.ai/blog", Title: "Peec AI vs Profound"}}}
-	ours := answer.Query{Query: "best AI mention tracking tools", Completed: true, Results: []answer.Link{{URL: "https://docs.popcorn.example/x"}}}
+	ours := answer.Query{Query: "best AI mention tracking tools", Completed: true, Results: []answer.Link{{URL: "https://docs.cheapseats.example/x"}}}
 	rep := Build(Input{Brand: brand, Set: set, Results: []run.Result{
 		res(true, ours, competitor),
 		res(false, answer.Query{Query: `"peec ai"  vs profound`, Completed: true, Results: competitor.Results}),

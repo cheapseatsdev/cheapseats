@@ -7,9 +7,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/metcalfc/popcorn/internal/audit"
-	"github.com/metcalfc/popcorn/internal/crawl"
-	"github.com/metcalfc/popcorn/internal/run"
+	"github.com/cheapseatsdev/cheapseats/internal/audit"
+	"github.com/cheapseatsdev/cheapseats/internal/crawl"
+	"github.com/cheapseatsdev/cheapseats/internal/run"
 )
 
 // The site audit, the citation check and the crawler counts: free checks over plain HTTP and

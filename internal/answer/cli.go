@@ -23,8 +23,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/metcalfc/popcorn/internal/config"
-	"github.com/metcalfc/popcorn/internal/llm"
+	"github.com/cheapseatsdev/cheapseats/internal/config"
+	"github.com/cheapseatsdev/cheapseats/internal/llm"
 )
 
 // cliSlots caps concurrent calls per CLI: subscriptions are rate limited, and the limit is
@@ -49,7 +49,7 @@ func runCLIInput(ctx context.Context, provider, unsetKey string, stdin []byte, n
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
-	dir, err := os.MkdirTemp("", "popcorn-"+provider+"-")
+	dir, err := os.MkdirTemp("", "cheapseats-"+provider+"-")
 	if err != nil {
 		return nil, err
 	}

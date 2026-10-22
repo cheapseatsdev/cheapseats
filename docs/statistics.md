@@ -2,7 +2,7 @@
 
 A prompt gets a handful of answers a run (answerers × tracks × samples), so its rate moves a lot
 by chance: with six answers, one prompt out of seven rising between two runs is close to certain
-even when nothing changed. Popcorn tests every comparison against that noise. It computes all of
+even when nothing changed. Cheap Seats tests every comparison against that noise. It computes all of
 it from answers already stored, so there are no extra model calls.
 
 ## The building blocks
@@ -24,7 +24,7 @@ with more answers doesn't count for more. A cell is one prompt's `h` hits out of
   same) of the answerers both had. The page greys out a change that's within noise, and shows
   `±X pts` beside it and on hover.
 - **Rank moves** are tested the same way. Rank changes when another product crosses the brand,
-  so for each product that crossed, Popcorn tests the paired change in the gap (brand share minus
+  so for each product that crossed, Cheap Seats tests the paired change in the gap (brand share minus
   that product's share of a prompt's answers). The variance is the sum of all four cells'; the
   covariance between the two products is ignored. If no crossing is significant in the direction
   the rank moved, the table says **within noise** and draws no arrow.
@@ -49,7 +49,7 @@ The set page pools each prompt's answers over the window (7, 14 or 28 days, `?wi
 the newest day that asked it. Pooling stops at a change of method, wording or intent. Named and
 recommended each come with a Wilson 95% interval.
 
-**Sample advice.** When some answerer takes more than one sample per prompt, Popcorn splits the
+**Sample advice.** When some answerer takes more than one sample per prompt, Cheap Seats splits the
 run-to-run variance of each prompt's named rate as `V = S/n + D` (Profound's decomposition). `S` is
 the variance of one answer within a run, `n` is the samples, and `D` is the drift between runs
 that more samples can't remove. A cell is prompt × answerer × track, over the same-method runs
@@ -102,7 +102,7 @@ run had it.
   all.
 - **After**: every same-method run since the attempt, within 28 days of the newest.
 
-Popcorn tests the change in named and recommended with `D ± margin` as above, and gives one of
+Cheap Seats tests the change in named and recommended with `D ± margin` as above, and gives one of
 these statuses:
 
 | Status | When |

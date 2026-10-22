@@ -3,7 +3,7 @@
 Runs grade the brand. The prompt review grades the prompts: which ones tell you nothing, which move
 for no reason, which are answered about something else, which ask the same thing twice, which the
 assistants search for in other words, and what no prompt asks about. It's worked out from what
-Popcorn already stores (results, grades, searches, citations); it calls no model and costs
+Cheap Seats already stores (results, grades, searches, citations); it calls no model and costs
 nothing, so it runs when you open it. Review monthly: a month of runs is what the flags need.
 Nothing runs on a schedule.
 
@@ -13,7 +13,7 @@ Nothing runs on a schedule.
   flag, numbers rounded. `get_started` suggests it once a set has four weeks of runs and hasn't
   been reviewed in 30 days. Opening the page, the CLI and the MCP tool count as a review; the JSON
   doesn't.
-- CLI: `popcorn review <set-id> [-days 30] [-json] [-suggest]`.
+- CLI: `cheapseats review <set-id> [-days 30] [-json] [-suggest]`.
 
 The review reads the set's finished runs in the window, and each prompt under the wording it was
 last asked in: walking back from the newest run, it stops at the first run that asked it in other
@@ -40,7 +40,7 @@ Each flag comes with the numbers behind it and a one-line suggestion. Thresholds
 | **Off target** | Any of: with 3 or more competitors configured and at least **5** product mentions, under **30%** of them are the brand or a configured competitor; one product that's neither is named in at least **50%** of the answers and more than the brand and every competitor; at least **25%** of the answers are graded as using the brand's name for another product (`other_product`). The top unexpected products are listed with counts. | Add context to the prompt (the category, who is asking), or add the product to the competitors if it is one. |
 | **Duplicate** | Two prompts of the same intent whose answers name nearly the same products, each product weighted by the share of answers naming it (weighted Jaccard, Σmin/Σmax, at least **0.75**), and whose verdict shares (recommended, mentioned, absent) differ by at most **15 points** (total variation). | Merge them to save answers: keep one, retire the other. |
 | **Rewritten by the assistant** | Over at least **5** searches, both from prompt (the share of a search's words in the prompt) and prompt kept (the share of the prompt's words in the search) average under **25%** ([how words are compared](searches.md)). | The assistants search for different words (the top ones it adds are listed); consider phrasing the prompt that way. |
-| **Branded leak** | Outside `head-to-heads`: the prompt names the brand or an alias as a whole word (`popcorn check` refuses these, so it's for prompts from before), or at least **2** of its searches and **20%** of them add the brand's name. | Reword it as a buyer who hasn't heard of the brand would ask. For searches, check the prompt doesn't point at the brand (a term only it uses); if not, the assistants found it on their own. |
+| **Branded leak** | Outside `head-to-heads`: the prompt names the brand or an alias as a whole word (`cheapseats check` refuses these, so it's for prompts from before), or at least **2** of its searches and **20%** of them add the brand's name. | Reword it as a buyer who hasn't heard of the brand would ask. For searches, check the prompt doesn't point at the brand (a term only it uses); if not, the assistants found it on their own. |
 
 The noise split is the one the set page's sample advice uses ([statistics](statistics.md)): per
 cell, S is the mean within-run variance n/(n-1)·p(1-p) and D what's left of the variance of the
@@ -72,7 +72,7 @@ permanent.
 
 ## Proposed edits (optional, one analyst call)
 
-The page's button, `popcorn review -suggest` or `review_prompts` with `suggest: true` send the
+The page's button, `cheapseats review -suggest` or `review_prompts` with `suggest: true` send the
 flags and their numbers to the analyst, fenced as data (product names and search words come from
 the web, so they go quoted, on one line, at most 60 characters), (the `[analyst]` model, within the daily budget like
 `suggest-prompts`; nothing on the `claude-code` provider) and print its proposals as a diff
@@ -85,6 +85,6 @@ against the set's file:
 Dropped, each with its reason: rewrites or retirements of prompts the set doesn't have, rewrites
 that change nothing, text that repeats a prompt in any set, has search operators, quotes or a
 link, or runs over 300 characters, text naming the brand outside `head-to-heads` (or not naming
-it in `head-to-heads`), and any edit `popcorn check` would refuse once applied to a copy of the
+it in `head-to-heads`), and any edit `cheapseats check` would refuse once applied to a copy of the
 sets. Nothing is
 written: the set changes only by pull request in the config repo.

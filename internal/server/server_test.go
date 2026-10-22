@@ -12,10 +12,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/metcalfc/popcorn/internal/app"
-	"github.com/metcalfc/popcorn/internal/config"
-	"github.com/metcalfc/popcorn/internal/llm"
-	"github.com/metcalfc/popcorn/internal/store"
+	"github.com/cheapseatsdev/cheapseats/internal/app"
+	"github.com/cheapseatsdev/cheapseats/internal/config"
+	"github.com/cheapseatsdev/cheapseats/internal/llm"
+	"github.com/cheapseatsdev/cheapseats/internal/store"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -26,14 +26,14 @@ func TestPagesRenderWithData(t *testing.T) {
 		var text string
 		switch {
 		case strings.Contains(s, "sharp growth lead"):
-			text = `{"insights":"## Why Popcorn lost\nDocker is GA.","fixes":[{"rank":1,"type":"new-page","title":"Write a credential-gateway guide","target":"docs.popcorn.example/guides/keys-off-the-box/","claim":"how","done_when":"page live","evidence":"Use Docker Sandboxes or Popcorn. (prompt 1)","prompts":[1],"effort":"S","displaces":"https://docs.docker.com/ai/sandboxes/security/"}]}`
+			text = `{"insights":"## Why Cheap Seats lost\nDocker is GA.","fixes":[{"rank":1,"type":"new-page","title":"Write a credential-gateway guide","target":"docs.cheapseats.example/guides/keys-off-the-box/","claim":"how","done_when":"page live","evidence":"Use Docker Sandboxes or Cheap Seats. (prompt 1)","prompts":[1],"effort":"S","displaces":"https://docs.docker.com/ai/sandboxes/security/"}]}`
 		case strings.Contains(s, "output_config"):
-			text = `{"verdict":"mentioned","position":2,"top_pick":"Docker Sandboxes","named":["Docker Sandboxes","Popcorn"],"reasoning":"r","why_not_top":"Docker is GA","objections":["private beta"],"tone":"positive","praise":["open source"],"evidence":"Docker Sandboxes or Popcorn"}`
+			text = `{"verdict":"mentioned","position":2,"top_pick":"Docker Sandboxes","named":["Docker Sandboxes","Cheap Seats"],"reasoning":"r","why_not_top":"Docker is GA","objections":["private beta"],"tone":"positive","praise":["open source"],"evidence":"Docker Sandboxes or Cheap Seats"}`
 		case strings.Contains(s, `"tools"`):
-			w.Write([]byte(`{"content":[{"type":"server_tool_use","id":"s1","name":"web_search","input":{"query":"q"}},{"type":"web_search_tool_result","tool_use_id":"s1","content":[{"type":"web_search_result","url":"https://docs.docker.com/ai/sandboxes/security/","title":"x"}]},{"type":"text","text":"Use Docker Sandboxes or Popcorn.","citations":[{"url":"https://docs.docker.com/ai/sandboxes/security/"}]}],"usage":{"input_tokens":10,"output_tokens":5}}`))
+			w.Write([]byte(`{"content":[{"type":"server_tool_use","id":"s1","name":"web_search","input":{"query":"q"}},{"type":"web_search_tool_result","tool_use_id":"s1","content":[{"type":"web_search_result","url":"https://docs.docker.com/ai/sandboxes/security/","title":"x"}]},{"type":"text","text":"Use Docker Sandboxes or Cheap Seats.","citations":[{"url":"https://docs.docker.com/ai/sandboxes/security/"}]}],"usage":{"input_tokens":10,"output_tokens":5}}`))
 			return
 		default:
-			w.Write([]byte(`{"content":[{"type":"text","text":"Use Docker Sandboxes or Popcorn."}],"usage":{"input_tokens":10,"output_tokens":5}}`))
+			w.Write([]byte(`{"content":[{"type":"text","text":"Use Docker Sandboxes or Cheap Seats."}],"usage":{"input_tokens":10,"output_tokens":5}}`))
 			return
 		}
 		json.NewEncoder(w).Encode(map[string]any{"content": []any{map[string]any{"type": "text", "text": text}}, "stop_reason": "end_turn", "usage": map[string]any{"input_tokens": 1, "output_tokens": 1}})
@@ -42,7 +42,7 @@ func TestPagesRenderWithData(t *testing.T) {
 	llm.AnthropicURL = api.URL
 	t.Setenv("ANTHROPIC_API_KEY", "fake-review-provider-key-123456")
 	t.Setenv("OPENAI_API_KEY", "")
-	os.Unsetenv("POPCORN_TOKENS")
+	os.Unsetenv("CHEAPSEATS_TOKENS")
 
 	cfg := testConfig(t)
 	dir := t.TempDir()
@@ -63,7 +63,7 @@ func TestPagesRenderWithData(t *testing.T) {
 	h := s.Handler()
 	for path, want := range map[string]string{
 		"/":                                 "Write a credential-gateway guide",
-		"/runs/" + r.ID:                     "<h2>Why Popcorn lost</h2>",
+		"/runs/" + r.ID:                     "<h2>Why Cheap Seats lost</h2>",
 		"/runs/" + r.ID + "?opinion":        "&#43;100</b><small>net sentiment</small>",
 		"/rankings":                         "#1",
 		"/quick-wins":                       "keys-off-the-box",
@@ -94,7 +94,7 @@ func TestPagesRenderWithData(t *testing.T) {
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest("GET", "/runs/"+r.ID, nil))
 	// The grader's evidence, highlighted in the answer: the answer's own words, escaped.
-	for _, want := range []string{`<blockquote class="evidence">Docker Sandboxes or Popcorn</blockquote>`, `<pre>Use <mark title="the grader's evidence">Docker Sandboxes or Popcorn</mark>.</pre>`} {
+	for _, want := range []string{`<blockquote class="evidence">Docker Sandboxes or Cheap Seats</blockquote>`, `<pre>Use <mark title="the grader's evidence">Docker Sandboxes or Cheap Seats</mark>.</pre>`} {
 		if !strings.Contains(rec.Body.String(), want) {
 			t.Errorf("run page: want %q", want)
 		}
@@ -170,7 +170,7 @@ func TestPagesRenderWithData(t *testing.T) {
 		t.Error("negative since_days should be a tool error")
 	}
 	if res, _ := a.Runs.Results(ctx, r.ID); len(res) > 0 {
-		if text, isErr := call("get_result", map[string]any{"run": r.ID, "result": res[0].ID}); isErr || !strings.Contains(text, `"evidence":"Docker Sandboxes or Popcorn"`) {
+		if text, isErr := call("get_result", map[string]any{"run": r.ID, "result": res[0].ID}); isErr || !strings.Contains(text, `"evidence":"Docker Sandboxes or Cheap Seats"`) {
 			t.Errorf("get_result: %s", limit(text))
 		}
 	}
@@ -189,7 +189,7 @@ func TestPagesRenderWithData(t *testing.T) {
 	}
 }
 func TestFixListNeedsAFinishedRun(t *testing.T) {
-	t.Setenv("POPCORN_TOKENS", "")
+	t.Setenv("CHEAPSEATS_TOKENS", "")
 	cfg := testConfig(t)
 	d, _ := store.Open(t.TempDir())
 	defer d.Close()
@@ -225,7 +225,7 @@ func TestFixListNeedsAFinishedRun(t *testing.T) {
 }
 
 func TestLiveChangesWhenRunsDo(t *testing.T) {
-	t.Setenv("POPCORN_TOKENS", "")
+	t.Setenv("CHEAPSEATS_TOKENS", "")
 	cfg := testConfig(t)
 	d, _ := store.Open(t.TempDir())
 	defer d.Close()
@@ -259,7 +259,7 @@ func TestLiveChangesWhenRunsDo(t *testing.T) {
 }
 
 func TestDashboardShowsProgress(t *testing.T) {
-	t.Setenv("POPCORN_TOKENS", "")
+	t.Setenv("CHEAPSEATS_TOKENS", "")
 	d, _ := store.Open(t.TempDir())
 	defer d.Close()
 	s, err := New(newApp(t, testConfig(t), d))
@@ -299,15 +299,17 @@ func TestDashboardShowsProgress(t *testing.T) {
 }
 
 func TestTokens(t *testing.T) {
-	t.Setenv("POPCORN_TOKENS", "a,b")
-	s := &Server{tokens: []string{"a", "b"}, cookie: "popcorn_token_x"}
+	t.Setenv("CHEAPSEATS_TOKENS", "a,b")
+	s := &Server{tokens: []string{"a", "b"}, cookie: "cheapseats_token_x", oldCookie: "popcorn_token_x"}
 	h := s.auth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) }))
 	for _, c := range []struct {
 		path, auth string
 		code       int
 	}{{"/api/runs", "", 401}, {"/api/runs", "Bearer b", 200}, {"/api/runs", "Bearer c", 401}, {"/", "", 303}, {"/login", "", 200},
 		// Another deployment's cookie on the same host doesn't count, this one's does.
-		{"/", "cookie popcorn_token_other=a", 303}, {"/", "cookie popcorn_token_x=a", 200}} {
+		{"/", "cookie cheapseats_token_other=a", 303}, {"/", "cookie cheapseats_token_x=a", 200},
+		// A sign-in from before the rename still counts.
+		{"/", "cookie popcorn_token_x=a", 200}, {"/", "cookie popcorn_token_x=c", 303}} {
 		rec := httptest.NewRecorder()
 		req := httptest.NewRequest("GET", c.path, nil)
 		if v, ok := strings.CutPrefix(c.auth, "cookie "); ok {
@@ -320,14 +322,19 @@ func TestTokens(t *testing.T) {
 		if rec.Code != c.code {
 			t.Errorf("%s %q: %d", c.path, c.auth, rec.Code)
 		}
+		if c.auth == "cookie popcorn_token_x=a" {
+			if got := strings.Join(rec.Header().Values("Set-Cookie"), "; "); !strings.Contains(got, "cheapseats_token_x=a") || !strings.Contains(got, "popcorn_token_x=;") {
+				t.Errorf("the old cookie isn't carried over: %s", got)
+			}
+		}
 	}
 }
 
-// testConfig is the fixture popcorn.toml (with its prompt sets beside it) and one API answerer on
+// testConfig is the fixture cheapseats.toml (with its prompt sets beside it) and one API answerer on
 // a fake provider, so no test depends on the config repo, or ever reaches a real CLI or API.
 func testConfig(t *testing.T) *config.Config {
 	t.Helper()
-	cfg, err := config.Load("../../examples/popcorn-config/popcorn.toml")
+	cfg, err := config.Load("../../examples/cheapseats-config/cheapseats.toml")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -354,9 +361,9 @@ func limit(s string) string {
 // Behind a proxy that signs people in (exe.dev, oauth2-proxy), its email header signs a request
 // in; the allowlist narrows who; tokens keep working for API clients.
 func TestProxyEmailHeader(t *testing.T) {
-	t.Setenv("POPCORN_TOKENS", "tok")
-	t.Setenv("POPCORN_AUTH_HEADER", "X-ExeDev-Email")
-	t.Setenv("POPCORN_ALLOWED_EMAILS", "alice@acme.com, @team.example")
+	t.Setenv("CHEAPSEATS_TOKENS", "tok")
+	t.Setenv("CHEAPSEATS_AUTH_HEADER", "X-ExeDev-Email")
+	t.Setenv("CHEAPSEATS_ALLOWED_EMAILS", "alice@acme.com, @team.example")
 	d, _ := store.Open(t.TempDir())
 	defer d.Close()
 	s, err := New(newApp(t, testConfig(t), d))
@@ -392,7 +399,7 @@ func TestProxyEmailHeader(t *testing.T) {
 		}
 	}
 	// Without tokens, a request the proxy didn't sign in is told where to sign in.
-	t.Setenv("POPCORN_TOKENS", "")
+	t.Setenv("CHEAPSEATS_TOKENS", "")
 	s, _ = New(newApp(t, testConfig(t), d))
 	rec := httptest.NewRecorder()
 	s.Handler().ServeHTTP(rec, httptest.NewRequest("GET", "/", nil))
@@ -404,15 +411,15 @@ func TestProxyEmailHeader(t *testing.T) {
 // Pages link assets by content hash, so a deploy that changes one changes its URL, and only
 // versioned URLs are cached for long.
 func TestAssetsAreVersioned(t *testing.T) {
-	t.Setenv("POPCORN_TOKENS", "")
-	t.Setenv("POPCORN_AUTH_HEADER", "")
+	t.Setenv("CHEAPSEATS_TOKENS", "")
+	t.Setenv("CHEAPSEATS_AUTH_HEADER", "")
 	d, _ := store.Open(t.TempDir())
 	defer d.Close()
 	s, _ := New(newApp(t, testConfig(t), d))
 	h := s.Handler()
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest("GET", "/search", nil))
-	if !strings.Contains(rec.Body.String(), `href="/static/popcorn.css?v=`+assetHashes["popcorn.css"]+`"`) || assetHashes["popcorn.css"] == "" {
+	if !strings.Contains(rec.Body.String(), `href="/static/cheapseats.css?v=`+assetHashes["cheapseats.css"]+`"`) || assetHashes["cheapseats.css"] == "" {
 		t.Fatalf("stylesheet not versioned:\n%s", limit(rec.Body.String()))
 	}
 	if !strings.Contains(rec.Body.String(), `<link rel="icon" type="image/svg+xml" href="/static/favicon.svg?v=`) {
@@ -423,7 +430,7 @@ func TestAssetsAreVersioned(t *testing.T) {
 	if fav.Code != 200 || !strings.HasPrefix(fav.Header().Get("content-type"), "image/svg+xml") || !strings.Contains(fav.Body.String(), "<path") {
 		t.Errorf("favicon: %d %q", fav.Code, fav.Header().Get("content-type"))
 	}
-	for path, want := range map[string]string{"/static/popcorn.css?v=x": "immutable", "/static/popcorn.css": "no-cache"} {
+	for path, want := range map[string]string{"/static/cheapseats.css?v=x": "immutable", "/static/cheapseats.css": "no-cache"} {
 		rec := httptest.NewRecorder()
 		h.ServeHTTP(rec, httptest.NewRequest("GET", path, nil))
 		if rec.Code != 200 || !strings.Contains(rec.Header().Get("cache-control"), want) {
@@ -433,7 +440,7 @@ func TestAssetsAreVersioned(t *testing.T) {
 }
 
 // Behind a proxy on the same machine, MCP requests arrive on loopback under the public host name:
-// served when that name is in POPCORN_HOSTS, refused under any other (DNS rebinding).
+// served when that name is in CHEAPSEATS_HOSTS, refused under any other (DNS rebinding).
 func TestMCPBehindALocalProxy(t *testing.T) {
 	initialize := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"t","version":"0"}}}`
 	for _, c := range []struct {
@@ -441,12 +448,12 @@ func TestMCPBehindALocalProxy(t *testing.T) {
 		host  string
 		code  int
 	}{
-		{nil, "popcorn.example.com", 403},
+		{nil, "cheapseats.example.com", 403},
 		{nil, "localhost:3000", 200},
-		{[]string{"popcorn.example.com"}, "popcorn.example.com", 200},
-		{[]string{"popcorn.example.com"}, "POPCORN.example.com:443", 200},
-		{[]string{"popcorn.example.com"}, "attacker.example", 403},
-		{[]string{"popcorn.example.com"}, "127.0.0.1:3000", 200},
+		{[]string{"cheapseats.example.com"}, "cheapseats.example.com", 200},
+		{[]string{"cheapseats.example.com"}, "CHEAPSEATS.example.com:443", 200},
+		{[]string{"cheapseats.example.com"}, "attacker.example", 403},
+		{[]string{"cheapseats.example.com"}, "127.0.0.1:3000", 200},
 	} {
 		s := &Server{App: &app.App{Cfg: &config.Config{Brand: config.Brand{Name: "Acme"}}}, hosts: c.hosts}
 		ts := httptest.NewServer(s.mcpHandler())

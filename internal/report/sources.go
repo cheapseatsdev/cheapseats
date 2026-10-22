@@ -4,8 +4,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/metcalfc/popcorn/internal/config"
-	"github.com/metcalfc/popcorn/internal/sets"
+	"github.com/cheapseatsdev/cheapseats/internal/config"
+	"github.com/cheapseatsdev/cheapseats/internal/sets"
 )
 
 // Source classes: what kind of site a page an answer drew on is. Own and competitor come from the
@@ -24,7 +24,7 @@ const (
 var ClassOrder = []string{Own, Competitor, UGC, Review, Reference, Institutional, Editorial}
 
 // Classes are the built-in hosts (or host/path prefixes) of each class; a host covers its
-// subdomains. [sources] in popcorn.toml adds to them and wins over them.
+// subdomains. [sources] in cheapseats.toml adds to them and wins over them.
 var Classes = map[string][]string{
 	UGC: {"reddit.com", "youtube.com", "youtu.be", "stackoverflow.com", "stackexchange.com", "superuser.com",
 		"serverfault.com", "askubuntu.com", "news.ycombinator.com", "quora.com", "medium.com", "dev.to",

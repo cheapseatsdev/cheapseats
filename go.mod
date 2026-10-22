@@ -1,4 +1,4 @@
-module github.com/metcalfc/popcorn
+module github.com/cheapseatsdev/cheapseats
 
 go 1.25.0
 

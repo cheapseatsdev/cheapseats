@@ -12,7 +12,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/metcalfc/popcorn/internal/store"
+	"github.com/cheapseatsdev/cheapseats/internal/store"
 )
 
 // Share is a read-only link to one run's report, for someone without a sign-in. The link carries

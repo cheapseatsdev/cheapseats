@@ -8,10 +8,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/metcalfc/popcorn/internal/answer"
-	"github.com/metcalfc/popcorn/internal/config"
-	"github.com/metcalfc/popcorn/internal/llm"
-	"github.com/metcalfc/popcorn/internal/sets"
+	"github.com/cheapseatsdev/cheapseats/internal/answer"
+	"github.com/cheapseatsdev/cheapseats/internal/config"
+	"github.com/cheapseatsdev/cheapseats/internal/llm"
+	"github.com/cheapseatsdev/cheapseats/internal/sets"
 )
 
 // Stages are the parts of a buyer's journey the questions are spread across, in snippet order.
@@ -154,7 +154,7 @@ func Prompts(ctx context.Context, cfg *config.Config, set sets.Set, all []sets.S
 // an id made from its wording and unique against taken.
 func Snippet(ps []Prompt, taken map[string]bool) string {
 	var b strings.Builder
-	b.WriteString("# Suggested by popcorn suggest-prompts. Check each one is a question your buyers ask, and its id,\n# before committing: ids are permanent.\n\n")
+	b.WriteString("# Suggested by cheapseats suggest-prompts. Check each one is a question your buyers ask, and its id,\n# before committing: ids are permanent.\n\n")
 	for _, st := range Stages {
 		first := true
 		for _, x := range ps {

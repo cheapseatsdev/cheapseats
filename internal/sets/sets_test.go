@@ -9,15 +9,15 @@ import (
 )
 
 func TestFixtureSetsLoad(t *testing.T) {
-	files, _ := filepath.Glob("../../examples/popcorn-config/prompt-sets/*.toml")
-	got, err := LoadAll("../../examples/popcorn-config/prompt-sets")
+	files, _ := filepath.Glob("../../examples/cheapseats-config/prompt-sets/*.toml")
+	got, err := LoadAll("../../examples/cheapseats-config/prompt-sets")
 	if err != nil || len(files) == 0 || len(got) != len(files) {
 		t.Fatalf("loaded %d of %d sets: %v", len(got), len(files), err)
 	}
 	if got[0].Tier != Core {
 		t.Error("core sets should sort first")
 	}
-	if err := Check("../../examples/popcorn-config/prompt-sets", []string{"Popcorn"}); err != nil {
+	if err := Check("../../examples/cheapseats-config/prompt-sets", []string{"Cheap Seats"}); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -41,25 +41,25 @@ func TestCheckCatchesTheBrandAndDuplicates(t *testing.T) {
 		}
 	}
 	prompt := func(id, text string) string { return "\n[[prompts]]\nid = \"" + id + "\"\ntext = \"" + text + "\"\n" }
-	write("a.toml", `id = "a"`+prompt("any-good", "Is popcorn any good?"))
+	write("a.toml", `id = "a"`+prompt("any-good", "Is cheap seats any good?"))
 	write("b.toml", `id = "b"`+prompt("what-to-use", "What should I use?"))
 	write("d.toml", `id = "a"`+prompt("dup-set", "A set reusing a set id"))
 	write("c.toml", `id = "c"`+prompt("what-to-use", "Something else entirely?"))
 	write("e.toml", `id = "e"`+prompt("same-again", "What  should I use?"))
-	write("h.toml", `id = "head-to-heads"`+prompt("vs-docker", "Popcorn or Docker?"))
+	write("h.toml", `id = "head-to-heads"`+prompt("vs-docker", "Cheap Seats or Docker?"))
 	write("old.toml", `id = "old"
 prompts = ["A list of strings, from before ids"]`)
 	write("bad.toml", `id = "Bad Id"`)
-	err := Check(dir, []string{"Popcorn"})
+	err := Check(dir, []string{"Cheap Seats"})
 	if err == nil {
 		t.Fatal("want errors")
 	}
 	for _, want := range []string{
-		"a.toml: prompt any-good names Popcorn",
+		"a.toml: prompt any-good names Cheap Seats",
 		`d.toml: id "a" is already used`,
 		`c.toml: prompt id "what-to-use" is already used in b`,
 		`e.toml: prompt "same-again" asks the same thing as "what-to-use"`,
-		"old.toml", "popcorn migrate-config",
+		"old.toml", "cheapseats migrate-config",
 		"bad.toml: id must be",
 	} {
 		if !strings.Contains(err.Error(), want) {
@@ -139,9 +139,9 @@ func TestNamesMatchesWholeWords(t *testing.T) {
 	}{
 		{"Is rl any good?", "rl", true},
 		{"Paste the url here", "rl", false},
-		{"Popcorn vs Profound", "popcorn", true},
-		{"popcorn.example docs", "popcorn.example", true},
-		{"microwave popcorns", "popcorn", false},
+		{"Cheap Seats vs Profound", "cheap seats", true},
+		{"cheapseats.example docs", "cheapseats.example", true},
+		{"microwave cheapseatss", "cheapseats", false},
 		{"anything", "", false},
 	} {
 		if got := Names(c.text, c.name); got != c.want {

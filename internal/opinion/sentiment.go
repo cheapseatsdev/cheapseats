@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/metcalfc/popcorn/internal/grade"
+	"github.com/cheapseatsdev/cheapseats/internal/grade"
 )
 
 // Sentiment is the tone of the answers that name the brand.

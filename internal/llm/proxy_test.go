@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/metcalfc/popcorn/internal/config"
+	"github.com/cheapseatsdev/cheapseats/internal/config"
 	"net/http"
 	"net/http/httptest"
 	"testing"

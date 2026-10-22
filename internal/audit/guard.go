@@ -13,7 +13,7 @@ import (
 )
 
 // The URLs fetched come from config, from MCP callers and, for the citation check, from model
-// answers, so a fetch must never reach the machine Popcorn runs on or its network: a cloud
+// answers, so a fetch must never reach the machine Cheap Seats runs on or its network: a cloud
 // metadata address, a database on loopback, an admin panel on 10/8. The check runs on the address
 // actually dialed, after DNS, so a redirect or a name that resolves to one is refused too.
 

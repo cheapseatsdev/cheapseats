@@ -3,8 +3,8 @@ package llm
 import (
 	"context"
 	"fmt"
-	"github.com/metcalfc/popcorn/internal/budget"
-	"github.com/metcalfc/popcorn/internal/config"
+	"github.com/cheapseatsdev/cheapseats/internal/budget"
+	"github.com/cheapseatsdev/cheapseats/internal/config"
 )
 
 type accountingKey struct{}

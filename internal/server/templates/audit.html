@@ -1,6 +1,6 @@
 {{define "title"}}Site audit · {{end}}{{define "body"}}
 <h1>Site audit</h1><p class="sub">What AI assistants' crawlers can read on {{brand}}'s sites, checked over plain HTTP the way a crawler that runs no JavaScript sees them: robots.txt rules and firewall blocks for each AI crawler, llms.txt, the sitemap, and each page's title, description, headings, structured data and text. Free: no model calls. Its errors and warnings go to the analyst with the next fix list.</p>
-<form method="post" action="/audit"><button{{if .Running}} disabled{{end}}>{{icon "refresh-cw"}}{{if .Running}}Auditing…{{else}}Audit now{{end}}</button> <span class="muted small">{{range $i, $s := .Sites}}{{if $i}}, {{end}}<span class="mono">{{$s}}</span>{{else}}No sites listed: add [[brand.sites]] to popcorn.toml.{{end}}</span></form>
+<form method="post" action="/audit"><button{{if .Running}} disabled{{end}}>{{icon "refresh-cw"}}{{if .Running}}Auditing…{{else}}Audit now{{end}}</button> <span class="muted small">{{range $i, $s := .Sites}}{{if $i}}, {{end}}<span class="mono">{{$s}}</span>{{else}}No sites listed: add [[brand.sites]] to cheapseats.toml.{{end}}</span></form>
 {{with .Error}}<p class="err">{{.}}</p>{{end}}
 {{with .Audit}}<p class="muted">Last audit {{day .At}} · <span class="err">{{.Errors}} errors</span> · {{.Warnings}} warnings · {{.Infos}} info</p>
 {{range .Sites}}{{$site := .Site}}<h2>{{.Site}}</h2>
@@ -14,7 +14,7 @@
 {{end}}{{else}}<p class="muted">No audit yet.</p>{{end}}
 
 <h2 id="citations">Pages the answers cite</h2>
-<p class="sub">The third-party pages a run's answers cited (then surfaced) most, fetched as Popcorn where their robots.txt allows, to see whether they name {{brand}} and which competitors. One that names competitors but not {{brand}} is an outreach target. Free; each page is fetched at most once a day.</p>
+<p class="sub">The third-party pages a run's answers cited (then surfaced) most, fetched as Cheap Seats where their robots.txt allows, to see whether they name {{brand}} and which competitors. One that names competitors but not {{brand}} is an outreach target. Free; each page is fetched at most once a day.</p>
 {{if .Runs}}<form method="post" action="/audit/citations" class="row"><select name="run" aria-label="Run">{{range .Runs}}<option value="{{.ID}}"{{if eq .ID $.RunID}} selected{{end}}>{{.Name}} · {{day .CreatedAt}}</option>{{end}}</select> <button class="ghost" formmethod="get" formaction="/audit#citations">Show</button> <button{{if .Checking}} disabled{{end}}>{{icon "search"}}{{if .Checking}}Checking…{{else}}Check citations{{end}}</button></form>
 {{with .Check}}<p class="muted">Checked {{day .At}} · {{.Outreach}} of {{len .Pages}} pages name competitors but not {{brand}}</p>
 <div class="scroll"><table><tr><th>Page</th><th class="num">Cited</th><th class="num">Surfaced</th><th>Names {{brand}}</th><th>Competitors named</th></tr>

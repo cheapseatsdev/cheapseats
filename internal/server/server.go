@@ -1,10 +1,10 @@
-// Package server is popcorn's web UI (server-rendered, no build step) and JSON API.
+// Package server is cheapseats's web UI (server-rendered, no build step) and JSON API.
 //
-// Auth: when POPCORN_TOKENS is set (comma-separated, so one can be rotated at a time), every
+// Auth: when CHEAPSEATS_TOKENS is set (comma-separated, so one can be rotated at a time), every
 // request needs `Authorization: Bearer <token>`, or the cookie /login sets. Behind a proxy that
 // signs people in and passes their email in a header (exe.dev's X-ExeDev-Email, an
-// oauth2-proxy's X-Forwarded-Email), POPCORN_AUTH_HEADER names that header and a request carrying
-// it is signed in, optionally limited to POPCORN_ALLOWED_EMAILS; tokens still work alongside it,
+// oauth2-proxy's X-Forwarded-Email), CHEAPSEATS_AUTH_HEADER names that header and a request carrying
+// it is signed in, optionally limited to CHEAPSEATS_ALLOWED_EMAILS; tokens still work alongside it,
 // for API and MCP clients. With neither set it's open, which is only safe because `serve` binds
 // to 127.0.0.1 by default.
 package server
@@ -26,22 +26,22 @@ import (
 	"math"
 	"net/http"
 	"net/url"
-	"os"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/metcalfc/popcorn/internal/analysis"
-	"github.com/metcalfc/popcorn/internal/app"
-	"github.com/metcalfc/popcorn/internal/grade"
-	"github.com/metcalfc/popcorn/internal/llm"
-	"github.com/metcalfc/popcorn/internal/opinion"
-	"github.com/metcalfc/popcorn/internal/probe"
-	"github.com/metcalfc/popcorn/internal/report"
-	"github.com/metcalfc/popcorn/internal/run"
-	"github.com/metcalfc/popcorn/internal/sets"
-	"github.com/metcalfc/popcorn/internal/store"
-	"github.com/metcalfc/popcorn/internal/version"
+	"github.com/cheapseatsdev/cheapseats/internal/analysis"
+	"github.com/cheapseatsdev/cheapseats/internal/app"
+	"github.com/cheapseatsdev/cheapseats/internal/env"
+	"github.com/cheapseatsdev/cheapseats/internal/grade"
+	"github.com/cheapseatsdev/cheapseats/internal/llm"
+	"github.com/cheapseatsdev/cheapseats/internal/opinion"
+	"github.com/cheapseatsdev/cheapseats/internal/probe"
+	"github.com/cheapseatsdev/cheapseats/internal/report"
+	"github.com/cheapseatsdev/cheapseats/internal/run"
+	"github.com/cheapseatsdev/cheapseats/internal/sets"
+	"github.com/cheapseatsdev/cheapseats/internal/store"
+	"github.com/cheapseatsdev/cheapseats/internal/version"
 	"github.com/yuin/goldmark"
 )
 
@@ -53,16 +53,18 @@ type Server struct {
 	tokens []string
 	pages  map[string]*template.Template
 	// A header a signing-in proxy sets to the user's email, and the emails or @domains allowed
-	// (any, when empty). Only set this when nothing can reach Popcorn except through that proxy.
+	// (any, when empty). Only set this when nothing can reach Cheap Seats except through that proxy.
 	authHeader string
 	allowed    []string
-	// Host names a proxy on the same machine serves Popcorn as (POPCORN_HOSTS). MCP refuses a
+	// Host names a proxy on the same machine serves Cheap Seats as (CHEAPSEATS_HOSTS). MCP refuses a
 	// request that arrives on loopback under any other non-local name (DNS rebinding).
 	hosts []string
 	// The login cookie's name. Cookies ignore the port, so two deployments on one host need
 	// different names or each sign-in signs the other out.
 	cookie string
-	// Where links to this Popcorn point (POPCORN_PUBLIC_URL), for share links; see linkBase.
+	// The name a sign-in before the rename set, honored and carried over to cookie.
+	oldCookie string
+	// Where links to this Cheap Seats point (CHEAPSEATS_PUBLIC_URL), for share links; see linkBase.
 	publicURL string
 	// The shared-report page, which has its own layout (no navigation to pages behind auth), and
 	// the limit on unknown tokens asked for.
@@ -71,19 +73,19 @@ type Server struct {
 }
 
 func New(a *app.App) (*Server, error) {
-	s := &Server{App: a, cookie: "popcorn_token_" + a.Cfg.Brand.Slug(), authHeader: strings.TrimSpace(os.Getenv("POPCORN_AUTH_HEADER")),
-		publicURL: strings.TrimRight(strings.TrimSpace(os.Getenv("POPCORN_PUBLIC_URL")), "/")}
-	for _, t := range strings.Split(os.Getenv("POPCORN_TOKENS"), ",") {
+	s := &Server{App: a, cookie: "cheapseats_token_" + a.Cfg.Brand.Slug(), oldCookie: "popcorn_token_" + a.Cfg.Brand.Slug(), authHeader: strings.TrimSpace(env.Get("AUTH_HEADER")),
+		publicURL: strings.TrimRight(strings.TrimSpace(env.Get("PUBLIC_URL")), "/")}
+	for _, t := range strings.Split(env.Get("TOKENS"), ",") {
 		if t = strings.TrimSpace(t); t != "" {
 			s.tokens = append(s.tokens, t)
 		}
 	}
-	for _, h := range strings.Split(os.Getenv("POPCORN_HOSTS"), ",") {
+	for _, h := range strings.Split(env.Get("HOSTS"), ",") {
 		if h = strings.ToLower(strings.TrimSpace(h)); h != "" {
 			s.hosts = append(s.hosts, h)
 		}
 	}
-	for _, e := range strings.Split(os.Getenv("POPCORN_ALLOWED_EMAILS"), ",") {
+	for _, e := range strings.Split(env.Get("ALLOWED_EMAILS"), ",") {
 		if e = strings.ToLower(strings.TrimSpace(e)); e != "" {
 			s.allowed = append(s.allowed, e)
 		}
@@ -338,7 +340,7 @@ var assetHashes = func() map[string]string {
 // asset is a static file's URL with its version, for cache busting.
 func asset(name string) string { return "/static/" + name + "?v=" + assetHashes[name] }
 
-// emailAllowed reports whether a proxy-signed-in email may use Popcorn: anyone when no list is
+// emailAllowed reports whether a proxy-signed-in email may use Cheap Seats: anyone when no list is
 // set, else an exact address or an @domain on it.
 func (s *Server) emailAllowed(email string) bool {
 	if len(s.allowed) == 0 {
@@ -382,13 +384,19 @@ func (s *Server) auth(h http.Handler) http.Handler {
 			h.ServeHTTP(w, r)
 			return
 		}
+		if c, err := r.Cookie(s.oldCookie); err == nil && s.validToken(c.Value) {
+			s.setCookie(w, r, c.Value)
+			http.SetCookie(w, &http.Cookie{Name: s.oldCookie, Path: "/", MaxAge: -1})
+			h.ServeHTTP(w, r)
+			return
+		}
 		if s.authHeader != "" {
 			if email := strings.TrimSpace(r.Header.Get(s.authHeader)); email != "" {
 				if s.emailAllowed(email) {
 					h.ServeHTTP(w, r)
 					return
 				}
-				http.Error(w, email+" isn't allowed to use this Popcorn.", http.StatusForbidden)
+				http.Error(w, email+" isn't allowed to use this Cheap Seats.", http.StatusForbidden)
 				return
 			}
 		}
@@ -397,7 +405,7 @@ func (s *Server) auth(h http.Handler) http.Handler {
 			return
 		}
 		if len(s.tokens) == 0 {
-			http.Error(w, "Sign in through the proxy in front of this Popcorn.", http.StatusUnauthorized)
+			http.Error(w, "Sign in through the proxy in front of this Cheap Seats.", http.StatusUnauthorized)
 			return
 		}
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
@@ -412,8 +420,12 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		s.render(w, "login", map[string]any{"Error": "That token isn't valid."})
 		return
 	}
-	http.SetCookie(w, &http.Cookie{Name: s.cookie, Value: t, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: r.TLS != nil, MaxAge: 30 * 86400})
+	s.setCookie(w, r, t)
 	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
+func (s *Server) setCookie(w http.ResponseWriter, r *http.Request, token string) {
+	http.SetCookie(w, &http.Cookie{Name: s.cookie, Value: token, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: r.TLS != nil, MaxAge: 30 * 86400})
 }
 
 func (s *Server) render(w http.ResponseWriter, page string, data any) {
@@ -849,7 +861,7 @@ func (s *Server) who(r *http.Request, via string) string {
 	return via
 }
 
-// back is where a form returns to: a path on this Popcorn, never another site.
+// back is where a form returns to: a path on this Cheap Seats, never another site.
 func back(r *http.Request, fallback string) string {
 	if b := r.FormValue("back"); strings.HasPrefix(b, "/") && !strings.HasPrefix(b, "//") && !strings.HasPrefix(b, "/\\") {
 		return b

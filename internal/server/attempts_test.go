@@ -13,9 +13,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/metcalfc/popcorn/internal/app"
-	"github.com/metcalfc/popcorn/internal/llm"
-	"github.com/metcalfc/popcorn/internal/store"
+	"github.com/cheapseatsdev/cheapseats/internal/app"
+	"github.com/cheapseatsdev/cheapseats/internal/llm"
+	"github.com/cheapseatsdev/cheapseats/internal/store"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -35,14 +35,14 @@ func fixFixture(t *testing.T) (a *app.App, db *store.DB, execute func() string, 
 			mu.Lock()
 			analystSaw = append(analystSaw, s)
 			mu.Unlock()
-			text = `{"insights":"## Why Popcorn lost\nx","fixes":[{"rank":1,"type":"new-page","title":"Write a credential-gateway guide","target":"https://docs.popcorn.example/guides/keys-off-the-box/","claim":"how","done_when":"page live","evidence":"e (prompt 1)","prompts":[1,2,3,4,5,6,7],"effort":"S","displaces":null}]}`
+			text = `{"insights":"## Why Cheap Seats lost\nx","fixes":[{"rank":1,"type":"new-page","title":"Write a credential-gateway guide","target":"https://docs.cheapseats.example/guides/keys-off-the-box/","claim":"how","done_when":"page live","evidence":"e (prompt 1)","prompts":[1,2,3,4,5,6,7],"effort":"S","displaces":null}]}`
 		case strings.Contains(s, "output_config"):
-			text = `{"verdict":"mentioned","position":2,"top_pick":"Docker Sandboxes","named":["Docker Sandboxes","Popcorn"],"reasoning":"r","why_not_top":"w","objections":[]}`
+			text = `{"verdict":"mentioned","position":2,"top_pick":"Docker Sandboxes","named":["Docker Sandboxes","Cheap Seats"],"reasoning":"r","why_not_top":"w","objections":[]}`
 		case strings.Contains(s, `"tools"`): // the search track must search first
-			w.Write([]byte(`{"content":[{"type":"server_tool_use","id":"s1","name":"web_search","input":{"query":"q"}},{"type":"web_search_tool_result","tool_use_id":"s1","content":[{"type":"web_search_result","url":"https://docs.docker.com/ai/sandboxes/security/","title":"x"}]},{"type":"text","text":"Use Docker Sandboxes or Popcorn."}],"usage":{"input_tokens":10,"output_tokens":5}}`))
+			w.Write([]byte(`{"content":[{"type":"server_tool_use","id":"s1","name":"web_search","input":{"query":"q"}},{"type":"web_search_tool_result","tool_use_id":"s1","content":[{"type":"web_search_result","url":"https://docs.docker.com/ai/sandboxes/security/","title":"x"}]},{"type":"text","text":"Use Docker Sandboxes or Cheap Seats."}],"usage":{"input_tokens":10,"output_tokens":5}}`))
 			return
 		default:
-			w.Write([]byte(`{"content":[{"type":"text","text":"Use Docker Sandboxes or Popcorn."}],"usage":{"input_tokens":10,"output_tokens":5}}`))
+			w.Write([]byte(`{"content":[{"type":"text","text":"Use Docker Sandboxes or Cheap Seats."}],"usage":{"input_tokens":10,"output_tokens":5}}`))
 			return
 		}
 		json.NewEncoder(w).Encode(map[string]any{"content": []any{map[string]any{"type": "text", "text": text}}, "stop_reason": "end_turn", "usage": map[string]any{"input_tokens": 1, "output_tokens": 1}})
@@ -53,7 +53,7 @@ func fixFixture(t *testing.T) (a *app.App, db *store.DB, execute func() string, 
 	t.Cleanup(func() { llm.AnthropicURL = old })
 	t.Setenv("ANTHROPIC_API_KEY", "fake-key")
 	t.Setenv("OPENAI_API_KEY", "")
-	os.Unsetenv("POPCORN_TOKENS")
+	os.Unsetenv("CHEAPSEATS_TOKENS")
 
 	db, _ = store.Open(t.TempDir())
 	t.Cleanup(func() { db.Close() })
@@ -110,7 +110,7 @@ func TestMarkingAFixAndItsRetry(t *testing.T) {
 	if rec := post("/runs/"+first+"/fixes/1/attempts", url.Values{"url": {"not a link"}}); rec.Code != 400 {
 		t.Errorf("no link: %d", rec.Code)
 	}
-	pr := "https://github.com/metcalfc/popcorn-site/pull/9"
+	pr := "https://github.com/cheapseatsdev/cheapseats-site/pull/9"
 	rec := post("/runs/"+first+"/fixes/1/attempts", url.Values{"url": {pr}, "note": {"the guide"}, "back": {"//evil.example/"}})
 	if rec.Code != 303 || rec.Header().Get("location") != "/runs/"+first+"#fix-1" {
 		t.Fatalf("mark: %d %s", rec.Code, rec.Header().Get("location"))
@@ -145,7 +145,7 @@ func TestMarkingAFixAndItsRetry(t *testing.T) {
 	third := execute()
 	saw := analyst()
 	last := saw[len(saw)-1]
-	if !strings.Contains(last, "Already tried by the Popcorn team") || !strings.Contains(last, pr) {
+	if !strings.Contains(last, "Already tried by the Cheap Seats team") || !strings.Contains(last, pr) {
 		t.Errorf("the analyst wasn't told what was tried:\n%s", limit(last))
 	}
 	var open []app.QuickWin
@@ -167,7 +167,7 @@ func TestMarkingAFixAndItsRetry(t *testing.T) {
 	// Work on the same page recorded after a fix list was built covers that list's fix too: the
 	// list didn't know about it. Here it's recorded on the first run's fix, after the second's list.
 	db.Exec(`UPDATE runs SET fixes_at='2001-01-01T00:00:00Z' WHERE id=?`, third)
-	pr2 := "https://github.com/metcalfc/popcorn-site/pull/10"
+	pr2 := "https://github.com/cheapseatsdev/cheapseats-site/pull/10"
 	if rec := post("/runs/"+first+"/fixes/1/attempts", url.Values{"url": {pr2}, "state": {"accepted"}}); rec.Code != 303 {
 		t.Fatalf("second mark: %d", rec.Code)
 	}
@@ -257,7 +257,7 @@ func TestTheFixLoopOverMCP(t *testing.T) {
 	}
 
 	// Mark: proposed with the pull request; it leaves the open list.
-	pr := "https://github.com/metcalfc/popcorn-site/pull/11"
+	pr := "https://github.com/cheapseatsdev/cheapseats-site/pull/11"
 	var at app.Attempt
 	marked := call("mark_fix", map[string]any{"run": todo[0].RunID, "rank": todo[0].Rank, "url": pr, "note": "the guide"})
 	json.Unmarshal([]byte(marked), &at)
@@ -300,10 +300,10 @@ func TestTheFixLoopOverMCP(t *testing.T) {
 
 func TestTargetKey(t *testing.T) {
 	for in, want := range map[string]string{
-		"https://www.Popcorn.zone/blog/x/?utm=1#top":                        "popcorn.zone/blog/x",
-		"popcorn.zone/blog/x":                                               "popcorn.zone/blog/x",
-		"github.com/metcalfc/popcorn (README.md) and popcorn.zone homepage": "github.com/metcalfc/popcorn",
-		"https://popcorn.zone/":                                             "popcorn.zone",
+		"https://www.CheapSeats.dev/blog/x/?utm=1#top":                                "cheapseats.dev/blog/x",
+		"cheapseats.dev/blog/x":                                                       "cheapseats.dev/blog/x",
+		"github.com/cheapseatsdev/cheapseats (README.md) and cheapseats.dev homepage": "github.com/cheapseatsdev/cheapseats",
+		"https://cheapseats.dev/":                                                     "cheapseats.dev",
 	} {
 		if got := app.TargetKey(in); got != want {
 			t.Errorf("TargetKey(%q) = %q, want %q", in, got, want)

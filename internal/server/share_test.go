@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/metcalfc/popcorn/internal/report"
+	"github.com/cheapseatsdev/cheapseats/internal/report"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -20,8 +20,8 @@ import (
 func TestShareLifecycle(t *testing.T) {
 	a, db, execute, _ := fixFixture(t)
 	r1, r2 := execute(), execute()
-	t.Setenv("POPCORN_TOKENS", "tok")
-	t.Setenv("POPCORN_PUBLIC_URL", "https://popcorn.example.com/")
+	t.Setenv("CHEAPSEATS_TOKENS", "tok")
+	t.Setenv("CHEAPSEATS_PUBLIC_URL", "https://cheapseats.example.com/")
 	s, err := New(a)
 	if err != nil {
 		t.Fatal(err)
@@ -55,7 +55,7 @@ func TestShareLifecycle(t *testing.T) {
 		t.Errorf("unauthenticated create: %d", rec.Code)
 	}
 	sh := create(r1, "")
-	if !strings.HasPrefix(sh.URL, "https://popcorn.example.com/share/") || sh.RunID != r1 || sh.IncludeAnswers {
+	if !strings.HasPrefix(sh.URL, "https://cheapseats.example.com/share/") || sh.RunID != r1 || sh.IncludeAnswers {
 		t.Fatalf("share: %+v", sh)
 	}
 	if exp, _ := time.Parse(time.RFC3339, sh.ExpiresAt); exp.Sub(time.Now()) < 29*24*time.Hour || exp.Sub(time.Now()) > 31*24*time.Hour {
@@ -81,7 +81,7 @@ func TestShareLifecycle(t *testing.T) {
 		}
 	}
 	fixes, _, _ := a.Fixes(context.Background(), r1)
-	for _, leak := range []string{r1, r2, "/runs/", "/api/", "Use Docker Sandboxes or Popcorn.", "claude_prompt", `href="/quick-wins"`} {
+	for _, leak := range []string{r1, r2, "/runs/", "/api/", "Use Docker Sandboxes or Cheap Seats.", "claude_prompt", `href="/quick-wins"`} {
 		if strings.Contains(body, leak) {
 			t.Errorf("share page shows %q", leak)
 		}
@@ -101,7 +101,7 @@ func TestShareLifecycle(t *testing.T) {
 
 	// With answers, when asked for; made from the run page's form, which shows the link once.
 	rec = do("POST", "/runs/"+r1+"/shares", "days=7&include_answers=1", true)
-	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "https://popcorn.example.com/share/") || !strings.Contains(rec.Body.String(), "copy it now") {
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "https://cheapseats.example.com/share/") || !strings.Contains(rec.Body.String(), "copy it now") {
 		t.Fatalf("form: %d %s", rec.Code, limit(rec.Body.String()))
 	}
 	shares, _ := a.Shares(context.Background(), r1)
@@ -110,9 +110,9 @@ func TestShareLifecycle(t *testing.T) {
 	}
 	// Every answer named the brand and none recommended it, so no prompt stands out: make the
 	// first one a loss to a competitor.
-	db.Exec(`UPDATE results SET verdict='absent', grade=replace(replace(grade, '"verdict":"mentioned"', '"verdict":"absent"'), ',"Popcorn"]', ']') WHERE run_id=? AND prompt_idx=0`, r1)
+	db.Exec(`UPDATE results SET verdict='absent', grade=replace(replace(grade, '"verdict":"mentioned"', '"verdict":"absent"'), ',"Cheap Seats"]', ']') WHERE run_id=? AND prompt_idx=0`, r1)
 	withAnswers := create(r1, `{"include_answers":true}`)
-	if body := do("GET", pathOf(withAnswers.URL), "", false).Body.String(); !strings.Contains(body, "Use Docker Sandboxes or Popcorn.") {
+	if body := do("GET", pathOf(withAnswers.URL), "", false).Body.String(); !strings.Contains(body, "Use Docker Sandboxes or Cheap Seats.") {
 		t.Errorf("include_answers: no answer text in\n%s", limit(body))
 	}
 
@@ -167,7 +167,7 @@ func TestShareLifecycle(t *testing.T) {
 func TestShareRunOverMCP(t *testing.T) {
 	a, _, execute, _ := fixFixture(t)
 	id := execute()
-	t.Setenv("POPCORN_PUBLIC_URL", "")
+	t.Setenv("CHEAPSEATS_PUBLIC_URL", "")
 	s, _ := New(a)
 	ts := httptest.NewServer(s.Handler())
 	defer ts.Close()
@@ -193,20 +193,20 @@ func TestShareRunOverMCP(t *testing.T) {
 	}
 	resp.Body.Close()
 	// The test server is on loopback: nobody else could open that link, and the result says so.
-	if !strings.Contains(sh.Warning, "POPCORN_PUBLIC_URL") {
+	if !strings.Contains(sh.Warning, "CHEAPSEATS_PUBLIC_URL") {
 		t.Errorf("no loopback warning: %s", b)
 	}
 	// A proxy's X-Forwarded-Host names the host people used.
 	req := httptest.NewRequest("GET", "/", nil)
 	req.Host = "127.0.0.1:3000"
-	req.Header.Set("X-Forwarded-Host", "popcorn.example.org, inner")
+	req.Header.Set("X-Forwarded-Host", "cheapseats.example.org, inner")
 	req.Header.Set("X-Forwarded-Proto", "https")
-	if got := s.linkBase(requestHost(req), requestScheme(req)); got != "https://popcorn.example.org" || linkWarning(got) != "" {
+	if got := s.linkBase(requestHost(req), requestScheme(req)); got != "https://cheapseats.example.org" || linkWarning(got) != "" {
 		t.Errorf("forwarded: %s", got)
 	}
-	// POPCORN_HOSTS names the public host when there's no public URL.
-	s.hosts = []string{"popcorn.example.com"}
-	if got := s.linkBase("127.0.0.1:3000", "http"); got != "https://popcorn.example.com" {
+	// CHEAPSEATS_HOSTS names the public host when there's no public URL.
+	s.hosts = []string{"cheapseats.example.com"}
+	if got := s.linkBase("127.0.0.1:3000", "http"); got != "https://cheapseats.example.com" {
 		t.Errorf("with hosts: %s", got)
 	}
 	if res, _ := cs.CallTool(ctx, &mcp.CallToolParams{Name: "share_run", Arguments: map[string]any{}}); !res.IsError {

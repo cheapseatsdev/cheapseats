@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/metcalfc/popcorn/internal/llm"
-	"github.com/metcalfc/popcorn/internal/store"
+	"github.com/cheapseatsdev/cheapseats/internal/llm"
+	"github.com/cheapseatsdev/cheapseats/internal/store"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -34,7 +34,7 @@ func TestSearchesPage(t *testing.T) {
 	llm.AnthropicURL = api.URL
 	t.Setenv("ANTHROPIC_API_KEY", "fake-review-provider-key-123456")
 	t.Setenv("OPENAI_API_KEY", "")
-	os.Unsetenv("POPCORN_TOKENS")
+	os.Unsetenv("CHEAPSEATS_TOKENS")
 
 	db, _ := store.Open(t.TempDir())
 	a := newApp(t, testConfig(t), db)

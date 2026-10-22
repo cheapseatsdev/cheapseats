@@ -6,7 +6,7 @@ import (
 	"math"
 	"sort"
 
-	"github.com/metcalfc/popcorn/internal/sets"
+	"github.com/cheapseatsdev/cheapseats/internal/sets"
 )
 
 // Citation stability: how much the hosts answers cite move from one run to the next. A run's

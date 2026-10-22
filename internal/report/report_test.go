@@ -3,10 +3,10 @@ package report
 import (
 	"testing"
 
-	"github.com/metcalfc/popcorn/internal/answer"
-	"github.com/metcalfc/popcorn/internal/config"
-	"github.com/metcalfc/popcorn/internal/grade"
-	"github.com/metcalfc/popcorn/internal/run"
+	"github.com/cheapseatsdev/cheapseats/internal/answer"
+	"github.com/cheapseatsdev/cheapseats/internal/config"
+	"github.com/cheapseatsdev/cheapseats/internal/grade"
+	"github.com/cheapseatsdev/cheapseats/internal/run"
 )
 
 func ptr[T any](v T) *T { return &v }
@@ -27,12 +27,12 @@ func TestWilson(t *testing.T) {
 }
 
 func TestBuild(t *testing.T) {
-	brand := config.Brand{Name: "Popcorn", Domains: []string{"popcorn.example"}}
+	brand := config.Brand{Name: "Cheap Seats", Domains: []string{"cheapseats.example"}}
 	res := []run.Result{
 		{PromptIdx: 0, Prompt: "p0", Answerer: "a", Track: answer.Search, Status: "done",
-			Grade: &grade.Grade{Verdict: grade.Recommended, TopPick: ptr("Popcorn"), Named: []string{"Popcorn", "Coder"}},
-			Answer: &answer.Answer{Citations: []answer.Link{{URL: "https://docs.popcorn.example/x/"}},
-				Searches: []answer.Query{{Query: "q", Results: []answer.Link{{URL: "https://docs.popcorn.example/x"}, {URL: "https://coder.com"}}}}}},
+			Grade: &grade.Grade{Verdict: grade.Recommended, TopPick: ptr("Cheap Seats"), Named: []string{"Cheap Seats", "Coder"}},
+			Answer: &answer.Answer{Citations: []answer.Link{{URL: "https://docs.cheapseats.example/x/"}},
+				Searches: []answer.Query{{Query: "q", Results: []answer.Link{{URL: "https://docs.cheapseats.example/x"}, {URL: "https://coder.com"}}}}}},
 		{PromptIdx: 0, Prompt: "p0", Answerer: "a", Track: answer.Recall, Status: "done",
 			Grade: &grade.Grade{Verdict: grade.Absent, TopPick: ptr("Coder"), Named: []string{"Coder", "coder"}}},
 		{PromptIdx: 1, Prompt: "p1", Answerer: "a", Track: answer.Search, Status: "error"},
@@ -59,15 +59,15 @@ func TestBuild(t *testing.T) {
 }
 
 func TestFirstParty(t *testing.T) {
-	b := config.Brand{Domains: []string{"popcorn.example", "github.com/metcalfc/popcorn"}}
+	b := config.Brand{Domains: []string{"cheapseats.example", "github.com/cheapseatsdev/cheapseats"}}
 	for u, want := range map[string]bool{
-		"https://popcorn.example":                    true,
-		"https://docs.popcorn.example/cli/":          true,
-		"https://www.popcorn.example/why":            true,
-		"https://github.com/metcalfc/popcorn/skills": true,
-		"https://github.com/metcalfc/popcornx":       false,
-		"https://notpopcorn.example/":                false,
-		"https://example.com/?ref=popcorn.example":   false,
+		"https://cheapseats.example":                         true,
+		"https://docs.cheapseats.example/cli/":               true,
+		"https://www.cheapseats.example/why":                 true,
+		"https://github.com/cheapseatsdev/cheapseats/skills": true,
+		"https://github.com/cheapseatsdev/cheapseatsx":       false,
+		"https://notcheapseats.example/":                     false,
+		"https://example.com/?ref=cheapseats.example":        false,
 	} {
 		if got := b.FirstParty(u); got != want {
 			t.Errorf("%s: got %v", u, got)

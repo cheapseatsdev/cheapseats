@@ -13,14 +13,14 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/metcalfc/popcorn/internal/answer"
-	"github.com/metcalfc/popcorn/internal/config"
-	"github.com/metcalfc/popcorn/internal/grade"
-	"github.com/metcalfc/popcorn/internal/queries"
-	"github.com/metcalfc/popcorn/internal/report"
-	"github.com/metcalfc/popcorn/internal/run"
-	"github.com/metcalfc/popcorn/internal/sets"
-	"github.com/metcalfc/popcorn/internal/store"
+	"github.com/cheapseatsdev/cheapseats/internal/answer"
+	"github.com/cheapseatsdev/cheapseats/internal/config"
+	"github.com/cheapseatsdev/cheapseats/internal/grade"
+	"github.com/cheapseatsdev/cheapseats/internal/queries"
+	"github.com/cheapseatsdev/cheapseats/internal/report"
+	"github.com/cheapseatsdev/cheapseats/internal/run"
+	"github.com/cheapseatsdev/cheapseats/internal/sets"
+	"github.com/cheapseatsdev/cheapseats/internal/store"
 )
 
 // The prompt review reads a set's stored answers over a window for what they say about the prompts
@@ -685,7 +685,7 @@ func (b *reviewBuilder) finish() Review {
 		}
 		if !h2h && p.BrandSearches >= BrandedMinSearches && float64(p.BrandSearches) >= BrandedSearchShare*float64(p.Searches) {
 			add(p, Finding{Kind: Branded, Variant: "searches",
-				Numbers:    fmt.Sprintf("%d of %d searches added %s's name", p.BrandSearches, p.Searches, brand.Name),
+				Numbers:    fmt.Sprintf("%d of %d searches added %s name", p.BrandSearches, p.Searches, possessive(brand.Name)),
 				Suggestion: fmt.Sprintf("check the prompt doesn't point at %s (a term or feature only it uses); if it doesn't, the assistants found %s on their own and the prompt is fine", brand.Name, brand.Name)})
 		}
 	}
@@ -1157,3 +1157,11 @@ func quoted(ws []string) string {
 func oneLine(s string) string { return clean(s) }
 
 func round4(f float64) float64 { return math.Round(f*10000) / 10000 }
+
+// possessive is name's, or name' for a name ending in s ("Cheap Seats' name").
+func possessive(name string) string {
+	if strings.HasSuffix(name, "s") || strings.HasSuffix(name, "S") {
+		return name + "'"
+	}
+	return name + "'s"
+}

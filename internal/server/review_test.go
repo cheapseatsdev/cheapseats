@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/metcalfc/popcorn/internal/app"
-	"github.com/metcalfc/popcorn/internal/llm"
-	"github.com/metcalfc/popcorn/internal/store"
+	"github.com/cheapseatsdev/cheapseats/internal/app"
+	"github.com/cheapseatsdev/cheapseats/internal/llm"
+	"github.com/cheapseatsdev/cheapseats/internal/store"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -48,7 +48,7 @@ func TestPromptReview(t *testing.T) {
 	defer func() { llm.AnthropicURL = old }()
 	t.Setenv("ANTHROPIC_API_KEY", "fake-key")
 	t.Setenv("OPENAI_API_KEY", "")
-	os.Unsetenv("POPCORN_TOKENS")
+	os.Unsetenv("CHEAPSEATS_TOKENS")
 
 	db, _ := store.Open(t.TempDir())
 	defer db.Close()

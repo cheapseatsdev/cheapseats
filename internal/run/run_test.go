@@ -11,13 +11,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/metcalfc/popcorn/internal/config"
-	"github.com/metcalfc/popcorn/internal/llm"
-	"github.com/metcalfc/popcorn/internal/sets"
-	"github.com/metcalfc/popcorn/internal/store"
+	"github.com/cheapseatsdev/cheapseats/internal/config"
+	"github.com/cheapseatsdev/cheapseats/internal/llm"
+	"github.com/cheapseatsdev/cheapseats/internal/sets"
+	"github.com/cheapseatsdev/cheapseats/internal/store"
 )
 
-// A fake Messages API: answers name Popcorn on the search track, the grader grades by whether
+// A fake Messages API: answers name Cheap Seats on the search track, the grader grades by whether
 // the answer named it.
 func fakeAnthropic(t *testing.T, calls *atomic.Int64) *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -29,14 +29,14 @@ func fakeAnthropic(t *testing.T, calls *atomic.Int64) *httptest.Server {
 		if _, grading := req["output_config"]; grading {
 			msg := llm.Str(llm.Map(llm.List(req["messages"])[0])["content"])
 			g := `{"verdict":"absent","position":null,"top_pick":"Coder","named":["Coder"],"reasoning":"not named","why_not_top":"preferred Coder","objections":[]}`
-			if strings.Contains(msg, "Use Popcorn") {
-				g = `{"verdict":"recommended","position":1,"top_pick":"Popcorn","named":["Popcorn","Coder"],"reasoning":"top pick","why_not_top":null,"relevance":"relevant","accuracy":"not-assessed","understanding":"Workstation option","evidence":"Use Popcorn.","objections":["private beta"]}`
+			if strings.Contains(msg, "Use Cheap Seats") {
+				g = `{"verdict":"recommended","position":1,"top_pick":"Cheap Seats","named":["Cheap Seats","Coder"],"reasoning":"top pick","why_not_top":null,"relevance":"relevant","accuracy":"not-assessed","understanding":"Workstation option","evidence":"Use Cheap Seats.","objections":["private beta"]}`
 			}
 			json.NewEncoder(w).Encode(map[string]any{"content": []any{map[string]any{"type": "text", "text": g}}, "stop_reason": "end_turn", "usage": map[string]any{"input_tokens": 100, "output_tokens": 50}})
 			return
 		}
 		if _, search := req["tools"]; search {
-			w.Write([]byte(`{"content":[{"type":"server_tool_use","id":"s1","name":"web_search","input":{"query":"q"}},{"type":"web_search_tool_result","tool_use_id":"s1","content":[{"type":"web_search_result","url":"https://docs.popcorn.example/x","title":"x"}]},{"type":"text","text":"Use Popcorn.","citations":[{"url":"https://docs.popcorn.example/x"}]}],"usage":{"input_tokens":1000,"output_tokens":200,"server_tool_use":{"web_search_requests":1}}}`))
+			w.Write([]byte(`{"content":[{"type":"server_tool_use","id":"s1","name":"web_search","input":{"query":"q"}},{"type":"web_search_tool_result","tool_use_id":"s1","content":[{"type":"web_search_result","url":"https://docs.cheapseats.example/x","title":"x"}]},{"type":"text","text":"Use Cheap Seats.","citations":[{"url":"https://docs.cheapseats.example/x"}]}],"usage":{"input_tokens":1000,"output_tokens":200,"server_tool_use":{"web_search_requests":1}}}`))
 			return
 		}
 		w.Write([]byte(`{"content":[{"type":"text","text":"Use Coder."}],"usage":{"input_tokens":500,"output_tokens":100}}`))
@@ -56,7 +56,7 @@ func setup(t *testing.T, budget float64) (*Engine, sets.Set, *atomic.Int64) {
 		t.Fatal(err)
 	}
 	cfg := &config.Config{
-		Brand:     config.Brand{Name: "Popcorn", Domains: []string{"popcorn.example"}},
+		Brand:     config.Brand{Name: "Cheap Seats", Domains: []string{"cheapseats.example"}},
 		Answerers: []config.Answerer{{ID: "a", Provider: "anthropic", Model: "m", Samples: config.Samples{Search: 2, Recall: 1}}, {ID: "o", Provider: "openai", Model: "g", Samples: config.Samples{Search: 1}}},
 		Grader:    config.Model{Model: "g"},
 		Budget:    config.Budget{DailyUSD: budget, Concurrency: 3},
@@ -155,7 +155,7 @@ func TestDesignIgnoresAudience(t *testing.T) {
 	}
 }
 
-// A deploy restarts Popcorn mid-run: the run records itself as interrupted rather than
+// A deploy restarts Cheap Seats mid-run: the run records itself as interrupted rather than
 // cancelled, and the next start resumes it, keeping every answer it already had.
 func TestShutdownInterruptsAndTheNextStartResumes(t *testing.T) {
 	e, set, _ := setup(t, 0)

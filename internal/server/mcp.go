@@ -11,14 +11,14 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/metcalfc/popcorn/internal/analysis"
-	"github.com/metcalfc/popcorn/internal/app"
-	"github.com/metcalfc/popcorn/internal/audit"
-	"github.com/metcalfc/popcorn/internal/crawl"
-	"github.com/metcalfc/popcorn/internal/opinion"
-	"github.com/metcalfc/popcorn/internal/probe"
-	"github.com/metcalfc/popcorn/internal/report"
-	"github.com/metcalfc/popcorn/internal/run"
+	"github.com/cheapseatsdev/cheapseats/internal/analysis"
+	"github.com/cheapseatsdev/cheapseats/internal/app"
+	"github.com/cheapseatsdev/cheapseats/internal/audit"
+	"github.com/cheapseatsdev/cheapseats/internal/crawl"
+	"github.com/cheapseatsdev/cheapseats/internal/opinion"
+	"github.com/cheapseatsdev/cheapseats/internal/probe"
+	"github.com/cheapseatsdev/cheapseats/internal/report"
+	"github.com/cheapseatsdev/cheapseats/internal/run"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -26,7 +26,7 @@ import (
 // Claude Code or any MCP client can start runs and read results. It sits behind the same bearer
 // tokens as /api/*.
 func (s *Server) mcpHandler() http.Handler {
-	srv := mcp.NewServer(&mcp.Implementation{Name: "popcorn-" + s.App.Cfg.Brand.Slug(), Title: "Popcorn: " + s.App.Cfg.Brand.Name, Version: "1"}, nil)
+	srv := mcp.NewServer(&mcp.Implementation{Name: "cheapseats-" + s.App.Cfg.Brand.Slug(), Title: "Cheap Seats: " + s.App.Cfg.Brand.Name, Version: "1"}, nil)
 	type none struct{}
 	type setArg struct {
 		Set string `json:"set" jsonschema:"prompt set id, from list_prompt_sets"`
@@ -34,7 +34,7 @@ func (s *Server) mcpHandler() http.Handler {
 	type runArg struct {
 		Run string `json:"run" jsonschema:"run id, from list_runs or start_run"`
 	}
-	addTool(srv, "get_started", "Call this first. What this Popcorn tracks and where it stands, in one small result: the brand and its sites, each prompt set with its tier, last run and status, today's spend against the budget, which answerers and the grader can run here, the latest site audit's errors and warnings, open and urgent fixes, fix attempts awaiting an outcome, data_state (no_runs, running, stale or ready) and next_steps: the tool calls worth making now, with their arguments. Free.",
+	addTool(srv, "get_started", "Call this first. What this Cheap Seats tracks and where it stands, in one small result: the brand and its sites, each prompt set with its tier, last run and status, today's spend against the budget, which answerers and the grader can run here, the latest site audit's errors and warnings, open and urgent fixes, fix attempts awaiting an outcome, data_state (no_runs, running, stale or ready) and next_steps: the tool calls worth making now, with their arguments. Free.",
 		func(ctx context.Context, _ none) (any, error) {
 			return s.frontDoor(ctx), nil
 		})
@@ -326,7 +326,7 @@ func (s *Server) mcpHandler() http.Handler {
 					// Only the brand's own sites: anything else is for the CLI, run by someone at
 					// the machine, not a request that can make this server fetch any address.
 					if !s.App.IsBrandSite(a.Site) {
-						return nil, fmt.Errorf("%q isn't one of the brand's sites (%s); audit other sites with popcorn audit on the command line", a.Site, strings.Join(s.App.AuditSites(), ", "))
+						return nil, fmt.Errorf("%q isn't one of the brand's sites (%s); audit other sites with cheapseats audit on the command line", a.Site, strings.Join(s.App.AuditSites(), ", "))
 					}
 					sites = []string{a.Site}
 				}
@@ -426,7 +426,7 @@ func (s *Server) mcpHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if local, ok := r.Context().Value(http.LocalAddrContextKey).(net.Addr); ok && loopback(local.String()) &&
 			!loopback(r.Host) && !slices.Contains(s.hosts, hostOnly(r.Host)) {
-			http.Error(w, fmt.Sprintf("Forbidden: invalid Host header %q (add it to POPCORN_HOSTS if a proxy serves Popcorn under it)", r.Host), http.StatusForbidden)
+			http.Error(w, fmt.Sprintf("Forbidden: invalid Host header %q (add it to CHEAPSEATS_HOSTS if a proxy serves Cheap Seats under it)", r.Host), http.StatusForbidden)
 			return
 		}
 		h.ServeHTTP(w, r)

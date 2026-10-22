@@ -10,8 +10,8 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"github.com/metcalfc/popcorn/internal/sets"
-	"github.com/metcalfc/popcorn/internal/store"
+	"github.com/cheapseatsdev/cheapseats/internal/sets"
+	"github.com/cheapseatsdev/cheapseats/internal/store"
 )
 
 func TestNamesAny(t *testing.T) {
@@ -20,8 +20,8 @@ func TestNamesAny(t *testing.T) {
 		names []string
 		want  bool
 	}{
-		{"Try Popcorn for this.", []string{"Popcorn"}, true},
-		{"try POPCORN.zone", []string{"popcorn.zone"}, true},
+		{"Try Cheap Seats for this.", []string{"Cheap Seats"}, true},
+		{"try CHEAPSEATS.dev", []string{"cheapseats.dev"}, true},
 		{"the whole world", []string{"rl"}, false},
 		{"Gauge-style tracking", []string{"Gauge"}, true},
 		{"Gauges", []string{"Gauge"}, false},
@@ -42,14 +42,14 @@ func TestCheckCitations(t *testing.T) {
 		hits.Add(1)
 		switch r.URL.Path {
 		case "/robots.txt":
-			fmt.Fprint(w, "User-agent: Popcorn-Audit\nDisallow: /private\n")
+			fmt.Fprint(w, "User-agent: CheapSeats-Audit\nDisallow: /private\n")
 		case "/roundup":
-			fmt.Fprint(w, `<html><body><h1>Best AI visibility tools</h1><p>Profound leads; Peec AI is close.</p><script>var x = "Popcorn";</script></body></html>`)
+			fmt.Fprint(w, `<html><body><h1>Best AI visibility tools</h1><p>Profound leads; Peec AI is close.</p><script>var x = "Cheap Seats";</script></body></html>`)
 		case "/both":
-			fmt.Fprint(w, `<html><body><p>Popcorn is free; Gauge is not.</p></body></html>`)
+			fmt.Fprint(w, `<html><body><p>Cheap Seats is free; Gauge is not.</p></body></html>`)
 		case "/plain":
 			w.Header().Set("content-type", "text/plain")
-			fmt.Fprint(w, "popcorn.zone is a tracker.")
+			fmt.Fprint(w, "cheapseats.dev is a tracker.")
 		case "/pdf":
 			w.Header().Set("content-type", "application/pdf")
 			fmt.Fprint(w, "%PDF")
@@ -70,7 +70,7 @@ func TestCheckCitations(t *testing.T) {
 		{URL: srv.URL + "/roundup", Cited: 5}, {URL: srv.URL + "/both", Cited: 3}, {URL: srv.URL + "/plain", Cited: 2},
 		{URL: srv.URL + "/private/page", Cited: 1}, {URL: srv.URL + "/gone", Surfaced: 4}, {URL: srv.URL + "/pdf"},
 	}
-	brand := []string{"Popcorn", "popcorn.zone"}
+	brand := []string{"Cheap Seats", "cheapseats.dev"}
 	c := CheckCitations(context.Background(), targets, brand, comps, CiteOptions{DB: db.DB})
 	type row struct {
 		names, outreach bool
@@ -78,7 +78,7 @@ func TestCheckCitations(t *testing.T) {
 		skipped         bool
 	}
 	want := []row{
-		{false, true, "[Profound Peec AI]", false}, // the script's "Popcorn" isn't visible text
+		{false, true, "[Profound Peec AI]", false}, // the script's "Cheap Seats" isn't visible text
 		{true, false, "[Gauge]", false},
 		{true, false, "[]", false},
 		{false, false, "[]", true}, // robots.txt
@@ -109,9 +109,9 @@ func TestCheckCitations(t *testing.T) {
 // A stray Latin-1 byte early on, in a page long enough to be cut, keeps the rest of the page up to
 // the cut: the brand named well past the byte is still found.
 func TestClipText(t *testing.T) {
-	page := "Caf\xe9 roundup. " + strings.Repeat("filler ", 20_000) + "Popcorn is our pick. " + strings.Repeat("filler ", 20_000)
+	page := "Caf\xe9 roundup. " + strings.Repeat("filler ", 20_000) + "Cheap Seats is our pick. " + strings.Repeat("filler ", 20_000)
 	got := clipText(page)
-	if len(page) <= maxText || len(got) > maxText || !utf8.ValidString(got) || !NamesAny(got, []string{"Popcorn"}) || !strings.HasPrefix(got, "Caf\uFFFD roundup") {
+	if len(page) <= maxText || len(got) > maxText || !utf8.ValidString(got) || !NamesAny(got, []string{"Cheap Seats"}) || !strings.HasPrefix(got, "Caf\uFFFD roundup") {
 		t.Errorf("len %d, valid %v, prefix %q", len(got), utf8.ValidString(got), got[:20])
 	}
 	long := strings.Repeat("é", maxText) // two bytes each: the cut falls inside a rune

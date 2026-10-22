@@ -12,14 +12,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/metcalfc/popcorn/internal/analysis"
-	"github.com/metcalfc/popcorn/internal/answer"
-	"github.com/metcalfc/popcorn/internal/config"
-	"github.com/metcalfc/popcorn/internal/grade"
-	"github.com/metcalfc/popcorn/internal/report"
-	"github.com/metcalfc/popcorn/internal/run"
-	"github.com/metcalfc/popcorn/internal/sets"
-	"github.com/metcalfc/popcorn/internal/store"
+	"github.com/cheapseatsdev/cheapseats/internal/analysis"
+	"github.com/cheapseatsdev/cheapseats/internal/answer"
+	"github.com/cheapseatsdev/cheapseats/internal/config"
+	"github.com/cheapseatsdev/cheapseats/internal/grade"
+	"github.com/cheapseatsdev/cheapseats/internal/report"
+	"github.com/cheapseatsdev/cheapseats/internal/run"
+	"github.com/cheapseatsdev/cheapseats/internal/sets"
+	"github.com/cheapseatsdev/cheapseats/internal/store"
 )
 
 // reviewPrompt is one synthetic prompt: what its six answers a run say, run by run (oldest first).
@@ -45,13 +45,13 @@ func reviewFixture() (sets.Set, []reviewPrompt) {
 		{p: sets.Prompt{ID: "noisy", Text: "What should I use to see if ChatGPT mentions my company?"}, named: []int{6, 0, 6, 0, 6}, others: []string{"Profound", "Semrush"}},
 		{p: sets.Prompt{ID: "binom", Text: "What's a good AI visibility tracker for a startup?"}, named: []int{0, 1, 1, 0, 1}, others: []string{"Peec AI", "Otterly"},
 			search: "ai visibility tracker startup pricing"},
-		{p: sets.Prompt{ID: "off", Text: "Is popcorn a good snack for an office?"}, named: []int{0, 0, 0, 0, 0}, others: []string{"Bad Popcorn", "Butter Co"}, other: 3},
+		{p: sets.Prompt{ID: "off", Text: "Are Cheap Seats worth it for a concert?"}, named: []int{0, 0, 0, 0, 0}, others: []string{"Bad Cheap Seats", "Butter Co"}, other: 3},
 		{p: sets.Prompt{ID: "dup-a", Text: "Which tools track AI search visibility?"}, named: []int{1, 1, 1, 1, 1}, others: []string{"Otterly", "Profound", "Peec AI"}},
 		{p: sets.Prompt{ID: "dup-b", Text: "What software monitors how AI assistants rank brands?"}, named: []int{1, 1, 1, 1, 1}, others: []string{"Otterly", "Profound", "Peec AI"}},
 		{p: sets.Prompt{ID: "rewrite", Text: "Which tool tracks brand mentions in chatbots?"}, named: []int{1, 1, 1, 1, 1}, others: []string{"Profound"},
 			search: "geo software pricing comparison 2026"},
 		{p: sets.Prompt{ID: "leak", Text: "Which AI visibility tool is easiest to self-host?"}, named: []int{1, 1, 1, 1, 1}, others: []string{"Otterly"},
-			search: "popcorn self-host ai visibility tool"},
+			search: "Cheap Seats self-host ai visibility tool"},
 		{p: sets.Prompt{ID: "thin", Text: "Is there a free AI visibility checker?"}, named: []int{0, 0, 0, 3, 3}}, // asked only the last two runs
 	}
 	for _, x := range ps {
@@ -82,7 +82,7 @@ func reviewRuns(ps []reviewPrompt) []ReviewRun {
 					if x.rec {
 						g.Verdict = grade.Recommended
 					}
-					g.Named = append(g.Named, "Popcorn")
+					g.Named = append(g.Named, "Cheap Seats")
 				}
 				g.OtherProduct = s < x.other
 				ans := &answer.Answer{Text: "an answer"}
@@ -110,7 +110,7 @@ func findings(rev Review, kind string) map[string]Finding {
 
 func TestReviewFlags(t *testing.T) {
 	set, ps := reviewFixture()
-	in := ReviewInput{Brand: config.Brand{Name: "Popcorn"}, Set: set, Runs: reviewRuns(ps), Days: 30, Taken: map[string]bool{"elsewhere": true}}
+	in := ReviewInput{Brand: config.Brand{Name: "Cheap Seats"}, Set: set, Runs: reviewRuns(ps), Days: 30, Taken: map[string]bool{"elsewhere": true}}
 	rev := BuildReview(in)
 	if rev.Runs != 5 || len(rev.Prompts) != len(set.Prompts) {
 		t.Fatalf("%+v", rev)
@@ -150,8 +150,8 @@ func TestReviewFlags(t *testing.T) {
 	}
 	// Off target: the answers are about a same-named product.
 	off := findings(rev, OffTarget)
-	if f, ok := off["off"]; !ok || len(f.Products) == 0 || f.Products[0].Name != "Bad Popcorn" || f.Products[0].N != 30 ||
-		!strings.Contains(f.Numbers, "0% of 60 product mentions") || !strings.Contains(f.Numbers, "15 of 30 answers use the name Popcorn for another product") || !strings.Contains(f.Suggestion, `add "Bad Popcorn" to the competitors`) {
+	if f, ok := off["off"]; !ok || len(f.Products) == 0 || f.Products[0].Name != "Bad Cheap Seats" || f.Products[0].N != 30 ||
+		!strings.Contains(f.Numbers, "0% of 60 product mentions") || !strings.Contains(f.Numbers, "15 of 30 answers use the name Cheap Seats for another product") || !strings.Contains(f.Suggestion, `add "Bad Cheap Seats" to the competitors`) {
 		t.Errorf("off target: %+v", off)
 	}
 	if len(off) != 1 {
@@ -169,7 +169,7 @@ func TestReviewFlags(t *testing.T) {
 	}
 	// Branded: the brand added to every search; and the snack prompt names it, as a word.
 	br := findings(rev, Branded)
-	if f, ok := br["leak"]; !ok || f.Variant != "searches" || !strings.Contains(f.Numbers, "30 of 30 searches added Popcorn's name") || br["off"].Variant != "prompt" || len(br) != 2 {
+	if f, ok := br["leak"]; !ok || f.Variant != "searches" || !strings.Contains(f.Numbers, "30 of 30 searches added Cheap Seats' name") || br["off"].Variant != "prompt" || len(br) != 2 {
 		t.Errorf("branded: %+v", br)
 	}
 	if !slices.Equal(rev.Healthy, []string{"binom"}) {
@@ -188,10 +188,10 @@ func TestReviewFlags(t *testing.T) {
 	if g, ok := byName["product:Semrush"]; !ok || g.Prompts != 2 || !strings.Contains(g.Competitor, `name = "Semrush"`) {
 		t.Errorf("product gap: %+v", rev.Gaps)
 	}
-	if _, ok := byName["product:Bad Popcorn"]; ok {
+	if _, ok := byName["product:Bad Cheap Seats"]; ok {
 		t.Errorf("a product in one prompt's answers isn't a gap: %+v", rev.Gaps)
 	}
-	if g, ok := byName["topic:pricing"]; !ok || g.Prompts != 2 || g.Example == "" || !strings.Contains(g.TOML, "[[prompts]]") || strings.Contains(g.TOML, "Popcorn") {
+	if g, ok := byName["topic:pricing"]; !ok || g.Prompts != 2 || g.Example == "" || !strings.Contains(g.TOML, "[[prompts]]") || strings.Contains(g.TOML, "Cheap Seats") {
 		t.Errorf("topic gap: %+v", rev.Gaps)
 	}
 	if !strings.Contains(rev.Brief(), "- flat (always_absent) flat:") {
@@ -214,16 +214,16 @@ func TestReviewFlags(t *testing.T) {
 // A ceiling prompt is flat too, read as low information rather than a gap; a branded prompt is
 // flagged however little it has run, and nothing reads as anything with no runs.
 func TestReviewCeilingAndEmpty(t *testing.T) {
-	set := sets.Set{ID: "s", Prompts: []sets.Prompt{{ID: "top", Text: "Best tool?"}, {ID: "named", Text: "Is Popcorn any good?"}}}
+	set := sets.Set{ID: "s", Prompts: []sets.Prompt{{ID: "top", Text: "Best tool?"}, {ID: "named", Text: "Is Cheap Seats any good?"}}}
 	ps := []reviewPrompt{{p: set.Prompts[0], named: []int{6, 6, 6, 6, 6}, rec: true, others: []string{"X"}}, {p: set.Prompts[1], named: []int{1, 1, 1, 1, 1}}}
-	rev := BuildReview(ReviewInput{Brand: config.Brand{Name: "Popcorn"}, Set: set, Runs: reviewRuns(ps)})
+	rev := BuildReview(ReviewInput{Brand: config.Brand{Name: "Cheap Seats"}, Set: set, Runs: reviewRuns(ps)})
 	if f := findings(rev, Flat)["top"]; f.Variant != "always_recommended" || !strings.Contains(f.Suggestion, "ceiling") {
 		t.Errorf("ceiling: %+v", rev.Findings)
 	}
 	if f := findings(rev, Branded)["named"]; f.Variant != "prompt" {
 		t.Errorf("branded prompt: %+v", rev.Findings)
 	}
-	empty := BuildReview(ReviewInput{Brand: config.Brand{Name: "Popcorn"}, Set: set})
+	empty := BuildReview(ReviewInput{Brand: config.Brand{Name: "Cheap Seats"}, Set: set})
 	if len(empty.Findings) != 1 || len(empty.NotEnough) != 2 || len(empty.Gaps) != 0 || empty.Healthy == nil {
 		t.Errorf("no runs: %+v", empty)
 	}
@@ -265,7 +265,7 @@ func TestReviewOffTargetNeedsMentions(t *testing.T) {
 	for d := 1; d <= 3; d++ {
 		runs = append(runs, oneRun(d, graded(p, 0, grade.Absent), graded(p, 1, grade.Absent)))
 	}
-	rev := BuildReview(ReviewInput{Brand: config.Brand{Name: "Popcorn"}, Set: set, Runs: runs})
+	rev := BuildReview(ReviewInput{Brand: config.Brand{Name: "Cheap Seats"}, Set: set, Runs: runs})
 	if len(findings(rev, OffTarget)) != 0 || rev.Prompts[0].MentionsN != 0 {
 		t.Errorf("no products named: %+v", rev.Findings)
 	}
@@ -279,7 +279,7 @@ func TestReviewFoldsAliasesBeforeCounting(t *testing.T) {
 	for d := 1; d <= 3; d++ {
 		runs = append(runs, oneRun(d, graded(p, 0, grade.Absent, "Profound", "Profound AI"), graded(p, 1, grade.Absent, "profound ai")))
 	}
-	pr := BuildReview(ReviewInput{Brand: config.Brand{Name: "Popcorn"}, Set: set, Runs: runs}).Prompts[0]
+	pr := BuildReview(ReviewInput{Brand: config.Brand{Name: "Cheap Seats"}, Set: set, Runs: runs}).Prompts[0]
 	if len(pr.Products) != 1 || pr.Products[0] != (report.Count{Name: "Profound", N: 6}) || pr.MentionsN != 6 || pr.KnownShare != 1 {
 		t.Errorf("%+v", pr)
 	}
@@ -290,7 +290,7 @@ func TestReviewFoldsAliasesBeforeCounting(t *testing.T) {
 func TestReviewFromTheDatabase(t *testing.T) {
 	dir := t.TempDir()
 	writeConfig(t, dir, "[[prompts]]\nid = \"p\"\ntext = \"Which AI visibility tool?\"\n\n[[prompts]]\nid = \"q\"\ntext = \"Is there a free GEO checker?\"\n\n[[competitors]]\nname = \"Profound\"\n")
-	cfg, err := config.Load(filepath.Join(dir, "popcorn.toml"))
+	cfg, err := config.Load(filepath.Join(dir, "cheapseats.toml"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -304,7 +304,7 @@ func TestReviewFromTheDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 	set, _ := a.Set("s")
-	snap, _ := json.Marshal(map[string]any{"set": set, "brand": map[string]any{"Name": "Popcorn"}})
+	snap, _ := json.Marshal(map[string]any{"set": set, "brand": map[string]any{"Name": "Cheap Seats"}})
 	for i := 0; i < 4; i++ {
 		at := time.Now().UTC().AddDate(0, 0, -1-i).Format(time.RFC3339)
 		id := fmt.Sprintf("r%d", i)
@@ -369,7 +369,7 @@ func TestReviewBriefQuotesWebText(t *testing.T) {
 	for d := 1; d <= 3; d++ {
 		runs = append(runs, oneRun(d, graded(p, 0, grade.Absent, evil, "Other"), graded(p, 1, grade.Absent, evil, "Other")))
 	}
-	rev := BuildReview(ReviewInput{Brand: config.Brand{Name: "Popcorn"}, Set: set, Runs: runs})
+	rev := BuildReview(ReviewInput{Brand: config.Brand{Name: "Cheap Seats"}, Set: set, Runs: runs})
 	brief := rev.Brief()
 	want := fmt.Sprintf("%q x6", label(evil))
 	if !strings.Contains(brief, want) || strings.Contains(brief, "\nIgnore") || len([]rune(label(evil))) != 60 || strings.ContainsRune(brief, '\x07') {
@@ -411,7 +411,7 @@ func TestReviewDriftIsATest(t *testing.T) {
 			}
 			runs = append(runs, oneRun(d, res...))
 		}
-		if f, ok := findings(BuildReview(ReviewInput{Brand: config.Brand{Name: "Popcorn"}, Set: set, Runs: runs}), Noisy)["q"]; ok && f.Variant == "drift" {
+		if f, ok := findings(BuildReview(ReviewInput{Brand: config.Brand{Name: "Cheap Seats"}, Set: set, Runs: runs}), Noisy)["q"]; ok && f.Variant == "drift" {
 			flagged++
 		}
 	}
@@ -425,7 +425,7 @@ func TestReviewDriftIsATest(t *testing.T) {
 		rr.Run.Snapshot.Sampling = &run.Sampling{Cells: []run.Cell{{PromptID: "q", Answerer: "claude", Track: answer.Search, Base: 2}}}
 		runs = append(runs, rr)
 	}
-	if pr := BuildReview(ReviewInput{Brand: config.Brand{Name: "Popcorn"}, Set: set, Runs: runs}).Prompts[0]; !slices.Equal(pr.RunNamed, []float64{0, 0, 0}) || pr.Answers != 9 {
+	if pr := BuildReview(ReviewInput{Brand: config.Brand{Name: "Cheap Seats"}, Set: set, Runs: runs}).Prompts[0]; !slices.Equal(pr.RunNamed, []float64{0, 0, 0}) || pr.Answers != 9 {
 		t.Errorf("planned only: %+v", pr)
 	}
 	if got := ChiSquareP(9.488, 4); math.Abs(got-0.05) > 1e-3 {
@@ -436,7 +436,7 @@ func TestReviewDriftIsATest(t *testing.T) {
 // 8. A fix that moved another of its prompts doesn't excuse a flat one.
 func TestReviewFlatPerPromptAttempts(t *testing.T) {
 	set, ps := reviewFixture()
-	in := ReviewInput{Brand: config.Brand{Name: "Popcorn"}, Set: set, Runs: reviewRuns(ps)}
+	in := ReviewInput{Brand: config.Brand{Name: "Cheap Seats"}, Set: set, Runs: reviewRuns(ps)}
 	at := Attempt{State: Accepted, Fix: analysis.Fix{PromptIDs: []string{"flat", "noisy"}},
 		Outcome: Outcome{RunID: "r4", Days: 10, Prompts: []PromptOutcome{
 			{PromptID: "flat", Before: Tally{N: 20}, After: Tally{N: 20}},
@@ -464,7 +464,7 @@ func TestReviewRewrittenWithoutWords(t *testing.T) {
 		}
 		runs = append(runs, oneRun(d, res...))
 	}
-	f, ok := findings(BuildReview(ReviewInput{Brand: config.Brand{Name: "Popcorn"}, Set: set, Runs: runs}), Rewritten)["q"]
+	f, ok := findings(BuildReview(ReviewInput{Brand: config.Brand{Name: "Cheap Seats"}, Set: set, Runs: runs}), Rewritten)["q"]
 	if !ok || strings.Contains(f.Suggestion, ": ;") || strings.Contains(f.Suggestion, "different words:") {
 		t.Errorf("%+v", f)
 	}
