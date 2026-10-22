@@ -23,6 +23,7 @@ intent = "info"                   # asks to explain, not to choose: scored on na
 [[competitors]]
 name = "Peec AI"
 aliases = ["Peec"]
+domains = ["peec.ai"]  # its sites, so the run page counts their pages as its own
 ```
 
 **Prompt ids are permanent.** Results, trends and fix lists follow a prompt by its id, so:
