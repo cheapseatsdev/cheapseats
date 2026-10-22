@@ -181,15 +181,16 @@ func (s *Server) mcpHandler() http.Handler {
 			res, err := s.probe(ctx, a)
 			return res, err
 		})
-	addTool(srv, "get_rankings", "The brand's daily share-of-voice rank and rates in each prompt set, with day-over-day change.",
+	addTool(srv, "get_rankings", "The brand's daily share-of-voice rank and rates in each prompt set, with rolling averages and 95% bands, and day-over-day change with its margin (within_noise when it could be chance).",
 		func(ctx context.Context, a struct {
 			Set      string `json:"set,omitempty" jsonschema:"only this prompt set"`
 			LastDays int    `json:"last_days,omitempty" jsonschema:"default 30"`
+			Window   int    `json:"window,omitempty" jsonschema:"rolling window in days: 7 (default), 14 or 28"`
 		}) (any, error) {
 			if a.LastDays <= 0 {
 				a.LastDays = 30
 			}
-			rk, err := s.App.Rankings(ctx, a.LastDays, a.Set)
+			rk, err := s.App.Rankings(ctx, a.LastDays, a.Window, a.Set)
 			return rk, err
 		})
 	addTool(srv, "cancel_run", "Stop an in-progress run. Finished answers are kept; retry from the web UI to finish it.",
