@@ -38,8 +38,11 @@ var regrades string
 //go:embed 008_shares.sql
 var shares string
 
+//go:embed 009_prompt_reviews.sql
+var promptReviews string
+
 // Each entry is applied once, in order; append, never edit.
-var migrations = []string{schema, promptIDs, provenance, fixAttempts, siteChecks, themes, regrades, shares}
+var migrations = []string{schema, promptIDs, provenance, fixAttempts, siteChecks, themes, regrades, shares, promptReviews}
 
 // Schema is the schema version this Cheap Seats brings a database to.
 func Schema() int { return len(migrations) }

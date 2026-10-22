@@ -1,0 +1,32 @@
+{{define "title"}}Prompt review · {{.SetName}} · {{end}}{{define "body"}}{{$d := .}}
+<h1>Prompt review</h1>
+<p class="sub"><a href="/sets/{{.SetID}}">{{.SetName}}</a> · the prompts themselves, from the answers they got since {{.Since}}: {{.Runs}} finished {{if eq .Runs 1}}run{{else}}runs{{end}}, {{.Answers}} graded answers. Each prompt is read under the wording it was last asked in. Free: computed from stored answers, no model calls. · <a href="/api/sets/{{.SetID}}/review?days={{.Days}}">JSON</a></p>
+<div class="filters"><p class="row"><span class="muted small filter-name">Window</span>{{range .Windows}}<a class="chip{{if .On}} on{{end}}" href="{{.Href}}"{{if .On}} aria-current="true"{{end}}>{{.Label}}</a>{{end}}</p></div>
+
+<div class="kpis"><div class="kpi"><b>{{len .Prompts}}</b><small>prompts</small></div><div class="kpi"><b>{{len .Healthy}}</b><small>healthy</small></div><div class="kpi"><b>{{len .Findings}}</b><small>flags</small></div><div class="kpi"><b>{{len .Gaps}}</b><small>gaps</small></div><div class="kpi"><b>{{len .NotEnough}}</b><small title="Fewer than {{.MinRuns}} runs or {{.MinAnswers}} graded answers under one wording">not enough data yet</small></div></div>
+
+<nav class="runnav" aria-label="Sections">{{range .Sections}}<a href="#{{.Kind}}">{{.Title}} {{len .Items}}</a>{{end}}<a href="#gaps">Gaps {{len .Gaps}}</a><a href="#prompts">Every prompt</a></nav>
+
+{{range .Sections}}<h2 id="{{.Kind}}">{{.Title}} <span class="muted">{{len .Items}}</span></h2>
+<p class="sub">{{.What}}</p>
+{{if .Items}}<div class="scroll"><table><thead><tr><th>Prompt</th><th>Numbers</th><th>Suggestion</th></tr></thead><tbody>{{range .Items}}<tr><td>{{.Text}} <span class="muted mono">{{.Prompt}}</span>{{if .Other}}<br>{{.OtherText}} <span class="muted mono">{{.Other}}</span>{{end}}{{with .Variant}} <span class="chip">{{.}}</span>{{end}}</td><td class="small">{{.Numbers}}{{if .Products}}<br><span class="muted">{{range $i, $c := .Products}}{{if $i}}, {{end}}{{$c.Name}} ×{{$c.N}}{{end}}</span>{{end}}</td><td class="small">{{.Suggestion}}</td></tr>{{end}}</tbody></table></div>
+{{else}}<p class="muted small">None.</p>{{end}}{{end}}
+
+<h2 id="gaps">Gaps <span class="muted">{{len .Gaps}}</span></h2>
+<p class="sub">What the set's answers and searches keep coming back to that no prompt asks about: competitors and other products named often, and words the assistants add to searches across prompts. To measure one, paste its prompt into <span class="mono">prompt-sets/{{.File}}</span> by pull request and reword it as your buyers would ask; prompt ids are permanent, so pick one you'll keep.</p>
+{{if .Gaps}}{{range .Gaps}}<details><summary><span class="chip">{{.Kind}}</span> {{.Name}} <span class="muted">— {{.Numbers}}</span></summary>
+{{with .Example}}<p class="muted small">From the search “{{.}}”.</p>{{end}}{{with .TOML}}<pre>{{.}}</pre>{{end}}{{with .Competitor}}<p class="muted small">Or, if it is a competitor, add it to the set's competitors:</p><pre>{{.}}</pre>{{end}}</details>{{end}}
+{{else}}<p class="muted small">None.</p>{{end}}
+
+{{if .Healthy}}<h2>Healthy</h2><p class="small">{{range $i, $id := .Healthy}}{{if $i}}, {{end}}<span class="mono">{{$id}}</span>{{end}}</p>{{end}}
+{{if .NotEnough}}<h2>Not enough data yet</h2><p class="sub">A prompt is reviewed once it has {{.MinRuns}} runs and {{.MinAnswers}} graded answers under one wording in the window.</p><p class="small">{{range $i, $id := .NotEnough}}{{if $i}}, {{end}}<span class="mono">{{$id}}</span>{{end}}</p>{{end}}
+
+<h2 id="suggest">Proposed edits</h2>
+{{with .Err}}<p class="err">{{.}}</p>{{end}}
+{{with .Edits}}<p class="sub">{{len .Rewrites}} rewrites, {{len .Retire}} retirements, {{len .Add}} additions{{if .Dropped}} ({{.Dropped}} dropped: unknown ids, repeats, or naming {{brand}} outside head-to-heads){{end}}{{if .CostUSD}}, {{money .CostUSD}}{{end}}. Nothing was written.</p><pre>{{.Diff}}</pre>
+{{else}}<form method="post" action="/sets/{{$d.SetID}}/review"><input type="hidden" name="days" value="{{$d.Days}}"><button>{{icon "zap"}}Propose rewrites, retirements and additions</button> <span class="muted small">{{if $d.Subscription}}One analyst call on your subscription: $0.{{else}}Costs one analyst model call, within the daily budget.{{end}} It returns a diff against the set's file and writes nothing.</span></form>{{end}}
+
+<h2 id="prompts">Every prompt</h2>
+<div class="scroll"><table><thead><tr><th>Prompt</th><th class="num">Runs</th><th class="num">Answers</th><th class="num">Named</th><th class="num">Recommended</th><th class="num">From prompt</th><th>Flags</th></tr></thead><tbody>{{range .Prompts}}<tr><td>{{.Text}} <span class="muted mono">{{.ID}}</span>{{range .Notes}}<br><span class="muted small">{{.}}</span>{{end}}</td><td class="num">{{.Runs}}</td><td class="num">{{.Answers}}</td><td class="num nowrap">{{rate .Named}}</td><td class="num nowrap">{{if .Info}}<span class="muted" title="info prompt">–</span>{{else}}{{rate .Recommended}}{{end}}</td><td class="num">{{if .Searches}}{{pct .FromPrompt}}{{else}}<span class="muted">–</span>{{end}}</td><td>{{if not .Enough}}<span class="muted small">not enough data yet</span>{{end}}{{range .Flags}}<span class="chip">{{.}}</span> {{end}}</td></tr>{{end}}</tbody></table></div>
+<p class="muted small">Review monthly: it's free, and a month of runs is what the flags need.</p>
+{{end}}

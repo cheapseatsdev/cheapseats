@@ -319,9 +319,14 @@ func (a *App) SetAttemptState(ctx context.Context, id int64, state string) error
 // Attempts lists attempts, newest first, with their outcomes: one set's, or every set's when
 // setID is empty.
 func (a *App) Attempts(ctx context.Context, setID string) ([]Attempt, error) {
-	q, args := `SELECT id,run_id,set_id,fix_rank,fix,url,state,note,marked_by,created_at,updated_at FROM fix_attempts`, []any{}
+	return a.attempts(ctx, setID, "")
+}
+
+// attempts is Attempts made at or after since (any time, if empty), with their outcomes.
+func (a *App) attempts(ctx context.Context, setID, since string) ([]Attempt, error) {
+	q, args := `SELECT id,run_id,set_id,fix_rank,fix,url,state,note,marked_by,created_at,updated_at FROM fix_attempts WHERE created_at>=?`, []any{since}
 	if setID != "" {
-		q += ` WHERE set_id=?`
+		q += ` AND set_id=?`
 		args = append(args, setID)
 	}
 	rows, err := a.DB.QueryContext(ctx, q+` ORDER BY created_at DESC, id DESC`, args...)

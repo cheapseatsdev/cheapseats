@@ -242,6 +242,29 @@ func (s *Server) mcpHandler() http.Handler {
 			}
 			return s.App.SuggestPrompts(ctx, a.Set, a.N)
 		})
+	addTool(srv, "review_prompts", "Review a prompt set's prompts from the answers they got over the last 30, 60 or 90 days: flat (never varied), noisy (moves more than sampling explains), off target (answered about other products), duplicates, rewritten by the assistants' searches, and branded leaks, each with its numbers and a one-line suggestion, plus gaps (competitors, products and search topics no prompt asks about) with prompts to paste as TOML. Free: computed from stored answers. With suggest=true it also asks the analyst for rewrites, retirements and additions as a diff against the set's file, which costs one analyst model call (nothing on the claude-code provider). Writes nothing.",
+		func(ctx context.Context, a struct {
+			Set     string `json:"set" jsonschema:"prompt set id, from list_prompt_sets"`
+			Days    int    `json:"days,omitempty" jsonschema:"window in days: 30 (default), 60 or 90"`
+			Suggest bool   `json:"suggest,omitempty" jsonschema:"also propose edits to the set file (one analyst call)"`
+		}) (any, error) {
+			if a.Days == 0 {
+				a.Days = app.ReviewWindows[0]
+			}
+			rev, err := s.App.Review(ctx, a.Set, a.Days)
+			if err != nil {
+				return nil, err
+			}
+			s.App.MarkReviewed(ctx, rev.SetID)
+			if !a.Suggest {
+				return reviewDigest(rev, nil), nil
+			}
+			e, err := s.App.SuggestReview(ctx, rev)
+			if err != nil {
+				return nil, err
+			}
+			return reviewDigest(rev, &e), nil
+		})
 	addTool(srv, "regrade", "Grade a set's (or one run's) stored answers again with today's grader prompt and model, brand and competitors, so older runs join the current method's trend; answers are not asked again, and runs already graded that way are skipped. dry_run (the default) only says how many answers it would grade and the estimated cost. With dry_run false it costs one grader call per answer (nothing on the claude-code provider), within the daily budget, and runs in the background.",
 		func(ctx context.Context, a struct {
 			Target    string `json:"target" jsonschema:"prompt set id, or a run id"`
