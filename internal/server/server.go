@@ -172,7 +172,7 @@ func New(a *app.App) (*Server, error) {
 		},
 	}
 	s.pages = map[string]*template.Template{}
-	for _, p := range []string{"home", "set", "run", "rankings", "quickwins", "search", "login"} {
+	for _, p := range []string{"home", "set", "run", "rankings", "quickwins", "search", "login", "searches"} {
 		t, err := template.New(p).Funcs(funcs).ParseFS(assets, "templates/layout.html", "templates/"+p+".html")
 		if err != nil {
 			return nil, fmt.Errorf("template %s: %w", p, err)
@@ -253,6 +253,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /search", s.searchForm)
 	mux.HandleFunc("POST /api/search-probe", s.apiSearchProbe)
 	mux.HandleFunc("GET /api/citations", s.apiCitations)
+	mux.HandleFunc("GET /runs/{id}/searches", s.searchesPage)
+	mux.HandleFunc("GET /sets/{id}/searches", s.setSearchesPage)
+	mux.HandleFunc("GET /api/runs/{id}/searches", s.apiSearches)
 	mux.Handle("/api/mcp", s.mcpHandler())
 	return s.auth(logRequests(mux))
 }

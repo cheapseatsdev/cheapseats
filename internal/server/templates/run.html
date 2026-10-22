@@ -6,6 +6,7 @@
 {{with .Progress}}{{template "progress" .}}{{end}}
 <div class="row">{{if and .Active (not .Progress)}}<form class="inline" method="post" action="/runs/{{.Run.ID}}/cancel"><button class="ghost">{{icon "x"}}Cancel</button></form>{{else if not .Active}}{{if or .Summary.Pending .Summary.Errors}}<form class="inline" method="post" action="/runs/{{.Run.ID}}/retry"><button class="ghost">{{icon "rotate-ccw"}}Retry unfinished</button></form>{{end}}{{end}}
 <a class="iconlink" href="/runs/{{.Run.ID}}/export.csv">{{icon "download"}}CSV</a> <a class="iconlink" href="/runs/{{.Run.ID}}/export.json">{{icon "download"}}JSON</a> <a class="iconlink" href="/sets/{{$set.ID}}">{{icon "list"}}Set</a></div>
+<p class="small"><a class="iconlink" href="/runs/{{.Run.ID}}/searches">{{icon "search"}}What the assistants searched</a></p>
 
 <nav class="runnav" aria-label="Sections"><a href="#scores">Scores</a><a href="#grid">Prompt by prompt</a><a href="#fixes">Fixes</a>{{if .Insights}}<a href="#insights">Insights</a>{{end}}{{if .Summary.Sites}}<a href="#sites">Sites</a>{{end}}<a href="#voice">Share of voice</a>{{if .HeadToHead}}<a href="#h2h">Head to head</a>{{end}}{{if .Objections}}<a href="#objections">Objections</a>{{end}}{{if .Hosts}}<a href="#sources">Sources</a>{{end}}<a href="#pages">Pages</a><a href="#answers">Every answer</a></nav>
 
