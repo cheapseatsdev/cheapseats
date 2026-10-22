@@ -178,10 +178,10 @@ popcorn version                        version and database schema
 
 - JSON API under `/api/` (status, sets, runs, fixes, quick wins, fix attempts, rankings, citations, searches, search probe, site audit, citation check, crawlers):
   [reference](https://popcorn.zone/docs/reference/).
-  marked on the chart. Each set also gets a **citation stability** score: how much the hosts its
-  answers cite hold their share from run to run. How it's worked out:
-  [docs/statistics.md](docs/statistics.md). After a grading change, [re-grade](docs/regrading.md)
-  the answers you already have to carry the trend on (free on the claude CLI).
+- MCP server at `/api/mcp` (Streamable HTTP). `get_run` includes net sentiment, themes and page
+  types; `get_result` the grade's evidence quote; `get_citation_stability` has a set's run-to-run
+  citation stability; `suggest_prompts` drafts new prompts for a set (one analyst call); `regrade`
+  re-grades stored answers ([re-grading](docs/regrading.md)), a dry run unless `dry_run` is false:
 
   ```bash
   claude mcp add --transport http popcorn https://<host>/api/mcp --header "Authorization: Bearer <token>"
