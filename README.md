@@ -170,7 +170,8 @@ popcorn version                        version and database schema
     and warnings, open and urgent fixes, attempts awaiting an outcome, `data_state` (`no_runs`,
     `running`, `stale` or `ready`) and `next_steps`, the tool calls worth making now.
   - `start_run` with `dry_run: true` plans a run without starting it: answers per answerer and
-    track, answerers skipped, estimated cost from recent answers (priced by `[pricing]`) and
+    track, answerers skipped, estimated cost from each answerer's recent answers and their grading
+    (priced by `[pricing]`; re-grades count toward grading, so it errs high) and
     today's remaining budget. `POST /api/runs` takes `"dry_run": true` too.
   - `share_run` makes a [share link](docs/sharing.md) for a run, or a set's newest finished run.
   - Prompts: `weekly_pulse`, `competitor_radar` and `why_not_recommended` (for one prompt), each
@@ -183,7 +184,8 @@ popcorn version                        version and database schema
 - `POPCORN_AUTH_HEADER` (+ `POPCORN_ALLOWED_EMAILS`): trust a signing-in proxy's email header.
 - `POPCORN_HOSTS`: host names a proxy on the same machine serves Popcorn as; MCP needs them.
 - `POPCORN_PUBLIC_URL`: the address share links use (`https://popcorn.example.com`). Unset, they
-  use the first of `POPCORN_HOSTS` over https, else the host the request came in on.
+  use the first of `POPCORN_HOSTS` over https, else the host the request came in on
+  (`X-Forwarded-Host` first).
 - `/share/<token>` is open without a sign-in; it serves only that link's run ([docs](docs/sharing.md)).
 
 ## Deploying

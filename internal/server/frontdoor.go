@@ -18,7 +18,7 @@ import (
 const (
 	NoRuns  = "no_runs" // no set has a finished run yet
 	Running = "running" // a run is in progress
-	Stale   = "stale"   // a set's newest finished run is older than its schedule
+	Stale   = "stale"   // a set never ran, or its newest finished run is older than its schedule
 	Ready   = "ready"   // every set has a recent finished run
 )
 
@@ -94,6 +94,9 @@ type nextStep struct {
 	Why  string         `json:"why"`
 }
 
+// dueSteps is how many sets due a run next_steps lists.
+const dueSteps = 3
+
 // mcpPrompts are the prompt templates registered by addPrompts, by name.
 var mcpPrompts = []string{"weekly_pulse", "competitor_radar", "why_not_recommended"}
 
@@ -126,7 +129,7 @@ func (s *Server) frontDoor(ctx context.Context) FrontDoor {
 	}
 
 	progress, _ := s.App.Progress(ctx)
-	var running, stale, fresh []doorSet
+	var running, never, stale, fresh []doorSet
 	finished := 0
 	for _, c := range s.cards(ctx, progress) {
 		ds := doorSet{ID: c.Set.ID, Name: c.Set.Name, Tier: string(c.Set.Tier), Prompts: len(c.Set.Prompts), EveryDays: s.everyDays(c.Set)}
@@ -145,6 +148,7 @@ func (s *Server) frontDoor(ctx context.Context) FrontDoor {
 			running = append(running, ds)
 		case ds.LastFinished == nil:
 			ds.Status = "never_run"
+			never = append(never, ds)
 		case ds.LastFinished.AgeDays*24 > float64(ds.EveryDays)*24+staleGrace.Hours():
 			ds.Status = Stale
 			stale = append(stale, ds)
@@ -159,7 +163,7 @@ func (s *Server) frontDoor(ctx context.Context) FrontDoor {
 		fd.DataState = Running
 	case finished == 0:
 		fd.DataState = NoRuns
-	case len(stale) > 0:
+	case len(stale)+len(never) > 0: // a set that never ran is as out of date as can be
 		fd.DataState = Stale
 	default:
 		fd.DataState = Ready
@@ -183,12 +187,12 @@ func (s *Server) frontDoor(ctx context.Context) FrontDoor {
 			fd.AwaitingOutcome++
 		}
 	}
-	fd.NextSteps = fd.steps(running, stale, fresh)
+	fd.NextSteps = fd.steps(running, never, stale, fresh)
 	return fd
 }
 
 // steps are the calls worth making next, most useful first.
-func (fd FrontDoor) steps(running, stale, fresh []doorSet) []nextStep {
+func (fd FrontDoor) steps(running, never, stale, fresh []doorSet) []nextStep {
 	out := []nextStep{}
 	add := func(tool string, args map[string]any, why string, a ...any) {
 		out = append(out, nextStep{tool, args, fmt.Sprintf(why, a...)})
@@ -204,13 +208,14 @@ func (fd FrontDoor) steps(running, stale, fresh []doorSet) []nextStep {
 	for _, r := range head(running, 2) {
 		add("get_run", map[string]any{"run": r.LastRun.ID}, "%s is running: its rates fill in as answers are graded. Poll every few minutes, not faster.", r.Name)
 	}
-	if fd.DataState == NoRuns && rd.CanRun && len(fd.Sets) > 0 {
-		first := fd.Sets[0]
-		add("start_run", map[string]any{"set": first.ID, "dry_run": true}, "Nothing has been measured yet. Dry-run the first set to see its answers and estimated cost, then call start_run again without dry_run to start it.")
-	}
+	// Sets due a run, never-run ones first, at most dueSteps of them.
 	if rd.CanRun {
-		for _, r := range head(stale, 2) {
-			add("start_run", map[string]any{"set": r.ID, "dry_run": true}, "%s last finished %.0f days ago (it's due every %d). Dry-run it, then start it.", r.Name, r.LastFinished.AgeDays, r.EveryDays)
+		for i, r := range head(append(append([]doorSet(nil), never...), stale...), dueSteps) {
+			if i < len(never) {
+				add("start_run", map[string]any{"set": r.ID, "dry_run": true}, "%s has never finished a run. Dry-run it to see its answers and estimated cost, then call start_run again without dry_run to start it.", r.Name)
+			} else {
+				add("start_run", map[string]any{"set": r.ID, "dry_run": true}, "%s last finished %.0f days ago (it's due every %d). Dry-run it, then start it.", r.Name, r.LastFinished.AgeDays, r.EveryDays)
+			}
 		}
 	}
 	// The newest finished report, fresh sets first.

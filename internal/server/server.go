@@ -523,6 +523,8 @@ type RunData struct {
 	// The run's share links, and one just made, whose link is shown this once.
 	Shares   []app.Share `json:"-"`
 	NewShare *NewShare   `json:"-"`
+	// Set when share links would point at a loopback address (see linkWarning).
+	ShareWarning string `json:"-"`
 }
 
 type TrackRates struct {
@@ -734,6 +736,7 @@ func (s *Server) runPage(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	d.ShareWarning = linkWarning(s.linkBase(requestHost(r), requestScheme(r)))
 	s.render(w, "run", d)
 }
 

@@ -53,12 +53,36 @@ func TestFrontDoor(t *testing.T) {
 	}
 	db.Exec(`DELETE FROM runs WHERE id='r-busy'`)
 
-	// Finished: ready, with the report, the urgent fix and the audit to read next.
+	// One set finished, the others never ran: still stale, with a dry run of one of them.
 	id := execute()
 	fd = s.frontDoor(ctx)
-	if fd.DataState != Ready || fd.OpenFixes != 1 || fd.UrgentFixes != 1 {
+	if fd.DataState != Stale {
+		t.Fatalf("one set run: %s", fd.DataState)
+	}
+	if st := stepTo(fd, "start_run"); st == nil || st.Args["set"] == "ai-search-visibility" || st.Args["dry_run"] != true {
+		t.Errorf("a never-run set should be dry-run next: %+v", fd.NextSteps)
+	}
+	if n := len(fd.NextSteps); n == 0 {
+		t.Error("no next steps")
+	}
+	// Every set finished: ready, with the report, the urgent fix and the audit to read next.
+	for _, st := range a.Sets() {
+		if st.ID == "ai-search-visibility" {
+			continue
+		}
+		r, err := a.Runs.Create(ctx, st, "manual")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := a.Runs.Execute(ctx, r.ID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	fd = s.frontDoor(ctx)
+	if fd.DataState != Ready || fd.OpenFixes == 0 || fd.UrgentFixes == 0 {
 		t.Fatalf("ready: %s open %d urgent %d", fd.DataState, fd.OpenFixes, fd.UrgentFixes)
 	}
+	urgent := fd.UrgentFixes
 	var set doorSet
 	for _, x := range fd.Sets {
 		if x.ID == "ai-search-visibility" {
@@ -69,7 +93,7 @@ func TestFrontDoor(t *testing.T) {
 		t.Errorf("set: %+v", set)
 	}
 	if st := stepTo(fd, "get_run"); st == nil || st.Args["run"] != id {
-		t.Errorf("ready should read the latest run: %+v", fd.NextSteps)
+		t.Errorf("ready should read the first set's latest run: %+v", fd.NextSteps)
 	}
 	if st := stepTo(fd, "get_quick_wins"); st == nil || st.Args["priority"] != "urgent" || st.Args["status"] != "open" {
 		t.Errorf("an urgent fix should be next: %+v", fd.NextSteps)
@@ -81,7 +105,7 @@ func TestFrontDoor(t *testing.T) {
 	if _, err := a.MarkFix(ctx, id, 1, "https://github.com/acme/docs/pull/1", "proposed", "", "test"); err != nil {
 		t.Fatal(err)
 	}
-	if fd = s.frontDoor(ctx); fd.AwaitingOutcome != 1 || fd.UrgentFixes != 0 || stepTo(fd, "list_attempts") == nil {
+	if fd = s.frontDoor(ctx); fd.AwaitingOutcome != 1 || fd.UrgentFixes >= urgent || stepTo(fd, "list_attempts") == nil {
 		t.Errorf("awaiting: %d urgent %d %+v", fd.AwaitingOutcome, fd.UrgentFixes, fd.NextSteps)
 	}
 

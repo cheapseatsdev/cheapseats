@@ -61,6 +61,25 @@ func (s *Server) linkBase(host, scheme string) string {
 	return scheme + "://" + host
 }
 
+// requestHost is the host a request was sent to: X-Forwarded-Host's first entry when a proxy
+// set it (as X-Forwarded-Proto is honoured for the scheme), else the Host header.
+func requestHost(r *http.Request) string {
+	if f := strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-Host"), ",")[0]); f != "" {
+		return f
+	}
+	return r.Host
+}
+
+// linkWarning is what to tell the person making a link that points at a loopback address, which
+// nobody else can open: usually a proxy that rewrote the Host.
+func linkWarning(base string) string {
+	host := strings.TrimPrefix(strings.TrimPrefix(base, "https://"), "http://")
+	if !loopback(host) {
+		return ""
+	}
+	return "This link points at " + base + ", which only this machine can open. Set POPCORN_PUBLIC_URL to the address people reach Popcorn at."
+}
+
 func requestScheme(r *http.Request) string {
 	if r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
 		return "https"
@@ -285,14 +304,16 @@ func (s *Server) sharePage(w http.ResponseWriter, r *http.Request) {
 	h.Set("Cache-Control", "no-store")
 	h.Set("X-Content-Type-Options", "nosniff")
 	h.Set("X-Frame-Options", "DENY")
-	ip, now := clientIP(r), time.Now()
-	if !s.shareLimit.allowed(ip, now) {
-		http.Error(w, "Too many requests for unknown links; try again in a minute.", http.StatusTooManyRequests)
-		return
-	}
+	// Looked up first, so a link that works always opens: behind a proxy every visitor shares one
+	// address, and someone else's misses mustn't lock it out. Only misses are limited.
 	token, _ := shareToken(r.URL.Path)
 	sh, err := s.App.OpenShare(r.Context(), token)
 	if err != nil {
+		ip, now := clientIP(r), time.Now()
+		if !s.shareLimit.allowed(ip, now) {
+			http.Error(w, "Too many requests for unknown links; try again in a minute.", http.StatusTooManyRequests)
+			return
+		}
 		s.shareLimit.miss(ip, now)
 		http.Error(w, "This link doesn't open anything: it may have expired or been revoked.", http.StatusNotFound)
 		return
@@ -322,7 +343,8 @@ func (s *Server) createShareForm(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	d.NewShare = &NewShare{Share: sh, URL: s.shareURL(s.linkBase(r.Host, requestScheme(r)), token)}
+	d.ShareWarning = linkWarning(s.linkBase(requestHost(r), requestScheme(r)))
+	d.NewShare = s.newShare(sh, s.linkBase(requestHost(r), requestScheme(r)), token)
 	w.Header().Set("Cache-Control", "no-store")
 	s.render(w, "run", d)
 }
@@ -337,10 +359,15 @@ func (s *Server) revokeShareForm(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/runs/"+sh.RunID+"#share", http.StatusSeeOther)
 }
 
-// NewShare is a share just made, with its link.
+// NewShare is a share just made, with its link, and a warning when nobody else could open it.
 type NewShare struct {
 	app.Share
-	URL string `json:"url"`
+	URL     string `json:"url"`
+	Warning string `json:"warning,omitempty"`
+}
+
+func (s *Server) newShare(sh app.Share, base, token string) *NewShare {
+	return &NewShare{Share: sh, URL: s.shareURL(base, token), Warning: linkWarning(base)}
 }
 
 func (s *Server) apiCreateShare(w http.ResponseWriter, r *http.Request) {
@@ -357,7 +384,7 @@ func (s *Server) apiCreateShare(w http.ResponseWriter, r *http.Request) {
 		httpErr(w, err, 400)
 		return
 	}
-	writeJSON(w, NewShare{sh, s.shareURL(s.linkBase(r.Host, requestScheme(r)), token)})
+	writeJSON(w, s.newShare(sh, s.linkBase(requestHost(r), requestScheme(r)), token))
 }
 
 func (s *Server) apiShares(w http.ResponseWriter, r *http.Request) {

@@ -152,6 +152,14 @@ func TestShareLifecycle(t *testing.T) {
 	if last != http.StatusTooManyRequests {
 		t.Errorf("after %d misses: %d", shareMisses+1, last)
 	}
+	// Someone else's misses never lock out a link that works.
+	live := create(r2, "")
+	for i := 0; i < 25; i++ {
+		do("GET", "/share/BBBBBBBBBBBBBBBBBBBBBB", "", false)
+	}
+	if rec := do("GET", pathOf(live.URL), "", false); rec.Code != 200 {
+		t.Errorf("a working link after 25 misses: %d", rec.Code)
+	}
 }
 
 // Without a public URL, a share link is built from the host the request came in on, over MCP too,
@@ -184,6 +192,18 @@ func TestShareRunOverMCP(t *testing.T) {
 		t.Fatalf("open: %v %v", err, resp)
 	}
 	resp.Body.Close()
+	// The test server is on loopback: nobody else could open that link, and the result says so.
+	if !strings.Contains(sh.Warning, "POPCORN_PUBLIC_URL") {
+		t.Errorf("no loopback warning: %s", b)
+	}
+	// A proxy's X-Forwarded-Host names the host people used.
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Host = "127.0.0.1:3000"
+	req.Header.Set("X-Forwarded-Host", "popcorn.example.org, inner")
+	req.Header.Set("X-Forwarded-Proto", "https")
+	if got := s.linkBase(requestHost(req), requestScheme(req)); got != "https://popcorn.example.org" || linkWarning(got) != "" {
+		t.Errorf("forwarded: %s", got)
+	}
 	// POPCORN_HOSTS names the public host when there's no public URL.
 	s.hosts = []string{"popcorn.example.com"}
 	if got := s.linkBase("127.0.0.1:3000", "http"); got != "https://popcorn.example.com" {

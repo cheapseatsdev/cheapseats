@@ -109,6 +109,7 @@ func (a *App) DryRun(ctx context.Context, setID string) (Plan, error) {
 		}
 	}
 	since := time.Now().UTC().Add(-run.Window).Format(time.RFC3339)
+	method := run.Method(pv.Snapshot)
 	for _, x := range pv.Snapshot.Answerers {
 		pa := PlanAnswerer{ID: x.ID, Provider: x.Provider, Model: x.Model}
 		for _, c := range pv.Cells {
@@ -122,13 +123,22 @@ func (a *App) DryRun(ctx context.Context, setID string) (Plan, error) {
 			}
 			pa.Extra += c.Extra
 		}
+		// By answerer, not model: results keep the model the provider reported (a dated snapshot
+		// id), rarely the configured name. Runs asked and graded the same way first, then any.
+		// grade_cost_usd also carries any re-grade's cost, so grading may be overestimated.
 		var n int
-		var usd float64
-		a.DB.QueryRowContext(ctx, `SELECT COUNT(*), COALESCE(SUM(answer_cost_usd + grade_cost_usd), 0) FROM results
-			WHERE answerer=? AND model=? AND status='done' AND finished_at>=?`, x.ID, x.Model, since).Scan(&n, &usd)
+		var ans, grd float64
+		for _, m := range []string{method, ""} {
+			a.DB.QueryRowContext(ctx, `SELECT COUNT(*), COALESCE(SUM(x.answer_cost_usd), 0), COALESCE(SUM(x.grade_cost_usd), 0)
+				FROM results x JOIN runs r ON r.id = x.run_id
+				WHERE x.answerer=? AND x.status='done' AND x.finished_at>=? AND (?='' OR r.method=?)`, x.ID, since, m, m).Scan(&n, &ans, &grd)
+			if n > 0 {
+				break
+			}
+		}
 		switch {
 		case n > 0:
-			pa.PerAnswer, pa.Basis = usd/float64(n), fmt.Sprintf("average of %d answers in the last %d days", n, int(run.Window.Hours()/24))
+			pa.PerAnswer, pa.Basis = (ans+grd)/float64(n), fmt.Sprintf("average of %d answers in the last %d days, grading included", n, int(run.Window.Hours()/24))
 		case config.Subscription(x.Provider) && a.Cfg.Grader.Via() == config.ClaudeCode:
 			pa.Basis = "subscription CLI, grading on the claude CLI: nothing billed"
 		default:

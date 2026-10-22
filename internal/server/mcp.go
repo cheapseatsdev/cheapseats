@@ -335,13 +335,13 @@ func (s *Server) mcpHandler() http.Handler {
 			if req != nil && req.Extra != nil && req.Extra.Header != nil {
 				host, scheme = req.Extra.Header.Get(hostHeader), req.Extra.Header.Get(schemeHeader)
 			}
-			return nil, NewShare{sh, s.shareURL(s.linkBase(host, scheme), token)}, nil
+			return nil, s.newShare(sh, s.linkBase(host, scheme), token), nil
 		})
 	addPrompts(srv)
 
 	withHost := func(h http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			r.Header.Set(hostHeader, r.Host)
+			r.Header.Set(hostHeader, requestHost(r))
 			r.Header.Set(schemeHeader, requestScheme(r))
 			h.ServeHTTP(w, r)
 		})

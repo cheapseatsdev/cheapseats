@@ -87,6 +87,7 @@
 
 {{if or (eq .Run.Status "done") .Shares}}<h2 id="share">Share</h2>
 <p class="muted small">A read-only link to this run's report for someone without a sign-in: the headline rates, share of voice, the strongest and weakest prompts, themes and the top fixes' titles and targets. Never the config, the Claude Code prompts or other runs; the answers' text only if you tick it.</p>
+{{with .ShareWarning}}<p class="err small">{{.}}</p>{{end}}
 {{with .NewShare}}<div class="card"><p><b>New link</b> (copy it now: it isn't shown again)</p><p><input class="mono" readonly value="{{.URL}}" aria-label="Share link" onfocus="this.select()" style="width:100%"></p><p class="muted small">Expires {{day .ExpiresAt}} UTC{{if .IncludeAnswers}} · includes answers{{end}}</p></div>{{end}}
 {{if eq .Run.Status "done"}}<form class="mark" method="post" action="/runs/{{.Run.ID}}/shares"><label class="small">Days <input type="number" name="days" value="30" min="1" max="365" aria-label="Days the link lasts" style="width:5em"></label> <label class="small"><input type="checkbox" name="include_answers" value="1"> include answers</label> <button class="ghost small">Make a link</button></form>{{end}}
 {{with .Shares}}<div class="scroll"><table><thead><tr><th>Made</th><th>By</th><th>Expires</th><th>Answers</th><th>State</th><th></th></tr></thead>

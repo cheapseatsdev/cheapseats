@@ -33,8 +33,9 @@ same as one that never existed.
 ## Where links point
 
 `POPCORN_PUBLIC_URL` when set; else `https://` and the first of `POPCORN_HOSTS`; else the host and
-scheme the request that made the link came in on (`X-Forwarded-Proto: https` counts). Behind a
-proxy, set `POPCORN_PUBLIC_URL`.
+scheme the request that made the link came in on (a proxy's `X-Forwarded-Host` and
+`X-Forwarded-Proto` count). Behind a proxy, set `POPCORN_PUBLIC_URL`: a link that would point at a
+loopback address gets a warning on the run page and in `share_run`'s result.
 
 ## Security
 
@@ -44,5 +45,6 @@ proxy, set `POPCORN_PUBLIC_URL`.
   static files, and only for `GET` with a well-formed token.
 - The page is sent with `X-Robots-Tag: noindex, nofollow`, `Referrer-Policy: no-referrer` (so the
   token doesn't leak to sites it links to), `Cache-Control: no-store` and `X-Frame-Options: DENY`.
-- A client asking for 20 unknown tokens in a minute gets 429 until the minute is up. Behind a proxy
-  every client is the proxy, so the limit is shared; links that work aren't counted.
+- A client asking for 20 unknown tokens in a minute gets 429 for unknown tokens until the minute is
+  up. A token is looked up before the limit is checked, so a link that works always opens, even
+  behind a proxy where every client shares the proxy's address.
