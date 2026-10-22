@@ -97,7 +97,7 @@ func (s *Server) mcpHandler() http.Handler {
 			}
 			return runDigest(d), nil
 		})
-	addTool(srv, "get_result", "One answer in full: the text, its grade, every search, result URL and citation.",
+	addTool(srv, "get_result", "One answer in full: the text, its grade (with evidence, the sentence of the answer that most supports the verdict, checked to be in the text), every search, result URL and citation.",
 		func(ctx context.Context, a struct {
 			Run    string `json:"run" jsonschema:"run id"`
 			Result int64  `json:"result" jsonschema:"result id, from get_run"`
@@ -209,6 +209,26 @@ func (s *Server) mcpHandler() http.Handler {
 			}
 			return s.App.SuggestPrompts(ctx, a.Set, a.N)
 		})
+	addTool(srv, "regrade", "Grade a set's (or one run's) stored answers again with today's grader prompt and model, brand and competitors, so older runs join the current method's trend; answers are not asked again, and runs already graded that way are skipped. dry_run (the default) only says how many answers it would grade and the estimated cost. With dry_run false it costs one grader call per answer (nothing on the claude-code provider), within the daily budget, and runs in the background.",
+		func(ctx context.Context, a struct {
+			Target    string `json:"target" jsonschema:"prompt set id, or a run id"`
+			SinceDays *int   `json:"since_days,omitempty" jsonschema:"for a set, only runs from the last N days (default 28; 0 for all)"`
+			DryRun    *bool  `json:"dry_run,omitempty" jsonschema:"only plan it, grading nothing (default true)"`
+		}) (any, error) {
+			since := 28
+			if a.SinceDays != nil {
+				since = *a.SinceDays
+			}
+			if a.DryRun == nil || *a.DryRun {
+				p, err := s.App.PlanRegrade(ctx, a.Target, since)
+				return regradeDigest(p, false), err
+			}
+			p, err := s.App.StartRegrade(a.Target, since)
+			if err != nil {
+				return nil, err
+			}
+			return regradeDigest(p, len(p.Runs) > 0), nil
+		})
 	addTool(srv, "cancel_run", "Stop an in-progress run. Finished answers are kept; retry from the web UI to finish it.",
 		func(ctx context.Context, a runArg) (any, error) {
 			return map[string]bool{"cancelled": s.App.Runs.Cancel(a.Run)}, nil
@@ -314,6 +334,17 @@ func (s *Server) mcpHandler() http.Handler {
 		}
 		h.ServeHTTP(w, r)
 	})
+}
+
+// regradeDigest is a re-grade plan with its runs cut to the first 20, and whether it started.
+func regradeDigest(p run.RegradePlan, started bool) any {
+	more := len(p.Runs) - len(head(p.Runs, 20))
+	p.Runs = head(p.Runs, 20)
+	return struct {
+		run.RegradePlan
+		MoreRuns int  `json:"more_runs,omitempty"`
+		Started  bool `json:"started"`
+	}{p, more, started}
 }
 
 // briefAttempts drops the Claude Code prompt from each attempt's copy of its fix: the caller has

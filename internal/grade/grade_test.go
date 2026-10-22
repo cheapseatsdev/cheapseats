@@ -20,7 +20,7 @@ import (
 // cost, and the same rules after it (here, absent for an answer that never names the brand).
 func TestGradingOnTheClaudeCLI(t *testing.T) {
 	dir := t.TempDir()
-	out := `{"type":"result","subtype":"success","is_error":false,"result":"","structured_output":{"verdict":"recommended","position":1,"top_pick":null,"named":["Gauge"],"reasoning":"r","why_not_top":null,"objections":[],"other_product":false,"tone":"positive","praise":["credible"]}}`
+	out := `{"type":"result","subtype":"success","is_error":false,"result":"","structured_output":{"verdict":"recommended","position":1,"top_pick":null,"named":["Gauge"],"reasoning":"r","why_not_top":null,"objections":[],"other_product":false,"tone":"positive","praise":["credible"],"evidence":"Use Popcorn."}}`
 	if err := os.WriteFile(filepath.Join(dir, "claude"), []byte("#!/bin/sh\ncat > /dev/null\nprintf '%s\\n' '"+out+"'\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -38,7 +38,7 @@ func TestGradingOnTheClaudeCLI(t *testing.T) {
 		t.Fatalf("an absent brand has no tone or praise: %+v", g)
 	}
 	g, _, err = Answer(context.Background(), cfg, sets.Set{}, "Popcorn or Gauge?", "Use Popcorn.")
-	if err != nil || g.Verdict != Recommended || g.Tone != Positive || len(g.Praise) != 1 {
+	if err != nil || g.Verdict != Recommended || g.Tone != Positive || len(g.Praise) != 1 || g.Evidence != "Use Popcorn." {
 		t.Fatalf("a named brand keeps the CLI's verdict, tone and praise: %+v %v", g, err)
 	}
 }
@@ -179,5 +179,67 @@ func TestToneAndPraiseOnlyForANamedBrand(t *testing.T) {
 		if !slices.Contains(schema["required"].([]string), f) || !strings.Contains(System, "\n"+f+":") {
 			t.Errorf("%s isn't required by the schema and described in System", f)
 		}
+	}
+}
+
+// The evidence quote is only ever the answer's own words: a quote that differs only in markdown,
+// spacing, case or curly quotes is found and replaced by the span of the answer it covers; one the
+// grader reworded or joined from two places is dropped, never shown.
+func TestEvidenceIsVerifiedAgainstTheAnswer(t *testing.T) {
+	answer := "Options:\n\n1. **Popcorn** is the  `free` place to start —\n   it runs on your Claude subscription.\n2. Profound is “enterprise grade”."
+	for quote, want := range map[string]string{
+		"Popcorn is the free place to start — it runs on your Claude subscription.": "**Popcorn** is the  `free` place to start —\n   it runs on your Claude subscription.",
+		`"popcorn is the FREE place to start"`:                                      "**Popcorn** is the  `free` place to start",
+		`Profound is "enterprise grade".`:                                           "Profound is “enterprise grade”.",
+		"Popcorn is the free place to start...":                                     "**Popcorn** is the  `free` place to start",
+		"Popcorn is the best free place to start.":                                  "", // reworded
+		"Popcorn is the free place to start. Profound is enterprise grade.":         "", // joined
+		"":    "",
+		"   ": "",
+	} {
+		if got := Quote(answer, quote); got != want {
+			t.Errorf("Quote(%q) = %q, want %q", quote, got, want)
+		}
+		if want != "" && !strings.Contains(answer, Quote(answer, quote)) {
+			t.Errorf("%q: not the answer's own words", quote)
+		}
+	}
+	if Quote("Use Popcorn. "+strings.Repeat("x", 700), "Use Popcorn. "+strings.Repeat("x", 700)) != "" {
+		t.Error("a quote that is most of a long answer isn't evidence")
+	}
+	m := Mark("Try it. Use Popcorn. Done.", "Use Popcorn.")
+	if m.Before != "Try it. " || m.Match != "Use Popcorn." || m.After != " Done." {
+		t.Errorf("%+v", m)
+	}
+	if m := Mark("Text", "missing"); m.Before != "Text" || m.Match != "" {
+		t.Errorf("%+v", m)
+	}
+	if !slices.Contains(schema["required"].([]string), "evidence") || !strings.Contains(System, "\nevidence:") {
+		t.Error("evidence isn't required by the schema and described in System")
+	}
+
+	// Through Answer: the API grader's quote is checked, and an absent brand has none.
+	var reply Grade
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		text, _ := json.Marshal(reply)
+		json.NewEncoder(w).Encode(map[string]any{"content": []any{map[string]any{"type": "text", "text": string(text)}}})
+	}))
+	defer srv.Close()
+	old := llm.AnthropicURL
+	llm.AnthropicURL = srv.URL
+	defer func() { llm.AnthropicURL = old }()
+	t.Setenv("ANTHROPIC_API_KEY", "fake-key")
+	cfg := &config.Config{Brand: config.Brand{Name: "Popcorn"}}
+	reply = Grade{Verdict: Mentioned, Named: []string{"Popcorn"}, Evidence: "popcorn is the free place to start"}
+	if g, _, err := Answer(context.Background(), cfg, sets.Set{}, "q", answer); err != nil || g.Evidence != "**Popcorn** is the  `free` place to start" {
+		t.Errorf("verified quote: %q %v", g.Evidence, err)
+	}
+	reply.Evidence = "Popcorn is the cheapest tool there is."
+	if g, _, _ := Answer(context.Background(), cfg, sets.Set{}, "q", answer); g.Evidence != "" {
+		t.Errorf("an invented quote was kept: %q", g.Evidence)
+	}
+	reply = Grade{Verdict: Absent, Evidence: "Profound is"}
+	if g, _, _ := Answer(context.Background(), cfg, sets.Set{}, "q", answer); g.Evidence != "" {
+		t.Errorf("absent has no evidence: %q", g.Evidence)
 	}
 }

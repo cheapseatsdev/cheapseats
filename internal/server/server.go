@@ -33,6 +33,7 @@ import (
 
 	"github.com/metcalfc/popcorn/internal/analysis"
 	"github.com/metcalfc/popcorn/internal/app"
+	"github.com/metcalfc/popcorn/internal/grade"
 	"github.com/metcalfc/popcorn/internal/llm"
 	"github.com/metcalfc/popcorn/internal/opinion"
 	"github.com/metcalfc/popcorn/internal/probe"
@@ -169,13 +170,21 @@ func New(a *app.App) (*Server, error) {
 			}
 			return template.HTML(b.String()) // goldmark escapes raw HTML unless told otherwise
 		},
+		// An answer split around its grade's evidence, to highlight it (see grade.Mark).
+		"mark": grade.Mark,
+		"evidence": func(x run.Result) string {
+			if x.Grade == nil {
+				return ""
+			}
+			return x.Grade.Evidence
+		},
 		"fixmd": func(set sets.Set, f []analysis.Fix) string { return analysis.Markdown(set, f) },
 		"work": func(runID string, rank int, status string, on, earlier []app.Attempt, back string) fixWork {
 			return fixWork{runID, rank, status, on, earlier, back}
 		},
 	}
 	s.pages = map[string]*template.Template{}
-	for _, p := range []string{"home", "set", "run", "rankings", "quickwins", "search", "login", "searches", "audit", "crawlers"} {
+	for _, p := range []string{"home", "set", "run", "rankings", "quickwins", "search", "login", "searches", "audit", "crawlers", "regrade"} {
 		t, err := template.New(p).Funcs(funcs).ParseFS(assets, "templates/layout.html", "templates/"+p+".html")
 		if err != nil {
 			return nil, fmt.Errorf("template %s: %w", p, err)
@@ -228,6 +237,8 @@ func (s *Server) Handler() http.Handler {
 	})
 	mux.HandleFunc("GET /sets/{id}", s.setPage)
 	mux.HandleFunc("POST /sets/{id}/run", s.startRunForm)
+	mux.HandleFunc("GET /sets/{id}/regrade", s.regradePage)
+	mux.HandleFunc("POST /sets/{id}/regrade", s.regradeForm)
 	mux.HandleFunc("GET /runs/{id}", s.runPage)
 	mux.HandleFunc("POST /runs/{id}/fixes", s.rebuildFixesForm)
 	mux.HandleFunc("POST /runs/{id}/fixes/{rank}/attempts", s.markFixForm)
@@ -684,7 +695,7 @@ func (s *Server) setPage(w http.ResponseWriter, r *http.Request) {
 	window := app.Window(atoi(r.URL.Query().Get("window")))
 	hist, _ := s.App.History(r.Context(), st, track, 30, window)
 	s.render(w, "set", map[string]any{"Set": st, "Runs": rows, "Spend": s.spend(r.Context()), "History": hist,
-		"Advice": s.App.SampleAdvice(r.Context(), st), "Windows": windowLinks(r, window)})
+		"Advice": s.App.SampleAdvice(r.Context(), st), "Windows": windowLinks(r, window), "Regrading": s.App.Regrading(st.ID)})
 }
 
 func (s *Server) startRunForm(w http.ResponseWriter, r *http.Request) {
@@ -698,6 +709,56 @@ func (s *Server) startRunForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/runs/"+started.ID, http.StatusSeeOther)
+}
+
+// regradeDays reads a re-grade's range of runs, in days: 28 unless given, 0 for all.
+func regradeDays(v string) int {
+	if v == "" {
+		return 28
+	}
+	return max(0, atoi(v))
+}
+
+// regradePage is a re-grade's confirmation: what it would grade and cost, and the button.
+func (s *Server) regradePage(w http.ResponseWriter, r *http.Request) {
+	st, ok := s.App.Set(r.PathValue("id"))
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	days := regradeDays(r.URL.Query().Get("since"))
+	var opts []filterOption
+	for _, d := range []int{7, 28, 90, 0} {
+		label := fmt.Sprintf("the last %d days", d)
+		if d == 0 {
+			label = "all time"
+		}
+		q := r.URL.Query()
+		q.Set("since", strconv.Itoa(d))
+		q.Del("started")
+		opts = append(opts, filterOption{Label: label, On: d == days, Href: "?" + q.Encode()})
+	}
+	data := map[string]any{"Set": st, "Since": days, "Options": opts, "Busy": s.App.Regrading(st.ID), "Started": r.URL.Query().Get("started") != "", "Spend": s.spend(r.Context())}
+	if p, err := s.App.PlanRegrade(r.Context(), st.ID, days); err != nil {
+		data["Err"] = err.Error()
+	} else {
+		data["Plan"] = p
+	}
+	s.render(w, "regrade", data)
+}
+
+func (s *Server) regradeForm(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if _, ok := s.App.Set(id); !ok {
+		http.NotFound(w, r)
+		return
+	}
+	days := regradeDays(r.FormValue("since"))
+	if _, err := s.App.StartRegrade(id, days); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	http.Redirect(w, r, fmt.Sprintf("/sets/%s/regrade?since=%d&started=1", id, days), http.StatusSeeOther)
 }
 
 func (s *Server) runPage(w http.ResponseWriter, r *http.Request) {
@@ -1129,7 +1190,7 @@ func (s *Server) exportCSV(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("content-type", "text/csv; charset=utf-8")
 	w.Header().Set("content-disposition", `attachment; filename="`+s.App.Cfg.Brand.Slug()+"-"+d.Run.ID+`.csv"`)
 	cw := csv.NewWriter(w)
-	cw.Write([]string{"result_id", "prompt_n", "prompt", "answerer", "model", "track", "status", "verdict", "position", "top_pick", "named", "why_not_top", "objections", "searches", "cited", "cost_usd", "answer", "prompt_id", "config_rev", "app_version", "prompt_branded"})
+	cw.Write([]string{"result_id", "prompt_n", "prompt", "answerer", "model", "track", "status", "verdict", "position", "top_pick", "named", "why_not_top", "objections", "searches", "cited", "cost_usd", "answer", "prompt_id", "config_rev", "app_version", "prompt_branded", "evidence"})
 	branded := map[int]bool{}
 	for _, p := range d.Summary.Prompts {
 		branded[p.Idx] = p.Branded
@@ -1161,7 +1222,11 @@ func (s *Server) exportCSV(w http.ResponseWriter, r *http.Request) {
 			row[13], row[14], row[16] = strings.Join(qs, "; "), strings.Join(cs, " "), a.Text
 		}
 		// New columns go at the end, so scripts that read the export by position keep working.
-		row = append(row, x.PromptID, d.Run.ConfigRev, d.Run.AppVersion, strconv.FormatBool(branded[x.PromptIdx]))
+		ev := ""
+		if x.Grade != nil {
+			ev = x.Grade.Evidence
+		}
+		row = append(row, x.PromptID, d.Run.ConfigRev, d.Run.AppVersion, strconv.FormatBool(branded[x.PromptIdx]), ev)
 		cw.Write(row)
 	}
 	cw.Flush()

@@ -28,7 +28,7 @@ func TestPagesRenderWithData(t *testing.T) {
 		case strings.Contains(s, "sharp growth lead"):
 			text = `{"insights":"## Why Popcorn lost\nDocker is GA.","fixes":[{"rank":1,"type":"new-page","title":"Write a credential-gateway guide","target":"docs.popcorn.example/guides/keys-off-the-box/","claim":"how","done_when":"page live","evidence":"Use Docker Sandboxes or Popcorn. (prompt 1)","prompts":[1],"effort":"S","displaces":"https://docs.docker.com/ai/sandboxes/security/"}]}`
 		case strings.Contains(s, "output_config"):
-			text = `{"verdict":"mentioned","position":2,"top_pick":"Docker Sandboxes","named":["Docker Sandboxes","Popcorn"],"reasoning":"r","why_not_top":"Docker is GA","objections":["private beta"],"tone":"positive","praise":["open source"]}`
+			text = `{"verdict":"mentioned","position":2,"top_pick":"Docker Sandboxes","named":["Docker Sandboxes","Popcorn"],"reasoning":"r","why_not_top":"Docker is GA","objections":["private beta"],"tone":"positive","praise":["open source"],"evidence":"Docker Sandboxes or Popcorn"}`
 		case strings.Contains(s, `"tools"`):
 			w.Write([]byte(`{"content":[{"type":"server_tool_use","id":"s1","name":"web_search","input":{"query":"q"}},{"type":"web_search_tool_result","tool_use_id":"s1","content":[{"type":"web_search_result","url":"https://docs.docker.com/ai/sandboxes/security/","title":"x"}]},{"type":"text","text":"Use Docker Sandboxes or Popcorn.","citations":[{"url":"https://docs.docker.com/ai/sandboxes/security/"}]}],"usage":{"input_tokens":10,"output_tokens":5}}`))
 			return
@@ -78,6 +78,7 @@ func TestPagesRenderWithData(t *testing.T) {
 		"/quick-wins?gap=documentation":      `aria-current="true">documentation 1</a>`,
 		"/quick-wins?gap=product":            `aria-current="true">product 0</a>`,
 		"/sets/" + set.ID:                    `<td class="num">#1</td>`,
+		"/sets/" + set.ID + "/regrade":       "Nothing to re-grade",
 		"/search":                            "Search probe",
 		"/runs/" + r.ID + "/export.csv":      "result_id,prompt_n,prompt",
 		"/runs/" + r.ID + "/export.json":     `"verdict": "mentioned"`,
@@ -92,6 +93,12 @@ func TestPagesRenderWithData(t *testing.T) {
 	// The run's measures beyond the rates: positions, head to head, objections and sources.
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest("GET", "/runs/"+r.ID, nil))
+	// The grader's evidence, highlighted in the answer: the answer's own words, escaped.
+	for _, want := range []string{`<blockquote class="evidence">Docker Sandboxes or Popcorn</blockquote>`, `<pre>Use <mark title="the grader's evidence">Docker Sandboxes or Popcorn</mark>.</pre>`} {
+		if !strings.Contains(rec.Body.String(), want) {
+			t.Errorf("run page: want %q", want)
+		}
+	}
 	for _, want := range []string{`<h2 id="h2h">Head to head</h2>`, "<td>private beta</td>", `<h2 id="sources">Sources</h2>`, `<td class="mono">docs.docker.com</td><td>reference</td>`, "Avg place"} {
 		if !strings.Contains(rec.Body.String(), want) {
 			t.Errorf("run page: want %q", want)
@@ -108,7 +115,7 @@ func TestPagesRenderWithData(t *testing.T) {
 	}
 	defer cs.Close()
 	tools, err := cs.ListTools(ctx, nil)
-	if err != nil || len(tools.Tools) != 19 {
+	if err != nil || len(tools.Tools) != 20 {
 		t.Fatalf("tools: %v %v", tools, err)
 	}
 	call := func(name string, args map[string]any) (string, bool) {
@@ -144,6 +151,25 @@ func TestPagesRenderWithData(t *testing.T) {
 	}
 	if text, isErr := call("get_citations", map[string]any{"url_contains": "docker"}); isErr || !strings.Contains(text, "docs.docker.com") {
 		t.Errorf("get_citations: %s", limit(text))
+	}
+	// After a change to what the grader reads, the set's re-grade page shows what it would do,
+	// behind a form rather than a dialog. Then back as it was.
+	cfg.Brand.About += " (changed)"
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/sets/"+set.ID+"/regrade?since=0", nil))
+	if body := rec.Body.String(); !strings.Contains(body, `<form method="post" action="/sets/`+set.ID+`/regrade"><input type="hidden" name="since" value="0">`) ||
+		!strings.Contains(body, fmt.Sprintf("Re-grade %d answers", 2*len(set.Prompts))) {
+		t.Errorf("regrade page: %s", limit(body[strings.Index(body, "<main>"):]))
+	}
+	cfg.Brand.About = strings.TrimSuffix(cfg.Brand.About, " (changed)")
+	// Re-grading is a dry run unless asked: nothing changed since this run, so nothing to do.
+	if text, isErr := call("regrade", map[string]any{"target": set.ID}); isErr || !strings.Contains(text, `"current_runs":1`) || !strings.Contains(text, `"started":false`) {
+		t.Errorf("regrade: %s", limit(text))
+	}
+	if res, _ := a.Runs.Results(ctx, r.ID); len(res) > 0 {
+		if text, isErr := call("get_result", map[string]any{"run": r.ID, "result": res[0].ID}); isErr || !strings.Contains(text, `"evidence":"Docker Sandboxes or Popcorn"`) {
+			t.Errorf("get_result: %s", limit(text))
+		}
 	}
 	// The tools that return lists.
 	if text, isErr := call("list_prompt_sets", nil); isErr || !strings.HasPrefix(text, "[") {

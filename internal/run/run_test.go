@@ -30,7 +30,7 @@ func fakeAnthropic(t *testing.T, calls *atomic.Int64) *httptest.Server {
 			msg := llm.Str(llm.Map(llm.List(req["messages"])[0])["content"])
 			g := `{"verdict":"absent","position":null,"top_pick":"Coder","named":["Coder"],"reasoning":"not named","why_not_top":"preferred Coder","objections":[]}`
 			if strings.Contains(msg, "Use Popcorn") {
-				g = `{"verdict":"recommended","position":1,"top_pick":"Popcorn","named":["Popcorn","Coder"],"reasoning":"top pick","why_not_top":null,"relevance":"relevant","accuracy":"not-assessed","understanding":"Workstation option","evidence":[{"quote":"Use Popcorn."}],"objections":["private beta"]}`
+				g = `{"verdict":"recommended","position":1,"top_pick":"Popcorn","named":["Popcorn","Coder"],"reasoning":"top pick","why_not_top":null,"relevance":"relevant","accuracy":"not-assessed","understanding":"Workstation option","evidence":"Use Popcorn.","objections":["private beta"]}`
 			}
 			json.NewEncoder(w).Encode(map[string]any{"content": []any{map[string]any{"type": "text", "text": g}}, "stop_reason": "end_turn", "usage": map[string]any{"input_tokens": 100, "output_tokens": 50}})
 			return

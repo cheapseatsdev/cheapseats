@@ -21,8 +21,9 @@ take to whichever of those tools you move to. Site and docs: [popcorn.zone](http
   - `mentioned`: named, but as one option among many, in passing, or with reservations
   - `absent`: not named at all
 - Records your position, the top pick, every product named (share of voice), "why not #1", objections,
-  the strengths it credits you with, its tone about you (positive, neutral, mixed or negative), and
-  every search result and citation.
+  the strengths it credits you with, its tone about you (positive, neutral, mixed or negative), the
+  sentence that backs the verdict (checked to be in the answer, and highlighted there), and every
+  search result and citation.
 - Sums up what the answers say about you: **net sentiment** (the share of answers naming you that are
   positive, minus the share negative), the praise and objections heard most, and a few named
   **themes** with the competitor each one helps and a quote, from one cheap grader call a run.
@@ -37,7 +38,9 @@ take to whichever of those tools you move to. Site and docs: [popcorn.zone](http
   fix list is written knowing what was tried.
 - **Rankings** trend each set week to week, through prompt and model changes: 7-, 14- or 28-day
   averages with 95% bands, day-over-day changes greyed out when they're within noise, and fixes
-  marked on the chart. How it's worked out: [docs/statistics.md](docs/statistics.md).
+  marked on the chart. How it's worked out: [docs/statistics.md](docs/statistics.md). After a
+  grading change, [re-grade](docs/regrading.md) the answers you already have to carry the trend on
+  (free on the claude CLI).
 - Free checks beside the runs, no model calls ([docs](docs/audit.md)): a **site audit** of what AI
   crawlers can read (robots.txt and firewall blocks per AI bot, llms.txt, sitemap, and pages that
   are empty without JavaScript), a **citation check** of which pages the answers cite name you and
@@ -146,6 +149,9 @@ popcorn crawl import <logfile>...      AI crawler fetches and AI referrals from 
 popcorn crawl report [-days 30]        those counts per page, beside how often runs cite it
 popcorn themes <run-id> [-rebuild]     net sentiment and the run's themes
 popcorn suggest-prompts <set-id> [-n 10]  new buyer questions as TOML to paste (one analyst call)
+popcorn regrade <set-id|run-id> [-since 28d] [-dry-run=false]
+                                       grade stored answers again with today's grader, brand and
+                                       competitors; a dry run with its cost unless -dry-run=false
 popcorn check                          validate the config
 popcorn plan <before> [<after>]        what a config change does to trends
 popcorn migrate-config [dir]           give prompts ids (sets from before ids)
@@ -157,7 +163,9 @@ popcorn version                        version and database schema
 - JSON API under `/api/` (status, sets, runs, fixes, quick wins, fix attempts, rankings, citations, searches, search probe, site audit, citation check, crawlers):
   [reference](https://popcorn.zone/docs/reference/).
 - MCP server at `/api/mcp` (Streamable HTTP). `get_run` includes net sentiment and themes;
-  `suggest_prompts` drafts new prompts for a set (one analyst call):
+  `get_result` the grade's evidence quote; `suggest_prompts` drafts new prompts for a set (one
+  analyst call); `regrade` re-grades stored answers ([re-grading](docs/regrading.md)), a dry run
+  unless `dry_run` is false:
 
   ```bash
   claude mcp add --transport http popcorn https://<host>/api/mcp --header "Authorization: Bearer <token>"
@@ -190,6 +198,7 @@ Tests use fake providers and never make a paid call. Data outlives releases, so:
 - Migrations are append-only; `internal/app/upgrade_test.go` upgrades the oldest schema.
 - Stored JSON decodes leniently; old shapes keep working.
 - `run.Method` changes only when grading changes; other changes are annotated, not new trends.
+  `popcorn regrade` brings older runs onto a new method without asking again ([how](docs/regrading.md)).
 - Unknown config keys are errors; format changes ship with `migrate-config`.
 
 Icons: [Lucide](https://lucide.dev) (ISC). License: [MIT](LICENSE).
