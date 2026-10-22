@@ -6,6 +6,8 @@ import (
 	"html/template"
 	"path"
 	"strings"
+
+	"github.com/cheapseatsdev/cheapseats/internal/grade"
 )
 
 // Lucide icons (lucide-static 0.460.0, ISC: icons/LICENSE), copied in rather than loaded from a
@@ -69,4 +71,43 @@ const markPath = "M0 112V108Q0 100 8 100V74Q8 58 24 58H44Q60 58 60 74V100H68V54Q
 // logo is the brand mark h pixels high, in the text color: the header's wordmark names it.
 func logo(h int) template.HTML {
 	return template.HTML(fmt.Sprintf(`<svg class="mark" width="%d" height="%d" viewBox="0 0 192 112" aria-hidden="true"><path fill="currentColor" d="%s"/></svg>`, h*192/112, h, markPath))
+}
+
+// The seat meter (brand kit): an answer's grade as filled seats, none for absent to all three for
+// top pick. Each file's paths, by grade; colors come from --seat-* in the stylesheet.
+//
+//go:embed meters/*.svg
+var meterFiles embed.FS
+
+var meterPaths = func() map[string]string {
+	out := map[string]string{}
+	for _, g := range []string{"absent", "mentioned", "recommended", "top-pick"} {
+		b, _ := meterFiles.ReadFile("meters/" + g + ".svg")
+		s := string(b)
+		start := strings.Index(s, "</title>") + len("</title>")
+		out[g] = s[start:strings.LastIndex(s, "</svg>")]
+	}
+	return out
+}()
+
+// seats is the seat meter for a grade key (absent, mentioned, recommended or top-pick), or the
+// status icon for anything else: an ungraded answer isn't absent. Text beside it names the grade.
+func seats(key string) template.HTML {
+	inner, ok := meterPaths[key]
+	if !ok {
+		return statusIcon(key)
+	}
+	return template.HTML(`<svg class="seat-meter" width="24" height="16" viewBox="0 0 24 16" aria-hidden="true" focusable="false">` + inner + `</svg>`)
+}
+
+// gradeKey is the seat meter's key for a grade: its verdict, or top-pick when the brand is the
+// answer's top pick.
+func gradeKey(g *grade.Grade, brand string) string {
+	if g == nil {
+		return ""
+	}
+	if g.IsTopPick(brand) {
+		return "top-pick"
+	}
+	return string(g.Verdict)
 }
