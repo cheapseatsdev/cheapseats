@@ -53,7 +53,9 @@ var schema = map[string]any{
 	"additionalProperties": false,
 }
 
-const System = `You grade AI assistant answers for brand visibility. Given a user question and an assistant's answer, decide:
+const System = `You grade AI assistant answers for brand visibility. Given a user question and an assistant's answer, decide the following for the brand named on the "Brand:" line, and only that brand.
+
+The question may be about another product, such as a competitor ("Is Gauge any good?"). That product is never the brand, however strongly the answer endorses it. If the answer doesn't name the brand or one of its aliases, the verdict is "absent", even when the question's subject is recommended.
 
 verdict:
 - "recommended": the answer presents the brand as its top pick, or as one of a small set (<=3) of primary recommendations it actively endorses for the user's situation.
@@ -102,8 +104,33 @@ func Answer(ctx context.Context, cfg *config.Config, set sets.Set, prompt, answe
 	if err != nil {
 		return g, cost, err
 	}
+	if !namesBrand(answer, cfg.Brand) {
+		g.notNamed(cfg.Brand.Name)
+	}
 	g.normalize(cfg.Brand.Name)
 	return g, cost, nil
+}
+
+// namesBrand reports whether the answer contains the brand's name or an alias, ignoring case. It's
+// deliberately loose (a substring, so "rl" passes in "world"): it only ever overrules the model one
+// way, so a false match leaves the model's verdict standing.
+func namesBrand(answer string, b config.Brand) bool {
+	text := strings.ToLower(answer)
+	for _, n := range append([]string{b.Name}, b.Aliases...) {
+		if n = strings.ToLower(strings.TrimSpace(n)); n != "" && strings.Contains(text, n) {
+			return true
+		}
+	}
+	return false
+}
+
+// notNamed makes the grade absent when the answer never names the brand, as System defines it. On a
+// question about a competitor ("Is Gauge any good?") the model can grade that competitor as the brand.
+func (g *Grade) notNamed(brand string) {
+	g.Verdict = Absent
+	if g.IsTopPick(brand) {
+		g.TopPick = nil
+	}
 }
 
 // normalize keeps the grade internally consistent whatever the model returned.
