@@ -15,11 +15,14 @@ import (
 	"github.com/metcalfc/popcorn/internal/app"
 	"github.com/metcalfc/popcorn/internal/llm"
 	"github.com/metcalfc/popcorn/internal/store"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// A fix marked with its pull request leaves the open quick wins; the next run's fix for the same
-// page is open again, as a retry, with the attempt, its outcome, and the analyst told about it.
-func TestMarkingAFixAndItsRetry(t *testing.T) {
+// fixFixture is an app over a fake API whose analyst always proposes one urgent fix, the same
+// guide (7 of 15 prompts, so urgent), with execute to run ai-search-visibility to the end and analyst to read what the analyst
+// was sent each time.
+func fixFixture(t *testing.T) (a *app.App, db *store.DB, execute func() string, analyst func() []string) {
+	t.Helper()
 	var mu sync.Mutex
 	var analystSaw []string
 	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -31,7 +34,7 @@ func TestMarkingAFixAndItsRetry(t *testing.T) {
 			mu.Lock()
 			analystSaw = append(analystSaw, s)
 			mu.Unlock()
-			text = `{"insights":"## Why Popcorn lost\nx","fixes":[{"rank":1,"type":"new-page","title":"Write a credential-gateway guide","target":"https://docs.popcorn.example/guides/keys-off-the-box/","claim":"how","done_when":"page live","evidence":"e (prompt 1)","prompts":[1],"effort":"S","displaces":null}]}`
+			text = `{"insights":"## Why Popcorn lost\nx","fixes":[{"rank":1,"type":"new-page","title":"Write a credential-gateway guide","target":"https://docs.popcorn.example/guides/keys-off-the-box/","claim":"how","done_when":"page live","evidence":"e (prompt 1)","prompts":[1,2,3,4,5,6,7],"effort":"S","displaces":null}]}`
 		case strings.Contains(s, "output_config"):
 			text = `{"verdict":"mentioned","position":2,"top_pick":"Docker Sandboxes","named":["Docker Sandboxes","Popcorn"],"reasoning":"r","why_not_top":"w","objections":[]}`
 		case strings.Contains(s, `"tools"`): // the search track must search first
@@ -43,19 +46,19 @@ func TestMarkingAFixAndItsRetry(t *testing.T) {
 		}
 		json.NewEncoder(w).Encode(map[string]any{"content": []any{map[string]any{"type": "text", "text": text}}, "stop_reason": "end_turn", "usage": map[string]any{"input_tokens": 1, "output_tokens": 1}})
 	}))
-	defer api.Close()
+	t.Cleanup(api.Close)
 	old := llm.AnthropicURL
 	llm.AnthropicURL = api.URL
-	defer func() { llm.AnthropicURL = old }()
+	t.Cleanup(func() { llm.AnthropicURL = old })
 	t.Setenv("ANTHROPIC_API_KEY", "fake-key")
 	t.Setenv("OPENAI_API_KEY", "")
 	os.Unsetenv("POPCORN_TOKENS")
 
-	db, _ := store.Open(t.TempDir())
-	defer db.Close()
-	a := newApp(t, testConfig(t), db)
+	db, _ = store.Open(t.TempDir())
+	t.Cleanup(func() { db.Close() })
+	a = newApp(t, testConfig(t), db)
 	set, _ := a.Set("ai-search-visibility")
-	execute := func() string {
+	execute = func() string {
 		r, err := a.Runs.Create(context.Background(), set, "manual")
 		if err != nil {
 			t.Fatal(err)
@@ -65,6 +68,18 @@ func TestMarkingAFixAndItsRetry(t *testing.T) {
 		}
 		return r.ID
 	}
+	analyst = func() []string {
+		mu.Lock()
+		defer mu.Unlock()
+		return append([]string(nil), analystSaw...)
+	}
+	return a, db, execute, analyst
+}
+
+// A fix marked with its pull request leaves the open quick wins; the next run's fix for the same
+// page is open again, as a retry, with the attempt, its outcome, and the analyst told about it.
+func TestMarkingAFixAndItsRetry(t *testing.T) {
+	a, db, execute, analyst := fixFixture(t)
 	first := execute()
 	s, err := New(a)
 	if err != nil {
@@ -119,9 +134,8 @@ func TestMarkingAFixAndItsRetry(t *testing.T) {
 	// the second, so the attempt is dated well before the new fix list to keep the order certain.
 	db.Exec(`UPDATE fix_attempts SET created_at='2000-01-01T00:00:00Z'`)
 	second := execute()
-	mu.Lock()
-	last := analystSaw[len(analystSaw)-1]
-	mu.Unlock()
+	saw := analyst()
+	last := saw[len(saw)-1]
 	if !strings.Contains(last, "Already tried by the Popcorn team") || !strings.Contains(last, pr) {
 		t.Errorf("the analyst wasn't told what was tried:\n%s", limit(last))
 	}
@@ -130,7 +144,7 @@ func TestMarkingAFixAndItsRetry(t *testing.T) {
 	if len(open) != 1 || open[0].RunID != second || len(open[0].Earlier) != 1 || open[0].Earlier[0].URL != pr {
 		t.Fatalf("the retry isn't open with its earlier attempt: %+v", open)
 	}
-	if o := open[0].Earlier[0].Outcome; o.RunID != second || len(o.Prompts) != 1 || o.Prompts[0].Before.Named == 0 || o.Status() != "unmoved" {
+	if o := open[0].Earlier[0].Outcome; o.RunID != second || len(o.Prompts) != 7 || o.Prompts[0].Before.Named == 0 || o.Status() != "unmoved" {
 		t.Errorf("outcome: %+v %s", o, o.Status())
 	}
 	if body := get("/quick-wins"); !strings.Contains(body, `<span class="chip">retry</span>`) || !strings.Contains(body, "Tried before for this page") {
@@ -162,6 +176,82 @@ func TestMarkingAFixAndItsRetry(t *testing.T) {
 		if rec.Code != code {
 			t.Errorf("%s: %d %s", state, rec.Code, rec.Body.String())
 		}
+	}
+}
+
+// The loop Claude Code runs over MCP: find the open urgent fixes, do one, mark it with its pull
+// request, accept it when it merges, and find the next.
+func TestTheFixLoopOverMCP(t *testing.T) {
+	a, _, execute, _ := fixFixture(t)
+	runID := execute()
+	s, err := New(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+	ctx := context.Background()
+	cs, err := mcp.NewClient(&mcp.Implementation{Name: "test"}, nil).Connect(ctx, &mcp.StreamableClientTransport{Endpoint: ts.URL + "/api/mcp"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cs.Close()
+	call := func(name string, args map[string]any) string {
+		t.Helper()
+		res, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: name, Arguments: args})
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		text := ""
+		for _, c := range res.Content {
+			if tc, ok := c.(*mcp.TextContent); ok {
+				text += tc.Text
+			}
+		}
+		if res.IsError {
+			t.Fatalf("%s: %s", name, text)
+		}
+		return text
+	}
+	open := map[string]any{"status": "open", "priority": "urgent", "brief": true, "limit": 1}
+
+	// Identify: brief leaves out the long Claude prompt; run_id and rank are what mark_fix takes.
+	var todo []app.QuickWin
+	json.Unmarshal([]byte(call("get_quick_wins", open)), &todo)
+	if len(todo) != 1 || todo[0].RunID != runID || todo[0].Rank != 1 || todo[0].ClaudePrompt != "" || todo[0].Status != app.Open {
+		t.Fatalf("identify: %+v", todo)
+	}
+	if full := call("get_quick_wins", map[string]any{"limit": 1}); !strings.Contains(full, "claude_prompt") || !strings.Contains(full, "## Your task") {
+		t.Errorf("without brief the prompt should be there: %s", limit(full))
+	}
+
+	// Mark: proposed with the pull request; it leaves the open list.
+	pr := "https://github.com/metcalfc/popcorn-site/pull/11"
+	var at app.Attempt
+	json.Unmarshal([]byte(call("mark_fix", map[string]any{"run": todo[0].RunID, "rank": todo[0].Rank, "url": pr, "note": "the guide"})), &at)
+	if at.ID == 0 || at.State != app.Proposed || at.By != "mcp" || at.URL != pr {
+		t.Fatalf("mark: %+v", at)
+	}
+	if got := call("get_quick_wins", open); got != "[]" {
+		t.Errorf("a marked fix is still open: %s", limit(got))
+	}
+
+	// Accept when it merges; list_attempts shows it.
+	call("set_attempt_state", map[string]any{"id": at.ID, "state": "accepted"})
+	var all []app.Attempt
+	json.Unmarshal([]byte(call("list_attempts", map[string]any{"set": "ai-search-visibility"})), &all)
+	if len(all) != 1 || all[0].State != app.Accepted || all[0].Fix.Title != "Write a credential-gateway guide" {
+		t.Fatalf("list: %+v", all)
+	}
+
+	// Mistakes come back as tool errors the caller can read, not as success.
+	res, _ := cs.CallTool(ctx, &mcp.CallToolParams{Name: "mark_fix", Arguments: map[string]any{"run": runID, "rank": 9, "url": pr}})
+	if !res.IsError {
+		t.Error("a fix that doesn't exist should be a tool error")
+	}
+	res, _ = cs.CallTool(ctx, &mcp.CallToolParams{Name: "set_attempt_state", Arguments: map[string]any{"id": at.ID, "state": "merged"}})
+	if !res.IsError {
+		t.Error("an unknown state should be a tool error")
 	}
 }
 

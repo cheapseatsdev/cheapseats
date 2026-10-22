@@ -117,12 +117,23 @@ func (s *Server) mcpHandler() http.Handler {
 			Site     string `json:"site,omitempty" jsonschema:"only fixes on this site of the brand's, by url or kind (docs, blog, marketing...), or elsewhere for fixes off its sites"`
 			Status   string `json:"status,omitempty" jsonschema:"open (nothing submitted yet), proposed or accepted"`
 			Priority string `json:"priority,omitempty" jsonschema:"urgent, high, medium or low"`
+			Limit    int    `json:"limit,omitempty" jsonschema:"at most this many, from the top"`
+			Brief    bool   `json:"brief,omitempty" jsonschema:"leave out each fix's Claude Code prompt, the bulk of the result; get it again with a limit when you take a fix on"`
 		}) (any, error) {
 			qw, err := s.App.QuickWins(ctx)
 			if err != nil {
 				return nil, err
 			}
-			return s.App.FilterQuickWins(qw, app.QuickWinFilter{Gap: a.Gap, Set: a.Set, Site: a.Site, Status: a.Status, Priority: a.Priority}), nil
+			out := s.App.FilterQuickWins(qw, app.QuickWinFilter{Gap: a.Gap, Set: a.Set, Site: a.Site, Status: a.Status, Priority: a.Priority})
+			if a.Limit > 0 && len(out) > a.Limit {
+				out = out[:a.Limit]
+			}
+			if a.Brief {
+				for i := range out {
+					out[i].ClaudePrompt = ""
+				}
+			}
+			return out, nil
 		})
 	addTool(srv, "mark_fix", "Record work submitted for a fix: the commit or pull request, as proposed (open PR) or accepted (merged). The fix then leaves the open quick wins; a later fix for the same page stays open and shows this attempt and its outcome.",
 		func(ctx context.Context, a struct {
