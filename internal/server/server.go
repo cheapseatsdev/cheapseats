@@ -62,10 +62,17 @@ type Server struct {
 	// The login cookie's name. Cookies ignore the port, so two deployments on one host need
 	// different names or each sign-in signs the other out.
 	cookie string
+	// Where links to this Popcorn point (POPCORN_PUBLIC_URL), for share links; see linkBase.
+	publicURL string
+	// The shared-report page, which has its own layout (no navigation to pages behind auth), and
+	// the limit on unknown tokens asked for.
+	share      *template.Template
+	shareLimit shareLimiter
 }
 
 func New(a *app.App) (*Server, error) {
-	s := &Server{App: a, cookie: "popcorn_token_" + a.Cfg.Brand.Slug(), authHeader: strings.TrimSpace(os.Getenv("POPCORN_AUTH_HEADER"))}
+	s := &Server{App: a, cookie: "popcorn_token_" + a.Cfg.Brand.Slug(), authHeader: strings.TrimSpace(os.Getenv("POPCORN_AUTH_HEADER")),
+		publicURL: strings.TrimRight(strings.TrimSpace(os.Getenv("POPCORN_PUBLIC_URL")), "/")}
 	for _, t := range strings.Split(os.Getenv("POPCORN_TOKENS"), ",") {
 		if t = strings.TrimSpace(t); t != "" {
 			s.tokens = append(s.tokens, t)
@@ -198,6 +205,11 @@ func New(a *app.App) (*Server, error) {
 		}
 		s.pages[p] = t
 	}
+	t, err := template.New("share").Funcs(funcs).ParseFS(assets, "templates/share.html")
+	if err != nil {
+		return nil, fmt.Errorf("template share: %w", err)
+	}
+	s.share = t
 	return s, nil
 }
 
@@ -257,6 +269,13 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /runs/{id}/retry", s.retryForm)
 	mux.HandleFunc("GET /runs/{id}/export.csv", s.exportCSV)
 	mux.HandleFunc("GET /runs/{id}/export.json", s.exportJSON)
+	mux.HandleFunc("POST /runs/{id}/shares", s.createShareForm)
+	mux.HandleFunc("POST /shares/{sid}/revoke", s.revokeShareForm)
+	mux.HandleFunc("GET /api/runs/{id}/shares", s.apiShares)
+	mux.HandleFunc("POST /api/runs/{id}/shares", s.apiCreateShare)
+	mux.HandleFunc("DELETE /api/shares/{sid}", s.apiRevokeShare)
+	// Open without auth (see auth): a shared run's report, and nothing else.
+	mux.HandleFunc("GET /share/{token}", s.sharePage)
 	mux.HandleFunc("GET /rankings", s.rankingsPage)
 	mux.HandleFunc("GET /quick-wins", s.quickWinsPage)
 	mux.HandleFunc("GET /api/sets", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, s.App.Sets()) })
@@ -343,6 +362,11 @@ func (s *Server) validToken(t string) bool {
 func (s *Server) auth(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if len(s.tokens) == 0 && s.authHeader == "" || r.URL.Path == "/login" || r.URL.Path == "/healthz" || strings.HasPrefix(r.URL.Path, "/static/") {
+			h.ServeHTTP(w, r)
+			return
+		}
+		// A shared report: its token is the credential, and the page serves only its run.
+		if _, ok := shareToken(r.URL.Path); ok && (r.Method == http.MethodGet || r.Method == http.MethodHead) {
 			h.ServeHTTP(w, r)
 			return
 		}
@@ -515,6 +539,11 @@ type RunData struct {
 	HostsMore  int                 `json:"-"`
 	Outreach   []report.Outreach   `json:"-"`
 	Uncited    []report.Page       `json:"-"`
+	// The run's share links, and one just made, whose link is shown this once.
+	Shares   []app.Share `json:"-"`
+	NewShare *NewShare   `json:"-"`
+	// Set when share links would point at a loopback address (see linkWarning).
+	ShareWarning string `json:"-"`
 }
 
 type TrackRates struct {
@@ -612,6 +641,7 @@ func (s *Server) runData(ctx context.Context, id string) (*RunData, error) {
 	d.HostsMore = len(d.Summary.Hosts) - len(d.Hosts)
 	d.Outreach = head(d.Summary.Outreach, outreachRows)
 	d.Uncited = head(d.Summary.Uncited, uncitedRows)
+	d.Shares, _ = s.App.Shares(ctx, id)
 	return d, nil
 }
 
@@ -781,6 +811,7 @@ func (s *Server) runPage(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	d.ShareWarning = linkWarning(s.linkBase(requestHost(r), requestScheme(r)))
 	s.render(w, "run", d)
 }
 
@@ -1027,10 +1058,20 @@ func (s *Server) apiRuns(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) apiStartRun(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Set string `json:"set"`
+		Set    string `json:"set"`
+		DryRun bool   `json:"dry_run"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Set == "" {
-		httpErr(w, errors.New(`body must be {"set": "<prompt set id>"}`), 400)
+		httpErr(w, errors.New(`body must be {"set": "<prompt set id>", "dry_run"?: true}`), 400)
+		return
+	}
+	if body.DryRun {
+		p, err := s.App.DryRun(r.Context(), body.Set)
+		if err != nil {
+			httpErr(w, err, 400)
+			return
+		}
+		writeJSON(w, p)
 		return
 	}
 	started, err := s.App.StartRun(r.Context(), body.Set, "api")

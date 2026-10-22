@@ -1,0 +1,36 @@
+{{define "share"}}<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex, nofollow"><meta name="referrer" content="no-referrer">
+<title>{{.Brand}} in AI answers · {{.Set}}</title>
+<link rel="icon" type="image/svg+xml" href="{{asset "favicon.svg"}}"><link rel="stylesheet" href="{{asset "popcorn.css"}}"></head><body>
+<header><span class="brand">{{icon "popcorn" 22}}<span>Popcorn</span></span><span class="brand-name">{{.Brand}}</span></header>
+<main>
+<h1>{{.Brand}} in AI answers: {{.Set}}</h1>
+<p class="sub">{{.Run}}{{with .Finished}} · finished {{day .}}{{end}} · {{.Answers}} answers graded{{with .Answerers}} from {{range $i, $a := .}}{{if $i}}, {{end}}{{$a}}{{end}}{{end}}</p>
+
+<h2>Headline</h2>
+{{$r := .Unbranded}}<div class="kpis"><div class="kpi"><b>{{pct $r.Visible.P}}</b><small>named</small></div><div class="kpi"><b>{{pct $r.Recommended.P}}</b><small>recommended</small></div><div class="kpi"><b>{{pct $r.TopPick.P}}</b><small>top pick</small></div></div>
+<div class="scroll"><table><thead><tr><th></th><th class="num">Named</th><th class="num">Recommended</th><th class="num">Top pick</th></tr></thead>
+<tbody><tr><td>Leaving out prompts that name {{.Brand}}</td><td class="num">{{rate .Unbranded.Visible}}</td><td class="num">{{rate .Unbranded.Recommended}}</td><td class="num">{{rate .Unbranded.TopPick}}</td></tr>
+{{if .Branded}}<tr><td>Every prompt ({{.Branded}} name {{.Brand}})</td><td class="num">{{rate .Overall.Visible}}</td><td class="num">{{rate .Overall.Recommended}}</td><td class="num">{{rate .Overall.TopPick}}</td></tr>{{end}}</tbody></table></div>
+<p class="muted small">Of the answers graded; 95% intervals in brackets. Named is any mention, recommended is named as a good choice, top pick is named as the best.</p>
+
+{{with .Voice}}<h2>Share of voice</h2>
+<div class="scroll"><table><thead><tr><th>Product</th><th class="num">Named in</th><th class="num">Share of voice</th><th class="num">Top pick</th></tr></thead>
+<tbody>{{range .}}<tr{{if .IsBrand}} class="us"{{end}}><td>{{if .IsBrand}}<b>{{.Name}}</b>{{else}}{{.Name}}{{end}}</td><td class="num">{{pct .NamedRate}}</td><td class="num">{{pct .ShareOfVoice}}</td><td class="num">{{.TopPick}}</td></tr>{{end}}</tbody></table></div>
+<p class="muted small">Named in: answers that named it, of all answers. Share of voice: its mentions of every product's mentions.</p>{{end}}
+
+{{with .Strongest}}<h2>Where {{$.Brand}} is strongest</h2>{{range .}}{{template "share-prompt" .}}{{end}}{{end}}
+{{with .Weakest}}<h2>Where competitors win</h2>{{range .}}{{template "share-prompt" .}}{{end}}{{end}}
+
+{{with .Themes}}<h2>What the answers say</h2>
+<div class="scroll"><table><thead><tr><th>Theme</th><th>Kind</th><th class="num">Answers</th><th>Helps</th></tr></thead>
+<tbody>{{range .}}<tr><td>{{.Name}}</td><td>{{.Kind}}</td><td class="num">{{.Answers}}</td><td>{{.Beneficiary}}</td></tr>{{end}}</tbody></table></div>{{end}}
+
+{{with .Fixes}}<h2>What to fix first</h2>
+<ol>{{range .}}<li>{{.Title}}{{with .Target}} <span class="muted mono small">{{.}}</span>{{end}}</li>{{end}}</ol>{{end}}
+
+<p class="muted small gap-top">A read-only report shared from Popcorn, an open-source AI visibility tracker. This link stops working {{day .Expires}} UTC, or sooner if it's revoked.</p>
+</main></body></html>{{end}}
+{{define "share-prompt"}}<div class="card"><p><b>{{.Prompt}}</b></p>
+<p class="small">Recommended {{.Recommended.Hits}}/{{.Recommended.N}}, named {{.Named.Hits}}/{{.Named.N}}{{with .TopPicks}} · top picks: {{range $i, $c := .}}{{if $i}}, {{end}}{{$c.Name}} ×{{$c.N}}{{end}}{{end}}</p>
+{{range .Answers}}<details><summary><span class="chip">{{.Answerer}} · {{.Track}}</span> <span class="v-{{.Verdict}}">{{.Verdict}}</span></summary><pre>{{.Text}}</pre></details>{{end}}
+</div>{{end}}

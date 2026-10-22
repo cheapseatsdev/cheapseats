@@ -33,6 +33,9 @@ Mounting a checkout at `/config` instead of building an image works too, as in t
 - **Time to stop.** On SIGTERM Popcorn marks runs in progress as interrupted, and resumes them on
   the next start; give it 30 seconds.
 - **Probes:** `GET /healthz` answers `ok` without a token.
+- **Share links:** `GET /share/<token>` answers without a token, serving only that link's run
+  ([sharing](sharing.md)). Set `POPCORN_PUBLIC_URL` to the address people reach Popcorn at, so the
+  links point there; a proxy that signs people in must let `/share/` through for them to work.
 
 ## Backups
 

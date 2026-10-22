@@ -34,6 +34,10 @@ func (s *Server) mcpHandler() http.Handler {
 	type runArg struct {
 		Run string `json:"run" jsonschema:"run id, from list_runs or start_run"`
 	}
+	addTool(srv, "get_started", "Call this first. What this Popcorn tracks and where it stands, in one small result: the brand and its sites, each prompt set with its tier, last run and status, today's spend against the budget, which answerers and the grader can run here, the latest site audit's errors and warnings, open and urgent fixes, fix attempts awaiting an outcome, data_state (no_runs, running, stale or ready) and next_steps: the tool calls worth making now, with their arguments. Free.",
+		func(ctx context.Context, _ none) (any, error) {
+			return s.frontDoor(ctx), nil
+		})
 	addTool(srv, "list_prompt_sets", "The checked-in prompt sets: id, name, tier, description and prompt count.",
 		func(ctx context.Context, _ none) (any, error) {
 			type row struct {
@@ -57,8 +61,14 @@ func (s *Server) mcpHandler() http.Handler {
 			}
 			return st, nil
 		})
-	addTool(srv, "start_run", "Start a run over a prompt set. Costs money: every prompt is answered by each configured assistant and graded. Returns the run id; poll get_run.",
-		func(ctx context.Context, a setArg) (any, error) {
+	addTool(srv, "start_run", "Start a run over a prompt set. Costs money: every prompt is answered by each configured assistant and graded. Call it with dry_run=true first: that returns the plan (answers per answerer and track, answerers skipped, estimated cost from recent runs, today's remaining budget, and whether it would be refused) and starts nothing. Without dry_run it returns the run id; poll get_run.",
+		func(ctx context.Context, a struct {
+			Set    string `json:"set" jsonschema:"prompt set id, from list_prompt_sets"`
+			DryRun bool   `json:"dry_run,omitempty" jsonschema:"plan the run and estimate its cost without starting it"`
+		}) (any, error) {
+			if a.DryRun {
+				return s.App.DryRun(ctx, a.Set)
+			}
 			r, err := s.App.StartRun(ctx, a.Set, "mcp")
 			if err != nil {
 				return nil, err
@@ -344,14 +354,52 @@ func (s *Server) mcpHandler() http.Handler {
 			return rep, nil
 		})
 
-	h := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return srv }, nil)
+	// share_run builds its link from the request's host when no public URL is configured, and
+	// the SDK passes tools the request's headers but not its Host: hand both over as headers.
+	mcp.AddTool(srv, &mcp.Tool{Name: "share_run", Description: "Make a read-only link to a run's report for someone without a sign-in: headline rates with intervals, share of voice, the strongest and weakest prompts, themes and the top fixes' titles and targets (never Claude Code prompts, config or other runs). Give run, or set for its newest finished run. Returns the URL, shown only this once; revoke it from the run page or DELETE /api/shares/{id}."},
+		func(ctx context.Context, req *mcp.CallToolRequest, a struct {
+			Run            string `json:"run,omitempty" jsonschema:"run id, from list_runs"`
+			Set            string `json:"set,omitempty" jsonschema:"instead of run: share this prompt set's newest finished run"`
+			Days           int    `json:"days,omitempty" jsonschema:"how long the link works (default 30, max 365)"`
+			IncludeAnswers bool   `json:"include_answers,omitempty" jsonschema:"also show the answers' text for the prompts the report highlights"`
+		}) (*mcp.CallToolResult, any, error) {
+			id := a.Run
+			if id == "" && a.Set != "" {
+				var err error
+				if id, err = s.App.LatestFinishedRun(ctx, a.Set); err != nil {
+					return nil, nil, err
+				}
+			}
+			if id == "" {
+				return nil, nil, errors.New("give run or set")
+			}
+			sh, token, err := s.App.CreateShare(ctx, id, a.Days, a.IncludeAnswers, "mcp")
+			if err != nil {
+				return nil, nil, err
+			}
+			var host, scheme string
+			if req != nil && req.Extra != nil && req.Extra.Header != nil {
+				host, scheme = req.Extra.Header.Get(hostHeader), req.Extra.Header.Get(schemeHeader)
+			}
+			return nil, s.newShare(sh, s.linkBase(host, scheme), token), nil
+		})
+	addPrompts(srv)
+
+	withHost := func(h http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			r.Header.Set(hostHeader, requestHost(r))
+			r.Header.Set(schemeHeader, requestScheme(r))
+			h.ServeHTTP(w, r)
+		})
+	}
+	h := withHost(mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return srv }, nil))
 	if len(s.hosts) == 0 {
 		return h // the SDK's own guard: loopback requests must name a loopback host
 	}
 	// A proxy on the same machine (exe.dev, a sidecar) delivers requests on loopback under the
 	// public host name, which the SDK's guard refuses. Do the same check here, also allowing the
 	// listed hosts, so a DNS-rebinding page under any other name is still refused.
-	h = mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return srv }, &mcp.StreamableHTTPOptions{DisableLocalhostProtection: true})
+	h = withHost(mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return srv }, &mcp.StreamableHTTPOptions{DisableLocalhostProtection: true}))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if local, ok := r.Context().Value(http.LocalAddrContextKey).(net.Addr); ok && loopback(local.String()) &&
 			!loopback(r.Host) && !slices.Contains(s.hosts, hostOnly(r.Host)) {
