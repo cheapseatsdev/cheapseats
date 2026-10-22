@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/metcalfc/popcorn/internal/app"
 	"github.com/metcalfc/popcorn/internal/llm"
@@ -130,10 +131,18 @@ func TestMarkingAFixAndItsRetry(t *testing.T) {
 	}
 
 	// The set runs again: the analyst hears about the attempt, and its new fix for the same page is
-	// open, as a retry carrying the attempt and its outcome against the new run. Timestamps are to
-	// the second, so the attempt is dated well before the new fix list to keep the order certain.
+	// open, as a retry carrying the attempt and its outcome. Timestamps are to the second, so the
+	// attempt is dated well before the new fix list to keep the order certain (and old enough to
+	// be read). One run after it is two answers a prompt, too few to read.
 	db.Exec(`UPDATE fix_attempts SET created_at='2000-01-01T00:00:00Z'`)
 	second := execute()
+	json.Unmarshal([]byte(get("/api/attempts")), &attempts)
+	if o := attempts[0].Outcome; o.RunID != second || o.Status() != app.OutcomeTooEarly || !strings.Contains(get("/api/attempts"), `"too early"`) {
+		t.Errorf("one run of two answers a prompt should be too early: %+v %s", o, o.Status())
+	}
+	// A second run pools with the first: four answers a prompt. Every answer is the same, so
+	// nothing changed, within a margin.
+	third := execute()
 	saw := analyst()
 	last := saw[len(saw)-1]
 	if !strings.Contains(last, "Already tried by the Popcorn team") || !strings.Contains(last, pr) {
@@ -141,11 +150,15 @@ func TestMarkingAFixAndItsRetry(t *testing.T) {
 	}
 	var open []app.QuickWin
 	json.Unmarshal([]byte(get("/api/quick-wins?status=open")), &open)
-	if len(open) != 1 || open[0].RunID != second || len(open[0].Earlier) != 1 || open[0].Earlier[0].URL != pr {
+	if len(open) != 1 || open[0].RunID != third || len(open[0].Earlier) != 1 || open[0].Earlier[0].URL != pr {
 		t.Fatalf("the retry isn't open with its earlier attempt: %+v", open)
 	}
-	if o := open[0].Earlier[0].Outcome; o.RunID != second || len(o.Prompts) != 7 || o.Prompts[0].Before.Named == 0 || o.Status() != "unmoved" {
-		t.Errorf("outcome: %+v %s", o, o.Status())
+	if o := open[0].Earlier[0].Outcome; o.RunID != third || o.AfterRuns != 2 || o.BeforeRuns != 1 || len(o.Prompts) != 7 || o.Prompts[0].Before.Named == 0 ||
+		o.Prompts[0].After.N != 4 || o.Status() != app.OutcomeNoChange || !strings.HasPrefix(o.Summary(), "no detectable change (±") {
+		t.Errorf("outcome: %+v %s", o, o.Summary())
+	}
+	if !strings.Contains(saw[len(saw)-1], "no detectable change (±") {
+		t.Errorf("the analyst should see the outcome with its margin:\n%s", limit(saw[len(saw)-1]))
 	}
 	if body := get("/quick-wins"); !strings.Contains(body, `<span class="chip">retry</span>`) || !strings.Contains(body, "Tried before for this page") {
 		t.Errorf("the retry isn't marked:\n%s", limit(body))
@@ -153,7 +166,7 @@ func TestMarkingAFixAndItsRetry(t *testing.T) {
 
 	// Work on the same page recorded after a fix list was built covers that list's fix too: the
 	// list didn't know about it. Here it's recorded on the first run's fix, after the second's list.
-	db.Exec(`UPDATE runs SET fixes_at='2001-01-01T00:00:00Z' WHERE id=?`, second)
+	db.Exec(`UPDATE runs SET fixes_at='2001-01-01T00:00:00Z' WHERE id=?`, third)
 	pr2 := "https://github.com/metcalfc/popcorn-site/pull/10"
 	if rec := post("/runs/"+first+"/fixes/1/attempts", url.Values{"url": {pr2}, "state": {"accepted"}}); rec.Code != 303 {
 		t.Fatalf("second mark: %d", rec.Code)
@@ -161,11 +174,29 @@ func TestMarkingAFixAndItsRetry(t *testing.T) {
 	if body := get("/api/quick-wins?status=open"); body != "[]\n" {
 		t.Errorf("work the fix list didn't know about should cover it:\n%s", limit(body))
 	}
-	if body := get("/api/quick-wins?status=accepted"); !strings.Contains(body, second) {
+	if body := get("/api/quick-wins?status=accepted"); !strings.Contains(body, third) {
 		t.Errorf("the covered fix should be accepted:\n%s", limit(body))
 	}
-	if body := get("/runs/" + second); !strings.Contains(body, `class="chip st-accepted">accepted`) {
+	if body := get("/runs/" + third); !strings.Contains(body, `class="chip st-accepted">accepted`) {
 		t.Errorf("run page doesn't show the covered fix as accepted:\n%s", limit(body))
+	}
+	// The trend marks the work, on the day it was proposed and accepted, linking to it; any rate
+	// and window can be drawn. The runs are spread over three days to make a trend.
+	for i, id := range []string{first, second} {
+		db.Exec(`UPDATE runs SET created_at=? WHERE id=?`, time.Now().UTC().AddDate(0, 0, i-2).Format(time.RFC3339), id)
+	}
+	if body := get("/rankings?metric=recommended&window=14"); !strings.Contains(body, `class="fixmark accepted"`) || !strings.Contains(body, `href="`+pr2+`"`) ||
+		!strings.Contains(body, "recommended, 14-day") || !strings.Contains(body, "14-day named") {
+		t.Errorf("rankings page:\n%s", limit(body))
+	}
+	var rk []app.Ranking
+	json.Unmarshal([]byte(get("/api/rankings?window=28")), &rk)
+	if len(rk) == 0 || rk[0].Days[0].WindowDays != 28 || rk[0].Days[0].Compare == nil || !rk[0].Days[0].Compare.WithinNoise || len(rk[0].Attempts) == 0 {
+		t.Errorf("api rankings: %+v", rk)
+	}
+	// Each prompt pooled over the window, with its interval.
+	if body := get("/sets/ai-search-visibility?window=28"); !strings.Contains(body, `Named <span class="muted">28d</span>`) || !strings.Contains(body, "100% (") {
+		t.Errorf("set page:\n%s", limit(body))
 	}
 
 	// Accepted, then withdrawn; an unknown state is refused.

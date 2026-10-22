@@ -383,6 +383,9 @@ func printReport(a *app.App, id string, asJSON bool) error {
 	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
 	fmt.Fprintln(w, "\nANSWERER\tTRACK\tTOP PICK\tRECOMMENDED\tNAMED")
 	fmt.Fprintf(w, "all\t\t%s\t%s\t%s\n", pr(s.Overall.TopPick), pr(s.Overall.Recommended), pr(s.Overall.Visible))
+	if s.BrandedPrompts > 0 {
+		fmt.Fprintf(w, "unbranded\t\t%s\t%s\t%s\n", pr(s.Unbranded.TopPick), pr(s.Unbranded.Recommended), pr(s.Unbranded.Visible))
+	}
 	for _, x := range s.Slices {
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", x.Answerer, x.Track, pr(x.TopPick), pr(x.Recommended), pr(x.Visible))
 	}
@@ -392,7 +395,16 @@ func printReport(a *app.App, id string, asJSON bool) error {
 		if i == 10 {
 			break
 		}
-		fmt.Printf("  %2d. %-32s %3d answers  %d top picks\n", i+1, v.Name, v.Answers, v.TopPick)
+		fmt.Printf("  %2d. %-32s %3d answers (%3.0f%%)  %3.0f%% of mentions  %d top picks\n", i+1, v.Name, v.Answers, 100*v.NamedRate, 100*v.ShareOfVoice, v.TopPick)
+	}
+	if len(s.Outreach) > 0 {
+		fmt.Printf("\nCited without %s (outreach):\n", a.Cfg.Brand.Name)
+		for i, o := range s.Outreach {
+			if i == 10 {
+				break
+			}
+			fmt.Printf("  %3d cited  %-32s %s\n", o.Citations, o.Host, strings.Join(o.Competitors, ", "))
+		}
 	}
 	fmt.Println("\nMost-cited pages:")
 	for i, p := range s.Pages {
