@@ -86,8 +86,17 @@ cp .env.example .env          # set ANTHROPIC_API_KEY
 go run ./cmd/popcorn serve    # the example config, at http://127.0.0.1:3000
 ```
 
-To measure your own brand, start a config repo from the
-[template](https://github.com/metcalfc/popcorn-config-template), then:
+To measure your own brand, start a config repo from its website:
+
+```bash
+go run ./cmd/popcorn init https://yoursite.com     # -dry-run to see it first
+```
+
+That reads the home page, `/llms.txt` and the sitemap for the brand's name, description, docs,
+blog and GitHub, and writes `./<brand>-popcorn-config` with popcorn.toml (on your Claude
+subscription) and starter prompt sets, marking with TODOs what you must decide
+([details](docs/init.md)). Or start from the
+[template](https://github.com/metcalfc/popcorn-config-template). Then:
 
 ```bash
 POPCORN_CONFIG=../your-config/popcorn.toml go run ./cmd/popcorn check
@@ -135,6 +144,8 @@ Check a change with `popcorn check`, and see what it does to trends with `popcor
 ## CLI
 
 ```
+popcorn init <url> [dir]               a new config repo from the brand's website (free;
+                                       -dry-run, -name, -competitors a,b, -suggest)
 popcorn serve [-addr 127.0.0.1:3000]   web UI, JSON API, MCP and the schedule
 popcorn sets                           list prompt sets
 popcorn run <set-id>                   run one set (costs money)

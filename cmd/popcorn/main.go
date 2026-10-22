@@ -33,6 +33,8 @@ import (
 
 const usage = `popcorn: how AI assistants answer your buyers' questions.
 
+  popcorn init <url> [dir]               a new config repo from the brand's website (-dry-run,
+                                         -name, -competitors a,b, -suggest)
   popcorn serve [-addr 127.0.0.1:3000]   web UI, JSON API and the daily schedule
   popcorn sets                           list prompt sets
   popcorn version                        this build's version
@@ -369,6 +371,8 @@ func dispatch(ctx context.Context, cmd string, args []string) error {
 		fmt.Print(res.Snippet)
 		fmt.Fprintf(os.Stderr, "%d prompts for %s (%d dropped as repeats), $%.3f. Paste into its file and open a pull request.\n", len(res.Prompts), fs.Arg(0), res.Dropped, res.CostUSD)
 		return nil
+	case "init":
+		return initCmd(ctx, args)
 	case "audit":
 		return auditCmd(ctx, args)
 	case "check-citations":
