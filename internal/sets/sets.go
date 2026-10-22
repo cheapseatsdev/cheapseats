@@ -27,6 +27,22 @@ const (
 type Competitor struct {
 	Name    string   `toml:"name" json:"name"`
 	Aliases []string `toml:"aliases" json:"aliases,omitempty"`
+	// Its websites: hosts (which cover their subdomains) or host/path prefixes. The run page counts
+	// pages on them as the competitor's own. Like the brand's sites, they never change how answers
+	// are graded or which runs compare, so they're read from today's config rather than a run's
+	// snapshot, and left out of the set's version.
+	Domains []string `toml:"domains" json:"-"`
+}
+
+// CheckDomains reports a domain that is empty or isn't a host or host/path.
+func (c Competitor) CheckDomains() error {
+	for i, d := range c.Domains {
+		d = strings.TrimSpace(d)
+		if d == "" || strings.ContainsAny(d, " \t") {
+			return fmt.Errorf("competitor %q: domains[%d] must be a host or host/path, got %q", c.Name, i, c.Domains[i])
+		}
+	}
+	return nil
 }
 
 // Prompt is one buyer question. Its id is what results, trends and fixes key on, so it stays the
@@ -240,6 +256,11 @@ func Parse(path string) (Set, error) {
 	}
 	if len(s.Prompts) == 0 {
 		return s, fmt.Errorf("prompts is empty")
+	}
+	for _, c := range s.Competitors {
+		if err := c.CheckDomains(); err != nil {
+			return s, err
+		}
 	}
 	ids := map[string]bool{}
 	for i := range s.Prompts {

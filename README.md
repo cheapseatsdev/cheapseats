@@ -44,6 +44,10 @@ A run's scores per track, and every prompt against every assistant:
   <img alt="A run page: search and recall scores, per-answerer rates, and a prompt-by-answerer grid of verdicts" src="docs/images/run-light.webp">
 </picture>
 
+Below them: share of voice (named rate, true share, position), head to head against each
+competitor, the objections answers raise, and where the answers' sources come from, with the
+third-party hosts cited without you. [Reading a run](docs/reading-a-run.md) defines every number.
+
 Quick wins: every fix across your sets, filterable by site, gap and set:
 
 <picture>
@@ -97,6 +101,10 @@ is unset.
 - `[grader]`, `[analyst]`: Claude models, through the API (`ANTHROPIC_API_KEY`, or a proxy that
   adds it in `POPCORN_ANTHROPIC_BASE_URL`), or with `provider = "claude-code"` through the local
   `claude` CLI on your subscription. With subscription answerers too, a laptop needs no API key.
+- `[[competitors]]`: names (and aliases) the grader folds onto one, shared by every set, and their
+  `domains`, so their pages count as theirs
+- `[sources]`: hosts to move between the kinds of source the run page sorts pages into
+  ([reading a run](docs/reading-a-run.md#configuring-it))
 - `[budget]`: a daily cap on API spend
 - `[schedule]`, `[tiers]`: when sets run (weekly is usually enough)
 - Prompt sets: one file per category of buyer question; every prompt has a permanent id

@@ -149,3 +149,29 @@ func TestNamesMatchesWholeWords(t *testing.T) {
 		}
 	}
 }
+
+// Competitors' domains are checked, and never change a set's version: they only decide whose
+// pages are whose, so adding them mustn't read as a change to the set.
+func TestCompetitorDomains(t *testing.T) {
+	dir := t.TempDir()
+	base := "id = \"a\"\n[[prompts]]\nid = \"q\"\ntext = \"q\"\n[[competitors]]\nname = \"Y\"\n"
+	parse := func(extra string) (Set, error) {
+		p := filepath.Join(dir, "a.toml")
+		os.WriteFile(p, []byte(base+extra), 0o644)
+		return Parse(p)
+	}
+	without, err := parse("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	with, err := parse("domains = [\"y.com\"]\n")
+	if err != nil || with.Competitors[0].Domains[0] != "y.com" {
+		t.Fatalf("%+v %v", with, err)
+	}
+	if with.Version != without.Version {
+		t.Error("domains changed the set's version")
+	}
+	if _, err := parse("domains = [\"\"]\n"); err == nil {
+		t.Error("an empty domain should be an error")
+	}
+}
