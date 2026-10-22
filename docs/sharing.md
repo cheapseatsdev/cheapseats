@@ -32,9 +32,9 @@ same as one that never existed.
 
 ## Where links point
 
-`POPCORN_PUBLIC_URL` when set; else `https://` and the first of `POPCORN_HOSTS`; else the host and
+`CHEAPSEATS_PUBLIC_URL` when set; else `https://` and the first of `CHEAPSEATS_HOSTS`; else the host and
 scheme the request that made the link came in on (a proxy's `X-Forwarded-Host` and
-`X-Forwarded-Proto` count). Behind a proxy, set `POPCORN_PUBLIC_URL`: a link that would point at a
+`X-Forwarded-Proto` count). Behind a proxy, set `CHEAPSEATS_PUBLIC_URL`: a link that would point at a
 loopback address gets a warning on the run page and in `share_run`'s result.
 
 ## Security

@@ -8,9 +8,9 @@ import (
 	_ "embed"
 	"fmt"
 	"os"
-	"path/filepath"
 	"time"
 
+	"github.com/cheapseatsdev/cheapseats/internal/env"
 	_ "modernc.org/sqlite"
 )
 
@@ -41,7 +41,7 @@ var shares string
 // Each entry is applied once, in order; append, never edit.
 var migrations = []string{schema, promptIDs, provenance, fixAttempts, siteChecks, themes, regrades, shares}
 
-// Schema is the schema version this Popcorn brings a database to.
+// Schema is the schema version this Cheap Seats brings a database to.
 func Schema() int { return len(migrations) }
 
 type DB struct{ *sql.DB }
@@ -58,14 +58,16 @@ func open(dataDir string, n int) (*DB, error) {
 	}
 	// _txlock=immediate: every transaction here reads and then writes, and a deferred one that read
 	// before another committed can't take the write lock (SQLITE_BUSY, which busy_timeout doesn't
-	// wait out). Taking it at BEGIN makes concurrent writers queue on busy_timeout instead.
-	dsn := "file:" + filepath.Join(dataDir, "popcorn.db") + "?_pragma=journal_mode(WAL)&_pragma=busy_timeout(10000)&_pragma=foreign_keys(1)&_txlock=immediate"
+	// wait out). Taking it at BEGIN makes concurrent writers queue on busy_timeout instead. A data
+	// directory from before the rename keeps its popcorn.db.
+	path := env.File(dataDir, "cheapseats.db", "popcorn.db")
+	dsn := "file:" + path + "?_pragma=journal_mode(WAL)&_pragma=busy_timeout(10000)&_pragma=foreign_keys(1)&_txlock=immediate"
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, err
 	}
 	db.SetMaxOpenConns(4)
-	if err := migrate(db, filepath.Join(dataDir, "popcorn.db"), migrations[:n]); err != nil {
+	if err := migrate(db, path, migrations[:n]); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -79,7 +81,7 @@ func migrate(db *sql.DB, backup string, migrations []string) error {
 		return err
 	}
 	if v > len(migrations) {
-		return fmt.Errorf("the database is from a newer popcorn (schema %d, this one knows %d); upgrade popcorn rather than run an older one on it", v, len(migrations))
+		return fmt.Errorf("the database is from a newer cheapseats (schema %d, this one knows %d); upgrade cheapseats rather than run an older one on it", v, len(migrations))
 	}
 	// Before changing an existing database, copy it, so a bad upgrade can be undone by putting
 	// the copy back and running the previous version.

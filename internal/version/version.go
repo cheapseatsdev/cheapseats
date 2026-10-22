@@ -1,11 +1,11 @@
-// Package version says which Popcorn this is.
+// Package version says which Cheap Seats this is.
 package version
 
 import "runtime/debug"
 
 // Version is set at release build time:
 //
-//	go build -ldflags "-X github.com/metcalfc/popcorn/internal/version.Version=v1.2.3"
+//	go build -ldflags "-X github.com/cheapseatsdev/cheapseats/internal/version.Version=v1.2.3"
 var Version = ""
 
 // String is the release version, or for any other build the commit it was built from, or "dev".

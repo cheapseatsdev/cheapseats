@@ -1,6 +1,6 @@
-// Package scaffold starts a config repo from a brand's website, for `popcorn init`: it reads what
+// Package scaffold starts a config repo from a brand's website, for `cheapseats init`: it reads what
 // the home page, /llms.txt and /sitemap.xml say about the brand (its name, what it is, its docs,
-// blog and code), then writes popcorn.toml and starter prompt sets with TODOs where a person must
+// blog and code), then writes cheapseats.toml and starter prompt sets with TODOs where a person must
 // decide. Every fetch goes through audit's Fetcher, so it reaches public addresses only.
 package scaffold
 
@@ -14,8 +14,8 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/metcalfc/popcorn/internal/audit"
-	"github.com/metcalfc/popcorn/internal/config"
+	"github.com/cheapseatsdev/cheapseats/internal/audit"
+	"github.com/cheapseatsdev/cheapseats/internal/config"
 	"golang.org/x/net/html"
 )
 

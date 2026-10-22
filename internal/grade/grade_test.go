@@ -3,9 +3,9 @@ package grade
 import (
 	"context"
 	"encoding/json"
-	"github.com/metcalfc/popcorn/internal/config"
-	"github.com/metcalfc/popcorn/internal/llm"
-	"github.com/metcalfc/popcorn/internal/sets"
+	"github.com/cheapseatsdev/cheapseats/internal/config"
+	"github.com/cheapseatsdev/cheapseats/internal/llm"
+	"github.com/cheapseatsdev/cheapseats/internal/sets"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -20,7 +20,7 @@ import (
 // cost, and the same rules after it (here, absent for an answer that never names the brand).
 func TestGradingOnTheClaudeCLI(t *testing.T) {
 	dir := t.TempDir()
-	out := `{"type":"result","subtype":"success","is_error":false,"result":"","structured_output":{"verdict":"recommended","position":1,"top_pick":null,"named":["Gauge"],"reasoning":"r","why_not_top":null,"objections":[],"other_product":false,"tone":"positive","praise":["credible"],"evidence":"Use Popcorn."}}`
+	out := `{"type":"result","subtype":"success","is_error":false,"result":"","structured_output":{"verdict":"recommended","position":1,"top_pick":null,"named":["Gauge"],"reasoning":"r","why_not_top":null,"objections":[],"other_product":false,"tone":"positive","praise":["credible"],"evidence":"Use Cheap Seats."}}`
 	if err := os.WriteFile(filepath.Join(dir, "claude"), []byte("#!/bin/sh\ncat > /dev/null\nprintf '%s\\n' '"+out+"'\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -29,7 +29,7 @@ func TestGradingOnTheClaudeCLI(t *testing.T) {
 	old := llm.AnthropicURL
 	llm.AnthropicURL = "http://127.0.0.1:1/never-called"
 	defer func() { llm.AnthropicURL = old }()
-	cfg := &config.Config{Brand: config.Brand{Name: "Popcorn"}, Grader: config.Model{Model: "claude-haiku-5-5", Provider: config.ClaudeCode}}
+	cfg := &config.Config{Brand: config.Brand{Name: "Cheap Seats"}, Grader: config.Model{Model: "claude-haiku-5-5", Provider: config.ClaudeCode}}
 	g, cost, err := Answer(context.Background(), cfg, sets.Set{}, "Is Gauge any good?", "Yes, Gauge is a credible choice.")
 	if err != nil || cost != 0 || g.Verdict != Absent || g.Position != nil {
 		t.Fatalf("%+v cost=%v %v", g, cost, err)
@@ -37,8 +37,8 @@ func TestGradingOnTheClaudeCLI(t *testing.T) {
 	if g.Tone != "" || len(g.Praise) > 0 {
 		t.Fatalf("an absent brand has no tone or praise: %+v", g)
 	}
-	g, _, err = Answer(context.Background(), cfg, sets.Set{}, "Popcorn or Gauge?", "Use Popcorn.")
-	if err != nil || g.Verdict != Recommended || g.Tone != Positive || len(g.Praise) != 1 || g.Evidence != "Use Popcorn." {
+	g, _, err = Answer(context.Background(), cfg, sets.Set{}, "Cheap Seats or Gauge?", "Use Cheap Seats.")
+	if err != nil || g.Verdict != Recommended || g.Tone != Positive || len(g.Praise) != 1 || g.Evidence != "Use Cheap Seats." {
 		t.Fatalf("a named brand keeps the CLI's verdict, tone and praise: %+v %v", g, err)
 	}
 }
@@ -46,13 +46,13 @@ func TestGradingOnTheClaudeCLI(t *testing.T) {
 func TestGraderSeesTheAnswerAndBrand(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
-		for _, want := range []string{"Brand: Popcorn", "About the brand: workstations", "Use Popcorn."} {
+		for _, want := range []string{"Brand: Cheap Seats", "About the brand: workstations", "Use Cheap Seats."} {
 			if !strings.Contains(string(body), want) {
 				t.Errorf("grader request lacks %q", want)
 			}
 		}
-		top := "Popcorn"
-		text, _ := json.Marshal(Grade{Verdict: Mentioned, TopPick: &top, Named: []string{"Popcorn"}})
+		top := "Cheap Seats"
+		text, _ := json.Marshal(Grade{Verdict: Mentioned, TopPick: &top, Named: []string{"Cheap Seats"}})
 		json.NewEncoder(w).Encode(map[string]any{"content": []any{map[string]any{"type": "text", "text": string(text)}}})
 	}))
 	defer srv.Close()
@@ -60,18 +60,18 @@ func TestGraderSeesTheAnswerAndBrand(t *testing.T) {
 	llm.AnthropicURL = srv.URL
 	defer func() { llm.AnthropicURL = old }()
 	t.Setenv("ANTHROPIC_API_KEY", "fake-key")
-	cfg := &config.Config{Brand: config.Brand{Name: "Popcorn", About: "workstations"}}
-	g, _, e := Answer(context.Background(), cfg, sets.Set{}, "public question", "Use Popcorn.")
+	cfg := &config.Config{Brand: config.Brand{Name: "Cheap Seats", About: "workstations"}}
+	g, _, e := Answer(context.Background(), cfg, sets.Set{}, "public question", "Use Cheap Seats.")
 	if e != nil || g.Verdict != Recommended {
 		t.Fatalf("a top pick must be recommended: %+v %v", g, e)
 	}
 }
 
 // On a question about a competitor the model graded that competitor as the brand: "recommended" at
-// position 1 for an answer that never names Popcorn (run r-20261021-200546-84c081, result 236).
+// position 1 for an answer that never names Cheap Seats (run r-20261021-200546-84c081, result 236).
 func TestAnAnswerThatNeverNamesTheBrandIsAbsent(t *testing.T) {
-	brand := config.Brand{Name: "Popcorn", Aliases: []string{"popcorn.zone", "metcalfc/popcorn"}}
-	pos, top := 1, "Popcorn"
+	brand := config.Brand{Name: "Cheap Seats", Aliases: []string{"cheapseats.dev", "cheapseatsdev/cheapseats"}}
+	pos, top := 1, "Cheap Seats"
 	g := Grade{Verdict: Recommended, Position: &pos, TopPick: &top, Objections: []string{"young company"}}
 	if namesBrand("Yes, Gauge is a credible choice. Alternatives: Peec AI, Profound.", brand) {
 		t.Fatal("matched a brand that isn't there")
@@ -81,7 +81,7 @@ func TestAnAnswerThatNeverNamesTheBrandIsAbsent(t *testing.T) {
 	if g.Verdict != Absent || g.Position != nil || g.TopPick != nil || len(g.Objections) > 0 {
 		t.Fatalf("%+v", g)
 	}
-	for _, answer := range []string{"Try POPCORN for this.", "See popcorn.zone/docs.", "github.com/metcalfc/popcorn is open source."} {
+	for _, answer := range []string{"Try CHEAP SEATS for this.", "See cheapseats.dev/docs.", "github.com/cheapseatsdev/cheapseats is open source."} {
 		if !namesBrand(answer, brand) {
 			t.Errorf("missed the brand in %q", answer)
 		}
@@ -104,11 +104,11 @@ func TestAnAnswerThatNeverNamesTheBrandIsAbsent(t *testing.T) {
 }
 
 // Another product can share the brand's name: answers about trypopcorn.ai, Reclaim Protocol's
-// popcorn-oss and Bad Popcorn were graded "mentioned" for Popcorn (run r-20261022-043102-ebd82f,
-// results 671, 695, 699). The grader says so in other_product, and that makes the grade absent;
+// popcorn-oss and Bad Popcorn were graded "mentioned" for Popcorn, as Cheap Seats was then called
+// (run r-20261022-043102-ebd82f, results 671, 695, 699). The grader says so in other_product, and that makes the grade absent;
 // an answer that can't find the brand, without taking it for something else, still names it.
 func TestTheNameUsedForAnotherProductIsAbsent(t *testing.T) {
-	brand := config.Brand{Name: "Popcorn", Aliases: []string{"popcorn.zone"}, About: "an open-source, self-hosted AI visibility tracker"}
+	brand := config.Brand{Name: "Cheap Seats", Aliases: []string{"cheapseats.dev"}, About: "an open-source, self-hosted AI visibility tracker"}
 	pos := 2
 	var reply Grade
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -128,20 +128,20 @@ func TestTheNameUsedForAnotherProductIsAbsent(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "fake-key")
 	ask := func(answer string) Grade {
 		t.Helper()
-		g, _, err := Answer(context.Background(), &config.Config{Brand: brand}, sets.Set{}, "Popcorn vs Profound?", answer)
+		g, _, err := Answer(context.Background(), &config.Config{Brand: brand}, sets.Set{}, "Cheap Seats vs Profound?", answer)
 		if err != nil {
 			t.Fatal(err)
 		}
 		return g
 	}
 
-	reply = Grade{Verdict: Mentioned, Position: &pos, Named: []string{"Profound", "Popcorn AI"}, Objections: []string{"WhatsApp agents"}, OtherProduct: true}
-	if g := ask("I couldn't verify the Popcorn you mean; trypopcorn.ai sells WhatsApp sales agents. Pick Profound."); g.Verdict != Absent || g.Position != nil || len(g.Objections) > 0 || !g.OtherProduct {
+	reply = Grade{Verdict: Mentioned, Position: &pos, Named: []string{"Profound", "Cheap Seats AI"}, Objections: []string{"WhatsApp agents"}, OtherProduct: true}
+	if g := ask("I couldn't verify the Cheap Seats you mean; trycheapseats.ai sells WhatsApp sales agents. Pick Profound."); g.Verdict != Absent || g.Position != nil || len(g.Objections) > 0 || !g.OtherProduct {
 		t.Errorf("another product's name must be absent: %+v", g)
 	}
 
-	reply = Grade{Verdict: Mentioned, Position: &pos, Named: []string{"Profound", "Popcorn"}, Objections: []string{"could not verify"}}
-	if g := ask("I couldn't find a product called Popcorn, so pick Profound."); g.Verdict != Mentioned || g.Position == nil {
+	reply = Grade{Verdict: Mentioned, Position: &pos, Named: []string{"Profound", "Cheap Seats"}, Objections: []string{"could not verify"}}
+	if g := ask("I couldn't find a product called Cheap Seats, so pick Profound."); g.Verdict != Mentioned || g.Position == nil {
 		t.Errorf("not finding the brand still names it: %+v", g)
 	}
 }
@@ -149,12 +149,12 @@ func TestTheNameUsedForAnotherProductIsAbsent(t *testing.T) {
 func TestAbsentBrandDoesNotGetInventedObjectionAndTiesStayUnpicked(t *testing.T) {
 	why := "Preferred another tool"
 	g := Grade{Verdict: Absent, WhyNotTop: &why, Objections: []string{"unsupported"}}
-	g.normalize("Popcorn")
+	g.normalize("Cheap Seats")
 	if g.WhyNotTop != nil || len(g.Objections) > 0 {
 		t.Fatal(g)
 	}
 	g = Grade{Verdict: Recommended}
-	g.normalize("Popcorn")
+	g.normalize("Cheap Seats")
 	if g.TopPick != nil {
 		t.Fatal("tie forced into a top pick")
 	}
@@ -164,13 +164,13 @@ func TestAbsentBrandDoesNotGetInventedObjectionAndTiesStayUnpicked(t *testing.T)
 // and a tone outside the four (the schema's "none", or nothing from an older grade) is no tone.
 func TestToneAndPraiseOnlyForANamedBrand(t *testing.T) {
 	g := Grade{Verdict: Absent, Tone: Positive, Praise: []string{"open source"}}
-	g.normalize("Popcorn")
+	g.normalize("Cheap Seats")
 	if g.Tone != "" || g.Praise != nil {
 		t.Fatalf("%+v", g)
 	}
 	for tone, want := range map[Tone]Tone{"none": "", "": "", "glowing": "", Mixed: Mixed, Negative: Negative} {
 		g = Grade{Verdict: Mentioned, Tone: tone, Praise: []string{"cheap"}}
-		g.normalize("Popcorn")
+		g.normalize("Cheap Seats")
 		if g.Tone != want || len(g.Praise) != 1 {
 			t.Errorf("tone %q: %+v", tone, g)
 		}
@@ -186,14 +186,14 @@ func TestToneAndPraiseOnlyForANamedBrand(t *testing.T) {
 // spacing, case or curly quotes is found and replaced by the span of the answer it covers; one the
 // grader reworded or joined from two places is dropped, never shown.
 func TestEvidenceIsVerifiedAgainstTheAnswer(t *testing.T) {
-	answer := "Options:\n\n1. **Popcorn** is the  `free` place to start —\n   it runs on your Claude subscription.\n2. Profound is “enterprise grade”."
+	answer := "Options:\n\n1. **Cheap Seats** is the  `free` place to start —\n   it runs on your Claude subscription.\n2. Profound is “enterprise grade”."
 	for quote, want := range map[string]string{
-		"Popcorn is the free place to start — it runs on your Claude subscription.": "**Popcorn** is the  `free` place to start —\n   it runs on your Claude subscription.",
-		`"popcorn is the FREE place to start"`:                                      "**Popcorn** is the  `free` place to start",
-		`Profound is "enterprise grade".`:                                           "Profound is “enterprise grade”.",
-		"Popcorn is the free place to start...":                                     "**Popcorn** is the  `free` place to start",
-		"Popcorn is the best free place to start.":                                  "", // reworded
-		"Popcorn is the free place to start. Profound is enterprise grade.":         "", // joined
+		"Cheap Seats is the free place to start — it runs on your Claude subscription.": "**Cheap Seats** is the  `free` place to start —\n   it runs on your Claude subscription.",
+		`"cheap seats is the FREE place to start"`:                                      "**Cheap Seats** is the  `free` place to start",
+		`Profound is "enterprise grade".`:                                               "Profound is “enterprise grade”.",
+		"Cheap Seats is the free place to start...":                                     "**Cheap Seats** is the  `free` place to start",
+		"Cheap Seats is the best free place to start.":                                  "", // reworded
+		"Cheap Seats is the free place to start. Profound is enterprise grade.":         "", // joined
 		"":    "",
 		"   ": "",
 	} {
@@ -204,11 +204,11 @@ func TestEvidenceIsVerifiedAgainstTheAnswer(t *testing.T) {
 			t.Errorf("%q: not the answer's own words", quote)
 		}
 	}
-	if Quote("Use Popcorn. "+strings.Repeat("x", 700), "Use Popcorn. "+strings.Repeat("x", 700)) != "" {
+	if Quote("Use Cheap Seats. "+strings.Repeat("x", 700), "Use Cheap Seats. "+strings.Repeat("x", 700)) != "" {
 		t.Error("a quote that is most of a long answer isn't evidence")
 	}
-	m := Mark("Try it. Use Popcorn. Done.", "Use Popcorn.")
-	if m.Before != "Try it. " || m.Match != "Use Popcorn." || m.After != " Done." {
+	m := Mark("Try it. Use Cheap Seats. Done.", "Use Cheap Seats.")
+	if m.Before != "Try it. " || m.Match != "Use Cheap Seats." || m.After != " Done." {
 		t.Errorf("%+v", m)
 	}
 	if m := Mark("Text", "missing"); m.Before != "Text" || m.Match != "" {
@@ -229,12 +229,12 @@ func TestEvidenceIsVerifiedAgainstTheAnswer(t *testing.T) {
 	llm.AnthropicURL = srv.URL
 	defer func() { llm.AnthropicURL = old }()
 	t.Setenv("ANTHROPIC_API_KEY", "fake-key")
-	cfg := &config.Config{Brand: config.Brand{Name: "Popcorn"}}
-	reply = Grade{Verdict: Mentioned, Named: []string{"Popcorn"}, Evidence: "popcorn is the free place to start"}
-	if g, _, err := Answer(context.Background(), cfg, sets.Set{}, "q", answer); err != nil || g.Evidence != "**Popcorn** is the  `free` place to start" {
+	cfg := &config.Config{Brand: config.Brand{Name: "Cheap Seats"}}
+	reply = Grade{Verdict: Mentioned, Named: []string{"Cheap Seats"}, Evidence: "cheap seats is the free place to start"}
+	if g, _, err := Answer(context.Background(), cfg, sets.Set{}, "q", answer); err != nil || g.Evidence != "**Cheap Seats** is the  `free` place to start" {
 		t.Errorf("verified quote: %q %v", g.Evidence, err)
 	}
-	reply.Evidence = "Popcorn is the cheapest tool there is."
+	reply.Evidence = "Cheap Seats is the cheapest tool there is."
 	if g, _, _ := Answer(context.Background(), cfg, sets.Set{}, "q", answer); g.Evidence != "" {
 		t.Errorf("an invented quote was kept: %q", g.Evidence)
 	}

@@ -6,12 +6,12 @@ import (
 	"math"
 	"time"
 
-	"github.com/metcalfc/popcorn/internal/answer"
-	"github.com/metcalfc/popcorn/internal/config"
-	"github.com/metcalfc/popcorn/internal/run"
+	"github.com/cheapseatsdev/cheapseats/internal/answer"
+	"github.com/cheapseatsdev/cheapseats/internal/config"
+	"github.com/cheapseatsdev/cheapseats/internal/run"
 )
 
-// Usable is one provider Popcorn calls (an answerer, the grader, the analyst) and whether this
+// Usable is one provider Cheap Seats calls (an answerer, the grader, the analyst) and whether this
 // machine can call it: its API key is set, or its CLI is on the PATH.
 type Usable struct {
 	ID       string `json:"id"`
@@ -20,7 +20,7 @@ type Usable struct {
 	Missing  string `json:"missing,omitempty"`
 }
 
-// Readiness is what popcorn check says about the providers, for the front door: which answerers
+// Readiness is what cheapseats check says about the providers, for the front door: which answerers
 // a run would ask (the others are skipped), and whether grading and the fix list can run here.
 type Readiness struct {
 	Answerers []Usable `json:"answerers"`

@@ -4,11 +4,11 @@ import (
 	"math"
 	"testing"
 
-	"github.com/metcalfc/popcorn/internal/answer"
-	"github.com/metcalfc/popcorn/internal/config"
-	"github.com/metcalfc/popcorn/internal/grade"
-	"github.com/metcalfc/popcorn/internal/run"
-	"github.com/metcalfc/popcorn/internal/sets"
+	"github.com/cheapseatsdev/cheapseats/internal/answer"
+	"github.com/cheapseatsdev/cheapseats/internal/config"
+	"github.com/cheapseatsdev/cheapseats/internal/grade"
+	"github.com/cheapseatsdev/cheapseats/internal/run"
+	"github.com/cheapseatsdev/cheapseats/internal/sets"
 )
 
 func near(a, b float64) bool { return math.Abs(a-b) < 1e-9 }

@@ -6,12 +6,12 @@ import (
 	"math"
 	"time"
 
-	"github.com/metcalfc/popcorn/internal/app"
-	"github.com/metcalfc/popcorn/internal/sets"
+	"github.com/cheapseatsdev/cheapseats/internal/app"
+	"github.com/cheapseatsdev/cheapseats/internal/sets"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// The front door: get_started is the first call an MCP client makes, a page of what this Popcorn
+// The front door: get_started is the first call an MCP client makes, a page of what this Cheap Seats
 // tracks, what it has, what can run here and what to call next, small enough to read whole.
 
 // Data states, from nothing to read to fresh.
@@ -32,7 +32,7 @@ type FrontDoor struct {
 	DataState string     `json:"data_state"`
 	Sets      []doorSet  `json:"sets"`
 	Spend     doorSpend  `json:"spend_today"`
-	// Which providers can run here, as popcorn check says.
+	// Which providers can run here, as cheapseats check says.
 	Readiness app.Readiness `json:"readiness"`
 	Audit     *doorAudit    `json:"latest_audit"` // null when the sites were never audited
 	// Fixes from the latest runs nobody has submitted work for, and the urgent ones among them.
@@ -203,7 +203,7 @@ func (fd FrontDoor) steps(running, never, stale, fresh []doorSet) []nextStep {
 		if !rd.Grader.Usable {
 			why = "the grader can't run here: " + rd.Grader.Missing
 		}
-		add("", nil, "Runs can't start: %s. Fix the environment (popcorn check on the command line says what's missing); the reads below still work.", why)
+		add("", nil, "Runs can't start: %s. Fix the environment (cheapseats check on the command line says what's missing); the reads below still work.", why)
 	}
 	for _, r := range head(running, 2) {
 		add("get_run", map[string]any{"run": r.LastRun.ID}, "%s is running: its rates fill in as answers are graded. Poll every few minutes, not faster.", r.Name)

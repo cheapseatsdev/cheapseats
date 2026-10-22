@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/metcalfc/popcorn/internal/bots"
+	"github.com/cheapseatsdev/cheapseats/internal/bots"
 )
 
 // Event is a hit worth counting: an AI crawler's fetch of a page, or a visit an assistant referred.
@@ -184,7 +184,7 @@ func Import(ctx context.Context, db *sql.DB, r io.Reader, host string) (Stats, e
 		}
 	}
 	if st.Lines > 0 && st.Unread == st.Lines {
-		return st, fmt.Errorf("no line is in a format Popcorn reads: %s", Formats)
+		return st, fmt.Errorf("no line is in a format Cheap Seats reads: %s", Formats)
 	}
 	return st, tx.Commit()
 }

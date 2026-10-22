@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/metcalfc/popcorn/internal/report"
+	"github.com/cheapseatsdev/cheapseats/internal/report"
 )
 
 func near(a, b float64) bool { return math.Abs(a-b) < 1e-3 }

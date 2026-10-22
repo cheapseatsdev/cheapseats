@@ -16,14 +16,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/metcalfc/popcorn/internal/analysis"
-	"github.com/metcalfc/popcorn/internal/answer"
-	"github.com/metcalfc/popcorn/internal/config"
-	"github.com/metcalfc/popcorn/internal/llm"
-	"github.com/metcalfc/popcorn/internal/report"
-	"github.com/metcalfc/popcorn/internal/run"
-	"github.com/metcalfc/popcorn/internal/sets"
-	"github.com/metcalfc/popcorn/internal/store"
+	"github.com/cheapseatsdev/cheapseats/internal/analysis"
+	"github.com/cheapseatsdev/cheapseats/internal/answer"
+	"github.com/cheapseatsdev/cheapseats/internal/config"
+	"github.com/cheapseatsdev/cheapseats/internal/llm"
+	"github.com/cheapseatsdev/cheapseats/internal/report"
+	"github.com/cheapseatsdev/cheapseats/internal/run"
+	"github.com/cheapseatsdev/cheapseats/internal/sets"
+	"github.com/cheapseatsdev/cheapseats/internal/store"
 )
 
 type App struct {

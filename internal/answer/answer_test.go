@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/metcalfc/popcorn/internal/llm"
+	"github.com/cheapseatsdev/cheapseats/internal/llm"
 )
 
 func decode(t *testing.T, s string) map[string]any {
@@ -24,17 +24,17 @@ func TestParseAnthropic(t *testing.T) {
 	    {"type":"server_tool_use","id":"s1","name":"web_search","input":{"query":"run claude code unattended safely"}},
 	    {"type":"web_search_tool_result","tool_use_id":"s1","content":[
 	      {"type":"web_search_result","url":"https://docs.docker.com/ai/sandboxes/","title":"Docker Sandboxes"},
-	      {"type":"web_search_result","url":"https://popcorn.example/why/","title":"Why Popcorn"}]},
+	      {"type":"web_search_result","url":"https://cheapseats.example/why/","title":"Why Cheap Seats"}]},
 	    {"type":"server_tool_use","id":"s2","name":"web_search","input":{"query":"x"}},
 	    {"type":"web_search_tool_result","tool_use_id":"s2","content":{"type":"web_search_tool_result_error","error_code":"max_uses_exceeded"}},
 	    {"type":"text","text":"Use "},
 	    {"type":"text","text":"Docker Sandboxes.","citations":[{"type":"web_search_result_location","url":"https://docs.docker.com/ai/sandboxes/","title":"Docker Sandboxes"}]},
-	    {"type":"text","text":" Or Popcorn.","citations":[{"url":"https://docs.docker.com/ai/sandboxes/"}]}
+	    {"type":"text","text":" Or Cheap Seats.","citations":[{"url":"https://docs.docker.com/ai/sandboxes/"}]}
 	  ],
 	  "usage":{"input_tokens":100,"output_tokens":50,"cache_read_input_tokens":10,"cache_creation_input_tokens":5,"server_tool_use":{"web_search_requests":2}}
 	}`)
 	a := ParseAnthropic(resp)
-	if a.Text != "Use Docker Sandboxes. Or Popcorn." {
+	if a.Text != "Use Docker Sandboxes. Or Cheap Seats." {
 		t.Fatalf("text = %q", a.Text)
 	}
 	if len(a.Searches) != 2 || len(a.Searches[0].Results) != 2 || len(a.Searches[1].Results) != 0 {

@@ -1,0 +1,56 @@
+# Your deployment's image: ghcr.io/cheapseatsdev/cheapseats with your config repo copied to /config (see
+# docs/deploying.md). The plain app image works too, with the config mounted at /config by
+# extraVolumes and extraVolumeMounts.
+image:
+  repository: ""   # required, e.g. ghcr.io/acme/cheapseats-config
+  tag: ""          # required: deploy an exact tag, so a rollback is redeploying the previous one
+  pullPolicy: IfNotPresent
+imagePullSecrets: []   # e.g. [{name: ghcr}] for a private registry
+
+# A release installed before the rename (as the popcorn chart) sets this to "popcorn", so its
+# Deployment, Service and data volume keep their names: changing them would start on an empty disk.
+nameOverride: ""
+
+# A Secret holding the environment: CHEAPSEATS_TOKENS (required: Cheap Seats listens beyond localhost
+# here), ANTHROPIC_API_KEY (required: grading), and OPENAI_API_KEY if an answerer uses it.
+# Create it yourself; the chart never takes keys as values.
+existingSecret: ""
+
+# Extra environment, e.g. CHEAPSEATS_CONFIG_REV when the config image doesn't set it.
+env: {}
+
+# The database. Cheap Seats is one always-on instance on one volume: the chart runs a single replica
+# and replaces it rather than rolling, so two never share the database.
+persistence:
+  size: 1Gi
+  storageClass: ""   # the cluster default when empty
+  existingClaim: ""  # use a PersistentVolumeClaim you manage instead of creating one
+
+service:
+  type: ClusterIP
+  port: 3000
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  host: ""
+  tls: []   # e.g. [{secretName: cheapseats-tls, hosts: [cheapseats.example.com]}]
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    memory: 512Mi
+
+# Cheap Seats marks runs in progress as interrupted on SIGTERM, to resume on the next start; this
+# leaves it time to.
+terminationGracePeriodSeconds: 30
+
+extraVolumes: []
+extraVolumeMounts: []
+nodeSelector: {}
+tolerations: []
+affinity: {}
+podAnnotations: {}

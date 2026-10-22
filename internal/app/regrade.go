@@ -6,8 +6,8 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/metcalfc/popcorn/internal/run"
-	"github.com/metcalfc/popcorn/internal/sets"
+	"github.com/cheapseatsdev/cheapseats/internal/run"
+	"github.com/cheapseatsdev/cheapseats/internal/sets"
 )
 
 // regradeRuns resolves a re-grade's target, a set id or a run id, into the runs to look at and the

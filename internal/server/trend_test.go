@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/metcalfc/popcorn/internal/app"
+	"github.com/cheapseatsdev/cheapseats/internal/app"
 )
 
 func TestTrend(t *testing.T) {

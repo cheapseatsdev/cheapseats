@@ -9,7 +9,7 @@ import (
 )
 
 func TestLoadRejectsUnknownKeys(t *testing.T) {
-	p := filepath.Join(t.TempDir(), "popcorn.toml")
+	p := filepath.Join(t.TempDir(), "cheapseats.toml")
 	// daily_hour_utc in [budget] instead of [schedule]: silently no schedule, unless rejected.
 	os.WriteFile(p, []byte("[brand]\nname = \"X\"\n[budget]\ndaily_usd = 1.0\ndaily_hour_utc = 13\n"), 0o644)
 	if _, err := Load(p); err == nil || !strings.Contains(err.Error(), "budget.daily_hour_utc") {
@@ -18,7 +18,7 @@ func TestLoadRejectsUnknownKeys(t *testing.T) {
 }
 
 func TestSlug(t *testing.T) {
-	for name, want := range map[string]string{"Popcorn": "popcorn", "Acme Sandbox, Inc.": "acme-sandbox-inc", "  ": "brand", "Café 2": "caf-2"} {
+	for name, want := range map[string]string{"Cheap Seats": "cheap-seats", "Acme Sandbox, Inc.": "acme-sandbox-inc", "  ": "brand", "Café 2": "caf-2"} {
 		if got := (Brand{Name: name}).Slug(); got != want {
 			t.Errorf("Slug(%q) = %q, want %q", name, got, want)
 		}
@@ -51,7 +51,7 @@ func TestSites(t *testing.T) {
 			t.Errorf("SiteOf(%s) = %q, %v; want %q", url, s.URL, ok, want)
 		}
 	}
-	p := filepath.Join(t.TempDir(), "popcorn.toml")
+	p := filepath.Join(t.TempDir(), "cheapseats.toml")
 	os.WriteFile(p, []byte("[brand]\nname = \"X\"\n[[brand.sites]]\nurl = \"x.com\"\nkind = \"wiki\"\n"), 0o644)
 	if _, err := Load(p); err == nil || !strings.Contains(err.Error(), "kind must be one of") {
 		t.Fatalf("want a kind error, got %v", err)
@@ -60,7 +60,7 @@ func TestSites(t *testing.T) {
 
 func TestSharedCompetitors(t *testing.T) {
 	load := func(body string) (*Config, error) {
-		p := filepath.Join(t.TempDir(), "popcorn.toml")
+		p := filepath.Join(t.TempDir(), "cheapseats.toml")
 		os.WriteFile(p, []byte("[brand]\nname = \"Acme\"\naliases = [\"acme.dev\"]\n"+body), 0o644)
 		return Load(p)
 	}
@@ -89,7 +89,7 @@ func TestGraderProvider(t *testing.T) {
 	if cli.Ref() != "claude-code:claude-haiku-5-5" || ModelFromRef(cli.Ref()) != cli || ModelFromRef(api.Ref()) != api {
 		t.Errorf("round trip: %q", cli.Ref())
 	}
-	p := filepath.Join(t.TempDir(), "popcorn.toml")
+	p := filepath.Join(t.TempDir(), "cheapseats.toml")
 	os.WriteFile(p, []byte("[brand]\nname = \"X\"\n[grader]\nmodel = \"m\"\nprovider = \"codex\"\n"), 0o644)
 	if _, err := Load(p); err == nil || !strings.Contains(err.Error(), "[grader] provider") {
 		t.Errorf("want a provider error, got %v", err)
@@ -98,11 +98,11 @@ func TestGraderProvider(t *testing.T) {
 
 // The subscription example is the API example with every model on the CLIs: nothing else may drift.
 func TestSubscriptionExampleMatchesTheAPIExample(t *testing.T) {
-	api, err := Load("../../examples/popcorn-config/popcorn.toml")
+	api, err := Load("../../examples/cheapseats-config/cheapseats.toml")
 	if err != nil {
 		t.Fatal(err)
 	}
-	subs, err := Load("../../examples/popcorn-config/popcorn.subscriptions.toml")
+	subs, err := Load("../../examples/cheapseats-config/cheapseats.subscriptions.toml")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,7 +126,7 @@ func TestSubscriptionExampleMatchesTheAPIExample(t *testing.T) {
 
 func TestSourcesAndCompetitorDomains(t *testing.T) {
 	load := func(body string) error {
-		p := filepath.Join(t.TempDir(), "popcorn.toml")
+		p := filepath.Join(t.TempDir(), "cheapseats.toml")
 		os.WriteFile(p, []byte("[brand]\nname = \"X\"\ndomains = [\"x.com\"]\n"+body), 0o644)
 		_, err := Load(p)
 		return err
@@ -148,7 +148,7 @@ func TestSourcesAndCompetitorDomains(t *testing.T) {
 }
 
 func TestThemesAndSampling(t *testing.T) {
-	p := filepath.Join(t.TempDir(), "popcorn.toml")
+	p := filepath.Join(t.TempDir(), "cheapseats.toml")
 	load := func(body string) (*Config, error) {
 		t.Helper()
 		os.WriteFile(p, []byte("[brand]\nname = \"X\"\n"+body), 0o644)
@@ -170,5 +170,19 @@ func TestThemesAndSampling(t *testing.T) {
 		if _, err := load(body); err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("%q: want %q, got %v", body, want, err)
 		}
+	}
+}
+
+// A config repo from before the rename has popcorn.toml, and CHEAPSEATS_CONFIG (or the image's
+// default) names cheapseats.toml.
+func TestLoadFindsTheOldConfigName(t *testing.T) {
+	dir := t.TempDir()
+	b, err := os.ReadFile("../../examples/cheapseats-config/cheapseats.toml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(dir, "popcorn.toml"), b, 0o644)
+	if _, err := Load(filepath.Join(dir, "cheapseats.toml")); err != nil {
+		t.Fatal(err)
 	}
 }

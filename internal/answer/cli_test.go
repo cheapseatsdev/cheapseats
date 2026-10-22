@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/metcalfc/popcorn/internal/config"
+	"github.com/cheapseatsdev/cheapseats/internal/config"
 )
 
 // Trimmed from real `claude -p --output-format stream-json --verbose` output (Claude Code 2.1).
@@ -71,7 +71,7 @@ func TestClaudeCodeRunsIsolatedOnTheSubscription(t *testing.T) {
 	dir := t.TempDir()
 	log := filepath.Join(dir, "log")
 	script := "#!/bin/sh\n{ printf '%s\\n' \"$@\"; echo \"KEY=${ANTHROPIC_API_KEY:-unset}\"; echo \"PWD=$PWD\"; } > " + log + "\n" +
-		"printf '%s\\n' '{\"type\":\"result\",\"result\":\"Use Popcorn.\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}'\n"
+		"printf '%s\\n' '{\"type\":\"result\",\"result\":\"Use Cheap Seats.\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}'\n"
 	if err := os.WriteFile(filepath.Join(dir, "claude"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -81,12 +81,12 @@ func TestClaudeCodeRunsIsolatedOnTheSubscription(t *testing.T) {
 		t.Fatal("claude on the PATH should make claude-code available")
 	}
 	a, err := Ask(context.Background(), config.Answerer{Provider: config.ClaudeCode, Model: "opus"}, Recall, System(""), "a question")
-	if err != nil || a.Text != "Use Popcorn." {
+	if err != nil || a.Text != "Use Cheap Seats." {
 		t.Fatalf("%+v %v", a, err)
 	}
 	got, _ := os.ReadFile(log)
 	args := string(got)
-	for _, want := range []string{"\n--safe-mode\n", "\n--strict-mcp-config\n", "\n--no-session-persistence\n", "\n--tools\n\n", "KEY=unset", "popcorn-claude-code-"} {
+	for _, want := range []string{"\n--safe-mode\n", "\n--strict-mcp-config\n", "\n--no-session-persistence\n", "\n--tools\n\n", "KEY=unset", "cheapseats-claude-code-"} {
 		if !strings.Contains(args, want) {
 			t.Errorf("claude call lacks %q:\n%s", want, args)
 		}

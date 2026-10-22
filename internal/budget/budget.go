@@ -5,8 +5,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/metcalfc/popcorn/internal/config"
-	"github.com/metcalfc/popcorn/internal/store"
+	"github.com/cheapseatsdev/cheapseats/internal/config"
+	"github.com/cheapseatsdev/cheapseats/internal/store"
 	"math"
 	"time"
 )

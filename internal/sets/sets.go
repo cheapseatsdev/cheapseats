@@ -1,5 +1,5 @@
 // Package sets loads prompt sets: one TOML file per category under prompt-sets/ in the
-// popcorn-config repo, beside popcorn.toml, changed only by pull request there.
+// cheapseats-config repo, beside cheapseats.toml, changed only by pull request there.
 package sets
 
 import (
@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -15,6 +14,8 @@ import (
 
 	"encoding/json"
 	"github.com/BurntSushi/toml"
+
+	"github.com/cheapseatsdev/cheapseats/internal/env"
 )
 
 type Tier string
@@ -112,15 +113,15 @@ const HeadToHeads = "head-to-heads"
 
 var idRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
 
-// Dir is POPCORN_PROMPT_SETS, or prompt-sets/ beside popcorn.toml.
+// Dir is CHEAPSEATS_PROMPT_SETS, or prompt-sets/ beside cheapseats.toml.
 func Dir(configDir string) string {
-	if d := os.Getenv("POPCORN_PROMPT_SETS"); d != "" {
+	if d := env.Get("PROMPT_SETS"); d != "" {
 		return d
 	}
 	return filepath.Join(configDir, "prompt-sets")
 }
 
-// LoadAll reads every set, as Popcorn does once at startup. A set that doesn't parse, or a set or
+// LoadAll reads every set, as Cheap Seats does once at startup. A set that doesn't parse, or a set or
 // prompt id used twice, is an error rather than a set quietly left out, so a deploy with a broken
 // config fails to start instead of running without part of it. Core sets come first.
 func LoadAll(dir string) ([]Set, error) {
@@ -195,7 +196,7 @@ func Share(all []Set, shared []Competitor) []Set {
 	return out
 }
 
-// Check is LoadAll plus the rules for writing sets, for `popcorn check` in the config repo: the
+// Check is LoadAll plus the rules for writing sets, for `cheapseats check` in the config repo: the
 // same question isn't asked twice, and only head-to-heads may name the brand.
 func Check(dir string, brand []string) error {
 	all, errs := load(dir)
@@ -238,7 +239,7 @@ func Parse(path string) (Set, error) {
 	md, err := toml.DecodeFile(path, &s)
 	if err != nil {
 		if strings.Contains(err.Error(), "prompts") {
-			return s, fmt.Errorf("%w (prompts are [[prompts]] tables with an id and text; popcorn migrate-config converts a list of strings)", err)
+			return s, fmt.Errorf("%w (prompts are [[prompts]] tables with an id and text; cheapseats migrate-config converts a list of strings)", err)
 		}
 		return s, err
 	}

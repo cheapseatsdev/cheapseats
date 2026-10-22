@@ -3,9 +3,9 @@ package llm
 import (
 	"context"
 	"encoding/json"
-	"github.com/metcalfc/popcorn/internal/budget"
-	"github.com/metcalfc/popcorn/internal/config"
-	"github.com/metcalfc/popcorn/internal/store"
+	"github.com/cheapseatsdev/cheapseats/internal/budget"
+	"github.com/cheapseatsdev/cheapseats/internal/config"
+	"github.com/cheapseatsdev/cheapseats/internal/store"
 	"net/http"
 	"net/http/httptest"
 	"testing"

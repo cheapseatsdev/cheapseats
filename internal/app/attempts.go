@@ -9,11 +9,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/metcalfc/popcorn/internal/analysis"
-	"github.com/metcalfc/popcorn/internal/answer"
-	"github.com/metcalfc/popcorn/internal/report"
-	"github.com/metcalfc/popcorn/internal/run"
-	"github.com/metcalfc/popcorn/internal/store"
+	"github.com/cheapseatsdev/cheapseats/internal/analysis"
+	"github.com/cheapseatsdev/cheapseats/internal/answer"
+	"github.com/cheapseatsdev/cheapseats/internal/report"
+	"github.com/cheapseatsdev/cheapseats/internal/run"
+	"github.com/cheapseatsdev/cheapseats/internal/store"
 )
 
 // Attempt is work submitted for a fix: the commit or pull request, proposed, then accepted or

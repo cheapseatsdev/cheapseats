@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Adds the two things a Popcorn on an exe.dev VM needs to be left alone, as systemd timers:
+# Adds the two things a Cheap Seats on an exe.dev VM needs to be left alone, as systemd timers:
 #
-#   nightly  a copy of the database in ~/popcorn/backups (14 kept), before the 09:00 UTC runs
+#   nightly  a copy of the database in ~/cheapseats/backups (14 kept), before the 09:00 UTC runs
 #   hourly   an email when a run ends partial, failed or out of budget, a fix list fails, or a
 #            run stops making progress (each problem once), sent with exe.dev's email gateway
 #
@@ -20,27 +20,27 @@ remote() { ssh -o BatchMode=yes "$host" "$@"; }
 # shellcheck disable=SC2016 # $HOME is the VM's
 home=$(remote 'echo $HOME')
 user=$(remote whoami)
-dir="$home/popcorn"
+dir="$home/cheapseats"
 
-remote "mkdir -p '$dir/bin' '$dir/backups' && cat > '$dir/bin/popcorn-backup' && chmod +x '$dir/bin/popcorn-backup'" <<'EOF'
+remote "mkdir -p '$dir/bin' '$dir/backups' && cat > '$dir/bin/cheapseats-backup' && chmod +x '$dir/bin/cheapseats-backup'" <<'EOF'
 #!/usr/bin/env bash
-# A consistent copy of the database (safe while Popcorn runs), keeping the newest 14.
+# A consistent copy of the database (safe while Cheap Seats runs), keeping the newest 14.
 set -euo pipefail
-dir="$HOME/popcorn"
-sqlite3 "$dir/data/popcorn.db" ".backup '$dir/backups/popcorn-$(date -u +%Y-%m-%d).db'"
-ls -1t "$dir"/backups/popcorn-*.db | tail -n +15 | xargs -r rm -f
+dir="$HOME/cheapseats"
+sqlite3 "$dir/data/cheapseats.db" ".backup '$dir/backups/cheapseats-$(date -u +%Y-%m-%d).db'"
+ls -1t "$dir"/backups/cheapseats-*.db | tail -n +15 | xargs -r rm -f
 EOF
 
-remote "cat > '$dir/bin/popcorn-watch' && chmod +x '$dir/bin/popcorn-watch'" <<'EOF'
+remote "cat > '$dir/bin/cheapseats-watch' && chmod +x '$dir/bin/cheapseats-watch'" <<'EOF'
 #!/usr/bin/env bash
 # Emails each new problem with the last two days' runs, once: runs that ended partial, failed or
 # out of budget, fix lists that failed, and runs with no answer finished for two hours.
 set -euo pipefail
 to=$1
-dir="$HOME/popcorn"
+dir="$HOME/cheapseats"
 seen="$dir/watch.seen"
 touch "$seen"
-db="file:$dir/data/popcorn.db?mode=ro"
+db="file:$dir/data/cheapseats.db?mode=ro"
 since=$(date -u -d '2 days ago' +%Y-%m-%dT%H:%M:%SZ)
 stale=$(date -u -d '2 hours ago' +%Y-%m-%dT%H:%M:%SZ)
 problems=$(sqlite3 "$db" "
@@ -63,46 +63,46 @@ while IFS= read -r line; do
 done <<<"$problems"
 [ -z "$new" ] && exit 0
 host=$(hostname)
-body="Popcorn on $host needs a look:
+body="Cheap Seats on $host needs a look:
 
 $new
 Open https://$host.exe.xyz to retry a run (\"Retry unfinished\") or rebuild a fix list.
 If answers fail with login errors, the Claude Code or Codex login on the VM has expired.
-Log: sudo journalctl -u popcorn"
+Log: sudo journalctl -u cheapseats"
 python3 -c 'import json,sys; print(json.dumps({"to": sys.argv[1], "subject": sys.argv[2], "body": sys.argv[3]}))' \
-	"$to" "Popcorn on $host: a run needs a look" "$body" |
+	"$to" "Cheap Seats on $host: a run needs a look" "$body" |
 	curl -fsS -X POST http://169.254.169.254/gateway/email/send -H 'Content-Type: application/json' --data-binary @- >/dev/null
 EOF
 
 unit() { # name, contents
 	printf '%s\n' "$2" | remote "sudo tee /etc/systemd/system/$1 >/dev/null"
 }
-unit popcorn-backup.service "[Unit]
-Description=Back up the Popcorn database
+unit cheapseats-backup.service "[Unit]
+Description=Back up the Cheap Seats database
 [Service]
 Type=oneshot
 User=$user
-ExecStart=$dir/bin/popcorn-backup"
-unit popcorn-backup.timer "[Unit]
-Description=Back up the Popcorn database nightly
+ExecStart=$dir/bin/cheapseats-backup"
+unit cheapseats-backup.timer "[Unit]
+Description=Back up the Cheap Seats database nightly
 [Timer]
 OnCalendar=*-*-* 08:00:00 UTC
 Persistent=true
 [Install]
 WantedBy=timers.target"
-unit popcorn-watch.service "[Unit]
-Description=Email when a Popcorn run needs a look
+unit cheapseats-watch.service "[Unit]
+Description=Email when a Cheap Seats run needs a look
 [Service]
 Type=oneshot
 User=$user
-ExecStart=$dir/bin/popcorn-watch $to"
-unit popcorn-watch.timer "[Unit]
-Description=Check Popcorn's runs hourly
+ExecStart=$dir/bin/cheapseats-watch $to"
+unit cheapseats-watch.timer "[Unit]
+Description=Check Cheap Seats' runs hourly
 [Timer]
 OnCalendar=hourly
 Persistent=true
 [Install]
 WantedBy=timers.target"
-remote "sudo systemctl daemon-reload && sudo systemctl enable --now popcorn-backup.timer popcorn-watch.timer >/dev/null 2>&1"
-remote "systemctl list-timers 'popcorn-*' --no-pager | head -4"
+remote "sudo systemctl daemon-reload && sudo systemctl enable --now cheapseats-backup.timer cheapseats-watch.timer >/dev/null 2>&1"
+remote "systemctl list-timers 'cheapseats-*' --no-pager | head -4"
 echo "ok: nightly backups in $dir/backups, alerts to $to"

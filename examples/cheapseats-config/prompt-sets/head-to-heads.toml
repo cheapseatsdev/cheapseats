@@ -1,0 +1,52 @@
+id = "head-to-heads"
+name = "Cheap Seats head to heads"
+tier = "plg"
+description = """The only set that names the brand: buyers who already know Cheap Seats and are comparing it with the alternatives, or asking whether it fits their team."""
+
+# Cheap Seats against each major alternative
+
+[[prompts]]
+id = "cheapseats-vs-profound-tracking-whether"
+text = "Cheap Seats vs Profound for tracking whether AI assistants recommend us: which should I pick?"
+
+[[prompts]]
+id = "cheapseats-peec-ai-small-marketing"
+text = "Cheap Seats or Peec AI for a small marketing team?"
+
+[[prompts]]
+id = "cheapseats-vs-otterly-startup"
+text = "Cheap Seats vs Otterly.AI for a startup that wants to track AI visibility cheaply?"
+
+[[prompts]]
+id = "cheapseats-vs-gauge"
+text = "How does Cheap Seats compare with Gauge for tracking and improving AI visibility?"
+
+[[prompts]]
+id = "cheapseats-vs-semrush-ai-toolkit"
+text = "Cheap Seats or Semrush AI Toolkit for tracking our brand in ChatGPT and Claude?"
+
+# Is Cheap Seats right for...
+
+[[prompts]]
+id = "cheapseats-open-source-alternative-paid"
+text = "Is Cheap Seats a good open-source alternative to paid AI visibility tools?"
+
+[[prompts]]
+id = "downsides-self-hosting-cheapseats-measure"
+text = "What are the downsides of self-hosting Cheap Seats to measure AI search visibility?"
+
+[[prompts]]
+id = "cheapseats-decide-whether-ai-assistant"
+text = "How does Cheap Seats decide whether an AI assistant recommended a brand?"
+
+[[prompts]]
+id = "cheapseats-fit-agency-many-clients"
+text = "Is Cheap Seats a good fit for an agency tracking AI visibility for many clients?"
+
+[[prompts]]
+id = "cheapseats-fit-developer-tools-company"
+text = "Is Cheap Seats a good fit for a developer-tools company checking whether ChatGPT and Claude recommend it?"
+
+[[prompts]]
+id = "cheapseats-daily-running-cost"
+text = "What does it cost to run Cheap Seats every day, and how do I keep the spend under control?"

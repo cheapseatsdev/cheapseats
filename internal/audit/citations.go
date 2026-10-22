@@ -11,7 +11,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/metcalfc/popcorn/internal/sets"
+	"github.com/cheapseatsdev/cheapseats/internal/sets"
 )
 
 // Target is a third-party page answers drew on, from a run's report.
@@ -61,7 +61,7 @@ type CiteOptions struct {
 // maxText is the most of a page's text kept for matching.
 const maxText = 200_000
 
-// CheckCitations fetches each page (as Popcorn, when its robots.txt allows Popcorn) and reports
+// CheckCitations fetches each page (as Cheap Seats, when its robots.txt allows Cheap Seats) and reports
 // whether it names the brand (by name or alias) and which competitors.
 func CheckCitations(ctx context.Context, targets []Target, brand []string, competitors []sets.Competitor, o CiteOptions) CitationCheck {
 	if o.Fetcher == nil {
@@ -117,7 +117,7 @@ func fetchNow(ctx context.Context, f *Fetcher, robots *robotsCache, raw string) 
 		return 0, "not a web page", ""
 	}
 	if !robots.allowed(ctx, u) {
-		return 0, "robots.txt asks Popcorn not to fetch it", ""
+		return 0, "robots.txt asks Cheap Seats not to fetch it", ""
 	}
 	r, err := f.Get(ctx, raw)
 	if err != nil {
@@ -189,7 +189,16 @@ func (c *robotsCache) allowed(ctx context.Context, u *url.URL) bool {
 	if u.RawQuery != "" {
 		path += "?" + u.RawQuery
 	}
-	ok, _ := e.r.Allowed(Token, path)
+	return allowsUs(e.r, path)
+}
+
+// allowsUs is whether robots.txt lets Cheap Seats fetch path: by its own token, or by the one from
+// before the rename when only that is named.
+func allowsUs(r *Robots, path string) bool {
+	ok, named := r.Allowed(Token, path)
+	if !named {
+		ok, _ = r.Allowed(OldToken, path)
+	}
 	return ok
 }
 

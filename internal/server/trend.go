@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/metcalfc/popcorn/internal/app"
+	"github.com/cheapseatsdev/cheapseats/internal/app"
 )
 
 // Chart geometry, in viewBox units.
