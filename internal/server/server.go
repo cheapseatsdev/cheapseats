@@ -92,6 +92,7 @@ func New(a *app.App) (*Server, error) {
 	}
 	funcs := template.FuncMap{
 		"icon":  icon,
+		"logo":  logo,
 		"sicon": statusIcon,
 		"pct":   func(p float64) string { return fmt.Sprintf("%.0f%%", 100*p) },
 		"neg":   func(n int) int { return -n },

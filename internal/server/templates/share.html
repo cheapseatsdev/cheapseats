@@ -1,7 +1,7 @@
 {{define "share"}}<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex, nofollow"><meta name="referrer" content="no-referrer">
 <title>{{.Brand}} in AI answers · {{.Set}}</title>
 <link rel="icon" type="image/svg+xml" href="{{asset "favicon.svg"}}"><link rel="stylesheet" href="{{asset "cheapseats.css"}}"></head><body>
-<header><span class="brand">{{icon "popcorn" 22}}<span>Cheap Seats</span></span><span class="brand-name">{{.Brand}}</span></header>
+<header><span class="brand">{{logo 18}}<span>Cheap Seats</span></span><span class="brand-name">{{.Brand}}</span></header>
 <main>
 <h1>{{.Brand}} in AI answers: {{.Set}}</h1>
 <p class="sub">{{.Run}}{{with .Finished}} · finished {{day .}}{{end}} · {{.Answers}} answers graded{{with .Answerers}} from {{range $i, $a := .}}{{if $i}}, {{end}}{{$a}}{{end}}{{end}}</p>

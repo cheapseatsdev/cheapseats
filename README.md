@@ -1,4 +1,4 @@
-# Cheap Seats
+<h1><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/logo-dark.svg"><img src="docs/images/logo-light.svg" alt="Cheap Seats" width="360"></picture></h1>
 
 Cheap Seats is an open-source (MIT) AI visibility tracker I wrote to make my own product better. It
 asks your buyers' questions of AI assistants, grades whether they recommend you, and builds a ranked

@@ -61,3 +61,12 @@ func icon(name string, size ...int) (template.HTML, error) {
 	}
 	return template.HTML(fmt.Sprintf(`<svg class="icon icon-%s" width="%d" height="%d" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">%s</svg>`, name, px, px, inner)), nil
 }
+
+// markPath is the Cheap Seats mark ("Back Row" in the brand kit): three rising seat backs on one
+// baseline, in a 192x112 box.
+const markPath = "M0 112V108Q0 100 8 100V74Q8 58 24 58H44Q60 58 60 74V100H68V54Q68 38 84 38H104Q120 38 120 54V100H128V34Q128 18 144 18H164Q180 18 180 34V100H184Q192 100 192 108V112Z"
+
+// logo is the brand mark h pixels high, in the text color: the header's wordmark names it.
+func logo(h int) template.HTML {
+	return template.HTML(fmt.Sprintf(`<svg class="mark" width="%d" height="%d" viewBox="0 0 192 112" aria-hidden="true"><path fill="currentColor" d="%s"/></svg>`, h*192/112, h, markPath))
+}
