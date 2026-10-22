@@ -43,8 +43,9 @@ const usage = `popcorn: how AI assistants answer your buyers' questions.
   popcorn fixes <run-id> [-rebuild]      the run's fix list as markdown
 
 Config: POPCORN_CONFIG, else the example in examples/popcorn-config; prompt sets beside it,
-data in ./data (POPCORN_DATA_DIR). Secrets from the environment or .env: ANTHROPIC_API_KEY,
-OPENAI_API_KEY, POPCORN_TOKENS, POPCORN_AUTH_HEADER and POPCORN_ALLOWED_EMAILS.
+data in ./data (POPCORN_DATA_DIR). Secrets from the environment or .env: ANTHROPIC_API_KEY
+(or POPCORN_ANTHROPIC_BASE_URL, a proxy that adds it), OPENAI_API_KEY, POPCORN_TOKENS,
+POPCORN_AUTH_HEADER and POPCORN_ALLOWED_EMAILS.
 `
 
 func main() {

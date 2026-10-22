@@ -30,6 +30,12 @@ which signs people in by email. Because it's a whole VM, its answerers can be th
 
    Add `OPENAI_API_KEY` if an answerer uses `provider = "openai"`.
 
+   To keep the Anthropic key off the VM, add it as an exe.dev integration instead, and replace the
+   `ANTHROPIC_API_KEY` line with `POPCORN_ANTHROPIC_BASE_URL=https://anthropic.int.exe.xyz`.
+   Popcorn's own API calls (grading, the fix list, `anthropic` answerers) then go through that
+   proxy, which adds the key. The `claude` CLI doesn't read this variable, so `claude-code`
+   answerers stay on your subscription.
+
 3. **Log the CLIs in**, if your answerers use them. The subscription is whoever logs in.
 
    ```bash

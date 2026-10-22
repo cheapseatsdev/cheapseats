@@ -136,7 +136,7 @@ func (e *Engine) Create(ctx context.Context, set sets.Set, trigger string) (*Run
 		return nil, errors.New("no answerer is available: set ANTHROPIC_API_KEY or OPENAI_API_KEY, or install the claude or codex CLI")
 	}
 	if !config.Available(config.Anthropic) {
-		return nil, errors.New("ANTHROPIC_API_KEY is needed for grading")
+		return nil, errors.New("grading needs ANTHROPIC_API_KEY, or " + config.AnthropicBaseURLVar + " for a proxy that adds it")
 	}
 	r := &Run{Design: Design(snap), Method: Method(snap), ConfigRev: e.Cfg.Rev, AppVersion: version.String(), ID: NewID("r-"), SetID: set.ID, SetVersion: set.Version, Trigger: trigger, Status: "queued",
 		Name: fmt.Sprintf("%s %s", set.Name, time.Now().UTC().Format("2006-01-02 15:04")), Snapshot: snap, CreatedAt: store.Now()}
