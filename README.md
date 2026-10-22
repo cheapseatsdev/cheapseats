@@ -43,6 +43,8 @@ take to whichever of those tools you move to. Site and docs: [popcorn.zone](http
   are empty without JavaScript), a **citation check** of which pages the answers cite name you and
   which name only competitors, and **AI crawler** counts from your access logs.
 - Web UI, CLI, JSON API and MCP server.
+- [Share a run](docs/sharing.md) with someone without a sign-in: a read-only link to its
+  headline rates, share of voice, strongest and weakest prompts and top fixes, revocable, expiring.
 - Self-hosted, MIT licensed: Docker, Kubernetes (Helm chart) or an exe.dev VM. Your prompts live
   in a git repo you own.
 
@@ -163,12 +165,26 @@ popcorn version                        version and database schema
   claude mcp add --transport http popcorn https://<host>/api/mcp --header "Authorization: Bearer <token>"
   ```
 
+  - `get_started` first: the brand and its sites, each set's last run and status, today's spend
+    against the budget, which answerers and the grader can run here, the latest audit's errors
+    and warnings, open and urgent fixes, attempts awaiting an outcome, `data_state` (`no_runs`,
+    `running`, `stale` or `ready`) and `next_steps`, the tool calls worth making now.
+  - `start_run` with `dry_run: true` plans a run without starting it: answers per answerer and
+    track, answerers skipped, estimated cost from recent answers (priced by `[pricing]`) and
+    today's remaining budget. `POST /api/runs` takes `"dry_run": true` too.
+  - `share_run` makes a [share link](docs/sharing.md) for a run, or a set's newest finished run.
+  - Prompts: `weekly_pulse`, `competitor_radar` and `why_not_recommended` (for one prompt), each
+    telling the model which tools to call.
+
 ## Access
 
 - Unset `POPCORN_TOKENS`: listens on 127.0.0.1 only, open.
 - `POPCORN_TOKENS`: bearer tokens for the API and MCP; the UI asks for one once.
 - `POPCORN_AUTH_HEADER` (+ `POPCORN_ALLOWED_EMAILS`): trust a signing-in proxy's email header.
 - `POPCORN_HOSTS`: host names a proxy on the same machine serves Popcorn as; MCP needs them.
+- `POPCORN_PUBLIC_URL`: the address share links use (`https://popcorn.example.com`). Unset, they
+  use the first of `POPCORN_HOSTS` over https, else the host the request came in on.
+- `/share/<token>` is open without a sign-in; it serves only that link's run ([docs](docs/sharing.md)).
 
 ## Deploying
 
