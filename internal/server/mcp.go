@@ -184,7 +184,7 @@ func (s *Server) mcpHandler() http.Handler {
 			}
 			return map[string]any{"id": a.ID, "state": a.State}, nil
 		})
-	addTool(srv, "list_attempts", "Work submitted for fixes, newest first, with each one's outcome: for the prompts the fix meant to flip, how often they were named and recommended in its run against the newest run since, and whether its target page turned up.",
+	addTool(srv, "list_attempts", "Work submitted for fixes, newest first, with each one's outcome: for the prompts the fix meant to flip, how often they were named and recommended in its run against the newest run since, and whether its target page turned up. An outcome whose status is needs regrade lists in regrade_runs the runs to re-grade (the set has only run since under another grading method); the regrade tool with its set and regrade_since_days covers them.",
 		func(ctx context.Context, a struct {
 			Set string `json:"set,omitempty" jsonschema:"only this prompt set"`
 		}) (any, error) {

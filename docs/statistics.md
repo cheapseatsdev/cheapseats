@@ -108,7 +108,8 @@ these statuses:
 | Status | When |
 |---|---|
 | pending | the set hasn't run since the attempt |
-| not comparable | it has, but only with a different method |
+| needs regrade | it has, but only under another grading method. The outcome names the runs to re-grade (the fix's run, the runs pooled before it, and runs since on older methods); once they are graded under today's method (`cheapseats regrade <set> -since <regrade_since_days>d`, the set page's **Re-grade stored answers**, or the MCP `regrade` tool) the attempt is measured as below. See [re-grading](regrading.md) |
+| not comparable | it has, but only with answers asked differently (another answer prompt or search policy), which no re-grade can change |
 | too early | the newest run is less than **7 days** after the attempt, or the target prompts average fewer than **4** answers after it (Gauge waits 14 days) |
 | moved | named or recommended rose: the interval is above 0, and neither fell |
 | worse | one fell beyond its margin, and neither rose |
@@ -124,7 +125,9 @@ analyst who writes the next fix list. The analyst also sees each prompt's `named
 
 The API's attempt `outcome` keeps `run_id`, `prompts` (now pooled, with `choice`, the recommended
 denominator), `target_seen_before` and `target_seen_after`. It adds `status`, `summary`, `named` and
-`recommended` (`{d, margin, prompts}`), `before_runs`, `after_runs`, `days` and `incomparable`.
+`recommended` (`{d, margin, prompts}`), `before_runs`, `after_runs`, `days`, `incomparable`, and
+for needs regrade `regrade_runs` (the run ids) and `regrade_since_days` (how far back a re-grade of
+the set must reach to cover them).
 
 ## Quick wins
 

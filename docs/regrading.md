@@ -32,6 +32,17 @@ cheapseats regrade <set-id|run-id> -since 90d -dry-run=false
   re-grade with the run (`regrades` in `/api/runs/<id>`): when, how many answers, the cost, and
   the method and grader it had before. The run page says "re-graded <date> (was method X)".
   Re-grading only some of a set's runs moves the trend's break to before the oldest re-graded run.
+- **Fix attempts come back**: an attempt's [outcome](statistics.md#fix-outcomes) only compares
+  runs of one method, so after a method change every open attempt reads **needs regrade** until
+  its runs are graded under today's method: the fix's run, the runs pooled before it, and any run
+  since on an older method. The outcome names them (`regrade_runs`) and how far back a re-grade of
+  the set must reach (`regrade_since_days`); the attempt on the run and quick-wins pages links to
+  the set's re-grade page with that range filled in, and `get_started`'s next_steps carries the
+  `regrade` call per set. Once re-graded, the attempt is measured from the next listing on; there
+  is nothing else to do. Only an attempt whose set has run since with another answer prompt or
+  search policy stays **not comparable**: a re-grade changes grades, never answers. Re-grading is
+  not run for you yet: a method change still means re-grading the sets with open attempts, by hand
+  or through the MCP tool.
 - **Not rebuilt**: the run's fix list and themes stay as they were; rebuild them with
   `cheapseats fixes <run-id> -rebuild` and `cheapseats themes <run-id> -rebuild` if you want them to
   follow the new grades. The [fact check](misstatements.md) isn't rerun either (the answers

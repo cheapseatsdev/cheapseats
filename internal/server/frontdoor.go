@@ -3,7 +3,9 @@ package server
 import (
 	"context"
 	"fmt"
+	"maps"
 	"math"
+	"slices"
 	"time"
 
 	"github.com/cheapseatsdev/cheapseats/internal/app"
@@ -41,14 +43,21 @@ type FrontDoor struct {
 	UrgentFixes int `json:"open_urgent_fixes"`
 	// Work submitted for fixes whose outcome isn't measured yet (the set hasn't run since, or not
 	// for long enough).
-	AwaitingOutcome int        `json:"attempts_awaiting_outcome"`
-	NextSteps       []nextStep `json:"next_steps"`
+	AwaitingOutcome int `json:"attempts_awaiting_outcome"`
+	// Work whose set has only run since under another grading method: measurable once its runs
+	// are re-graded (next_steps carries the regrade call per set).
+	NeedsRegrade int        `json:"attempts_needing_regrade"`
+	NextSteps    []nextStep `json:"next_steps"`
 	// MCP prompts this server offers, for a client that shows them.
 	Prompts []string `json:"prompts"`
 
 	// Sets with four weeks of runs whose prompts weren't reviewed in the last 30 days.
 	reviewDue []doorSet
+	// Sets whose attempts need a re-grade: how many, and how many days back it must reach.
+	regradeDue map[string]regradeNeed
 }
+
+type regradeNeed struct{ attempts, days int }
 
 type doorSite struct {
 	URL  string `json:"url"`
@@ -186,9 +195,19 @@ func (s *Server) frontDoor(ctx context.Context) FrontDoor {
 		}
 	}
 	at, _ := s.App.Attempts(ctx, "")
+	fd.regradeDue = map[string]regradeNeed{}
 	for _, x := range at {
-		if st := x.Outcome.Status(); x.State != app.Withdrawn && (st == app.OutcomePending || st == app.OutcomeTooEarly) {
+		if x.State == app.Withdrawn {
+			continue
+		}
+		switch x.Outcome.Status() {
+		case app.OutcomePending, app.OutcomeTooEarly:
 			fd.AwaitingOutcome++
+		case app.OutcomeNeedsRegrade:
+			fd.NeedsRegrade++
+			need := fd.regradeDue[x.SetID]
+			need.attempts, need.days = need.attempts+1, max(need.days, x.Outcome.RegradeSinceDays)
+			fd.regradeDue[x.SetID] = need
 		}
 	}
 	for _, ds := range append(append([]doorSet(nil), fresh...), stale...) {
@@ -247,6 +266,11 @@ func (fd FrontDoor) steps(running, never, stale, fresh []doorSet) []nextStep {
 	}
 	if fd.AwaitingOutcome > 0 {
 		add("list_attempts", nil, "%d submitted fixes are waiting for the set to run again before their outcome can be measured.", fd.AwaitingOutcome)
+	}
+	// Sets whose submitted fixes can't be measured until their runs are re-graded, at most dueSteps.
+	for _, id := range head(slices.Sorted(maps.Keys(fd.regradeDue)), dueSteps) {
+		need := fd.regradeDue[id]
+		add("regrade", map[string]any{"target": id, "since_days": need.days}, "%d submitted fixes on %s were measured under a grading method the set no longer runs with; re-grading its runs from the last %d days makes them measurable. This dry-runs it (runs, answers, cost); then call it again with dry_run false. list_attempts names the runs.", need.attempts, id, need.days)
 	}
 	if len(fd.reviewDue) > 0 {
 		r := fd.reviewDue[0]

@@ -68,8 +68,15 @@ type Outcome struct {
 	BeforeRuns int     `json:"before_runs,omitempty"`
 	AfterRuns  int     `json:"after_runs,omitempty"`
 	Days       float64 `json:"days,omitempty"`
-	// The set has run since, but only asked or graded differently, so nothing compares.
+	// The set has run since, but only with answers asked differently (another answer prompt or
+	// search policy), which no re-grade can change: nothing compares and nothing ever will.
 	Incomparable bool `json:"incomparable,omitempty"`
+	// The set has only run since under another grading method. These runs (the fix's, the ones
+	// pooled before it, and runs since on methods older than the newest) would compare once
+	// re-graded under today's grader; a re-grade of the set reaching RegradeSinceDays back covers
+	// them all.
+	RegradeRuns      []string `json:"regrade_runs,omitempty"`
+	RegradeSinceDays int      `json:"regrade_since_days,omitempty"`
 }
 
 type PromptOutcome struct {
@@ -109,6 +116,7 @@ const (
 	OutcomeMixed        = "mixed"
 	OutcomeNoChange     = "no detectable change"
 	OutcomeIncomparable = "not comparable"
+	OutcomeNeedsRegrade = "needs regrade"
 )
 
 // Changes is the stratified change over the target prompts in named (out of every answer) and
@@ -122,11 +130,15 @@ func (o Outcome) Changes() (named, recommended Diff) {
 	return PairedDiff(nb, na), PairedDiff(rb, ra)
 }
 
-// Status is the outcome in a word: pending until the set runs again; too early until the attempt
-// is OutcomeMinDays old with OutcomeMinAnswers answers a prompt since; then moved when named or
-// recommended rose beyond its 95% margin, worse when one fell beyond it, mixed when one did each,
-// and otherwise no detectable change.
+// Status is the outcome in a word: pending until the set runs again; needs regrade while it has
+// only run under another grading method (RegradeRuns says which runs to re-grade); too early
+// until the attempt is OutcomeMinDays old with OutcomeMinAnswers answers a prompt since; then
+// moved when named or recommended rose beyond its 95% margin, worse when one fell beyond it,
+// mixed when one did each, and otherwise no detectable change.
 func (o Outcome) Status() string {
+	if len(o.RegradeRuns) > 0 {
+		return OutcomeNeedsRegrade
+	}
 	if o.Incomparable {
 		return OutcomeIncomparable
 	}
@@ -164,7 +176,10 @@ func (o Outcome) Summary() string {
 	case OutcomePending:
 		return "pending: the set hasn't run since"
 	case OutcomeIncomparable:
-		return "not comparable: the set has only run since with answers asked or graded differently"
+		return "not comparable: the set has only run since with answers asked differently, which no re-grade can change"
+	case OutcomeNeedsRegrade:
+		return fmt.Sprintf("needs regrade: the set has only run since under another grading method; re-grade %s (%s) to measure it",
+			plural(len(o.RegradeRuns), "run"), strings.Join(o.RegradeRuns, ", "))
 	}
 	named, rec := o.Changes()
 	head := o.Status()
@@ -404,7 +419,9 @@ func (fa FixAttempts) Earlier(runID string, f analysis.Fix) []Attempt {
 // outcome measures an attempt: the fix's run and the same-method runs just before it, against the
 // same-method runs of the set since the attempt, pooled per target prompt (Outcome). Counts come
 // from the results' verdict column and only answers that might name the target are decoded, so
-// listing attempts stays cheap however many runs it covers.
+// listing attempts stays cheap however many runs it covers. When the set has only run since under
+// another method, the attempt needs a re-grade (RegradeRuns) if the runs were asked alike, and is
+// incomparable for good if not.
 func (a *App) outcome(ctx context.Context, at Attempt) Outcome {
 	var o Outcome
 	r, err := a.Runs.Get(ctx, at.RunID)
@@ -422,14 +439,21 @@ func (a *App) outcome(ctx context.Context, at Attempt) Outcome {
 	if err != nil {
 		return o
 	}
-	var after []string
+	var after, older []string // older: runs since on a method that is neither the fix run's nor the newest's
 	var newest time.Time
 	ran := false
+	newestID, newestMethod := "", ""
 	for rows.Next() {
 		var id, created, method string
 		rows.Scan(&id, &created, &method)
 		ran = true
+		if newestID == "" {
+			newestID, newestMethod = id, method
+		}
 		if method != r.Method {
+			if method != newestMethod {
+				older = append(older, id)
+			}
 			continue
 		}
 		t, _ := time.Parse(time.RFC3339, created)
@@ -442,28 +466,25 @@ func (a *App) outcome(ctx context.Context, at Attempt) Outcome {
 	}
 	rows.Close()
 	if len(after) == 0 {
-		o.Incomparable = ran
+		// Runs since, but none graded as the fix's run was. Re-grading joins them if they were
+		// asked alike (a re-grade changes grades, never answers); nothing can if they weren't.
+		if ran && a.askedAlike(ctx, r, newestID) {
+			before, oldest := a.beforeRuns(ctx, at, r)
+			o.RegradeRuns = append(before, older...)
+			o.RegradeSinceDays = 1
+			if t, err := time.Parse(time.RFC3339, oldest); err == nil {
+				o.RegradeSinceDays = int(math.Max(1, math.Ceil(time.Since(t).Hours()/24)))
+			}
+		} else {
+			o.Incomparable = ran
+		}
 		return o
 	}
 	o.RunID = after[0]
 	if t, err := time.Parse(time.RFC3339, at.CreatedAt); err == nil {
 		o.Days = math.Max(0, newest.Sub(t).Hours()/24)
 	}
-	before := []string{at.RunID}
-	floor := ""
-	if t, err := time.Parse(time.RFC3339, fixAt); err == nil {
-		floor = t.AddDate(0, 0, -OutcomeBeforeDays).Format(time.RFC3339)
-	}
-	rows, err = a.DB.QueryContext(ctx, `SELECT id FROM runs WHERE set_id=? AND status='done' AND method=? AND created_at<? AND created_at>=? ORDER BY created_at DESC LIMIT ?`,
-		at.SetID, r.Method, fixAt, floor, OutcomeBeforeRuns-1)
-	if err == nil {
-		for rows.Next() {
-			var id string
-			rows.Scan(&id)
-			before = append(before, id)
-		}
-		rows.Close()
-	}
+	before, _ := a.beforeRuns(ctx, at, r)
 	o.BeforeRuns, o.AfterRuns = len(before), len(after)
 
 	ids := at.Fix.PromptIDs
@@ -490,6 +511,37 @@ func (a *App) outcome(ctx context.Context, at Attempt) Outcome {
 		o.HostCitedBefore, o.HostCitedAfter = a.hostCitedIn(ctx, before, host), a.hostCitedIn(ctx, after, host)
 	}
 	return o
+}
+
+// beforeRuns is the fix's run and the same-method runs up to OutcomeBeforeDays before it, at most
+// OutcomeBeforeRuns in all, newest first, with the oldest one's date.
+func (a *App) beforeRuns(ctx context.Context, at Attempt, r *run.Run) (ids []string, oldest string) {
+	ids, oldest = []string{at.RunID}, r.CreatedAt
+	floor := ""
+	if t, err := time.Parse(time.RFC3339, r.CreatedAt); err == nil {
+		floor = t.AddDate(0, 0, -OutcomeBeforeDays).Format(time.RFC3339)
+	}
+	rows, err := a.DB.QueryContext(ctx, `SELECT id, created_at FROM runs WHERE set_id=? AND status='done' AND method=? AND created_at<? AND created_at>=? ORDER BY created_at DESC LIMIT ?`,
+		at.SetID, r.Method, r.CreatedAt, floor, OutcomeBeforeRuns-1)
+	if err != nil {
+		return ids, oldest
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, created string
+		if rows.Scan(&id, &created) == nil {
+			ids, oldest = append(ids, id), created
+		}
+	}
+	return ids, oldest
+}
+
+// askedAlike reports whether run id asked its answers as r did (the answer prompt and search
+// policy): the part of a method a re-grade can't change, so what decides whether one could ever
+// join the two.
+func (a *App) askedAlike(ctx context.Context, r *run.Run, id string) bool {
+	x, err := a.Runs.Get(ctx, id)
+	return err == nil && x.Snapshot.AnswerPrompt == r.Snapshot.AnswerPrompt && x.Snapshot.SearchPolicy == r.Snapshot.SearchPolicy
 }
 
 // hostCitedIn reports whether any answer in runs cited a page on host or a subdomain of it. Only

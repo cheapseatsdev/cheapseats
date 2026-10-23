@@ -228,3 +228,27 @@ func TestDryRun(t *testing.T) {
 		t.Errorf("busy: %+v", p)
 	}
 }
+
+// A submitted fix whose set has since run only under another grading method: the front door
+// counts it as needing a re-grade, not as awaiting an outcome, and next_steps carries the regrade
+// call for its set with the range that covers its runs.
+func TestFrontDoorSendsAttemptsToRegrade(t *testing.T) {
+	a, db, execute, _ := fixFixture(t)
+	s, err := New(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	first := execute()
+	if _, err := a.MarkFix(ctx, first, 1, "https://github.com/acme/docs/pull/1", "proposed", "", "test"); err != nil {
+		t.Fatal(err)
+	}
+	// The grader changed after the fix's run: the next run is on another method.
+	db.Exec(`UPDATE runs SET method='older' WHERE id=?`, first)
+	execute()
+	fd := s.frontDoor(ctx)
+	st := stepTo(fd, "regrade")
+	if fd.NeedsRegrade != 1 || fd.AwaitingOutcome != 0 || st == nil || st.Args["target"] != "ai-search-visibility" || st.Args["since_days"] != 1 || !strings.Contains(st.Why, "1 submitted fix") {
+		t.Fatalf("needs regrade: %d awaiting %d %+v", fd.NeedsRegrade, fd.AwaitingOutcome, fd.NextSteps)
+	}
+}
