@@ -123,7 +123,7 @@ func (s *Server) mcpHandler() http.Handler {
 			}
 			return nil, fmt.Errorf("run %s has no result %d", a.Run, a.Result)
 		})
-	addTool(srv, "get_quick_wins", "The ranked fixes from the latest run of every prompt set, fastest ranking gain first, each with a ready-to-paste prompt for Claude Code, its status (open, proposed or accepted) and the work submitted for it or earlier for the same page.",
+	addTool(srv, "get_quick_wins", "The ranked fixes from the latest run of every prompt set, fastest ranking gain first, each with a ready-to-paste prompt for Claude Code, its status (open, proposed or accepted) and the work submitted for it or earlier for the same page. A page that several sets' lists ask for is one card, with the other sets' fixes under also_in (each with the run_id and rank mark_fix takes).",
 		func(ctx context.Context, a struct {
 			Gap      string `json:"gap,omitempty" jsonschema:"documentation, positioning, third-party or product"`
 			Set      string `json:"set,omitempty" jsonschema:"only fixes from this prompt set"`
