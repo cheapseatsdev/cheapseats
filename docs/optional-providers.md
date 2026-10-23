@@ -149,6 +149,45 @@ model = "jev-1.14.0"
 # cluster_phrases = true
 # min_confidence = 0.7   # Jev's probability that two wordings say the same thing
 
+### Second opinions on grades (Jev)
+
+The grader is one model's reading of each answer. Nothing checked its verdicts, nothing measured
+how its reading moved from one run to the next, and the evidence quote was verified only to be
+somewhere in the answer. Jev reads every grade again.
+
+After each run, every graded answer is put to Jev once, in its own request: the answer, the
+question, the brand's name, aliases and `about` (so another product sharing the name isn't the
+brand), and two questions. The first is the verdict, a Choice over `recommended`, `mentioned` and
+`absent` whose criteria are the grader's own definitions: they live in one place
+(`grade.Definitions`), the grader's prompt is built from them, and the pass sends the same text,
+so the two readings are of one rule and can't drift apart. The second is the evidence: a Choice
+over the sentences of the answer that name the brand (at most twelve), which one most supports
+the verdict; it isn't asked when the grader found the brand absent. An answer longer than 12,000
+characters is cut at a sentence end first. Each opinion lands in `grade_opinions` with Jev's
+probability for the verdict it chose, the sentence it picked and what the grader said at the
+time; a run of sixty answers is under a cent.
+
+What's stored is compared with each result's *current* grade when read, at
+`typesafe.min_confidence`: `agrees`, `disagrees`, or `unsure` when Jev's probability is below the
+threshold, and for the evidence `same` (equal once case, space and punctuation are folded, or
+one contains the other), `differs` or `none`. A re-grade changes the comparison and not the row;
+tightening the threshold re-reads the same rows. The run page shows a "Second opinion" block
+under the prompt grid: agreed, disagreed and unsure counts, the agreement rate (agreed of the
+answers Jev was sure about), and each disagreement with the prompt, the answerer, what the
+grader said and what Jev said at what probability, linking to the answer; under each answer,
+Jev's verdict and sentence sit beside the grader's. `GET /api/runs/{id}` carries it as
+`second_opinion`, MCP `get_run` the counts and up to ten disagreements, `get_result` the one
+answer's opinion. The agreement rate run over run is the drift measure: the set page gains a "Jev
+agrees" column when any run has opinions, and `cheapseats verdicts <run-id>` runs the pass on a
+finished run and prints the rate and the disagreements. The disagreements are a regrade queue:
+the answers to read first when the grader is in doubt.
+
+```toml
+[typesafe]
+model = "jev-1.14.0"
+# second_opinions = true
+# min_confidence = 0.7   # below it, Jev's opinion counts as unsure rather than as a disagreement
+
 [pricing."jev-1.14.0"]
 input = 0.042
 ```
@@ -430,16 +469,10 @@ Each item below fits the six rules. They are ranked by how visible the gain is o
 
 **Jev, judgments over data the run already has**
 
-2. A second opinion on verdicts. The verdict as a Choice with the brand and aliases in state,
-   stored beside the grader's, with disagreements and low confidence as a regrade queue. Also
-   makes grader drift measurable.
-3. Prompt review at check time. Duplicates and off-target prompts are found today from a month
    of answers by overlap of named products. A Score over prompt pairs for "asks the same thing"
    and a Noul for "about something other than the category", as suggestions in `cheapseats check`.
-4. Intent and branded detection at check time: suggest `intent = "info"`, catch a brand name the
+3. Intent and branded detection at check time: suggest `intent = "info"`, catch a brand name the
    whole-word alias match misses.
-6. Evidence sentence selection: a Choice over the answer's sentences, as a check on the grader's
-   quoted evidence.
 
 Not Jev: anything that produces a list or a sentence. The named-products list, reasoning,
 why-not-top, objections as text and the fix list stay on a generative model.

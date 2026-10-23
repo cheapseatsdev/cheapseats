@@ -84,16 +84,40 @@ var schema = map[string]any{
 	"additionalProperties": false,
 }
 
-const System = `You grade AI assistant answers for brand visibility. Given a user question and an assistant's answer, decide the following for the brand named on the "Brand:" line, and only that brand.
+// Verdicts are the three verdicts in the order they are defined.
+var Verdicts = []Verdict{Recommended, Mentioned, Absent}
+
+// Definitions are the verdicts as the grader is told them, word for word. The second-opinion
+// pass puts the same text to Jev as its criteria, so the two readings are of one rule; change
+// a definition here and both move together.
+var Definitions = map[Verdict]string{
+	Recommended: "the answer presents the brand as its top pick, or as one of a small set (<=3) of primary recommendations it actively endorses for the user's situation.",
+	Mentioned:   "the brand is named but only as one option among many, in passing, as a comparison point, or with reservations.",
+	Absent:      "the brand is not named at all (aliases included). A bare alias that clearly means something else is not the brand.",
+}
+
+// definitions is the verdict block of System, one line per verdict.
+var definitions = func() string {
+	var b strings.Builder
+	for i, v := range Verdicts {
+		if i > 0 {
+			b.WriteByte('\n')
+		}
+		fmt.Fprintf(&b, "- %q: %s", v, Definitions[v])
+	}
+	return b.String()
+}()
+
+// System is the grader's prompt. It is a var only because the verdict definitions are shared
+// with the second-opinion pass; nothing changes it.
+var System = `You grade AI assistant answers for brand visibility. Given a user question and an assistant's answer, decide the following for the brand named on the "Brand:" line, and only that brand.
 
 The question may be about another product, such as a competitor ("Is Gauge any good?"). That product is never the brand, however strongly the answer endorses it. If the answer doesn't name the brand or one of its aliases, the verdict is "absent", even when the question's subject is recommended.
 
 Other products and companies can share the brand's name. Use "About the brand" to tell them apart. If every use of the name in the answer refers to one of them, or the answer can't tell which product is meant and describes a different one, the brand itself isn't named: other_product is true and the verdict is "absent". An answer that says it can't find or verify the brand, without taking it for something else, still names it.
 
 verdict:
-- "recommended": the answer presents the brand as its top pick, or as one of a small set (<=3) of primary recommendations it actively endorses for the user's situation.
-- "mentioned": the brand is named but only as one option among many, in passing, as a comparison point, or with reservations.
-- "absent": the brand is not named at all (aliases included). A bare alias that clearly means something else is not the brand.
+` + definitions + `
 
 position: the 1-based position of the brand in the order products are first named in the answer, or null if absent.
 top_pick: the single product the answer most strongly recommends, or null if it doesn't commit to one.

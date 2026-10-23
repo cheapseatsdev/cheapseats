@@ -625,6 +625,10 @@ type RunData struct {
 	// Pages like the cited listicles that no answer cited (the prospects pass), when [exa] has
 	// run it; gated at today's threshold.
 	Prospects []app.Prospect `json:"prospects,omitempty"`
+	// Jev's second opinion on each grade (by result id) and the run's agreement with the grader,
+	// when [typesafe] has read this run (docs/optional-providers.md).
+	Opinions      map[int64]*app.Opinion `json:"-"`
+	SecondOpinion *app.Agreement         `json:"second_opinion,omitempty"`
 	// The work submitted for this run's fixes, and for earlier fixes for the same pages, and when
 	// the fix list was built (FixAttempts.Status).
 	Attempts app.FixAttempts `json:"-"`
@@ -693,6 +697,8 @@ func (s *Server) runData(ctx context.Context, id string) (*RunData, error) {
 	d.Coverage = s.App.Coverage(ctx, id, res)
 	d.Baseline = s.App.Baseline(ctx, id, res)
 	d.Prospects = s.App.Prospects(ctx, id, res)
+	d.Opinions = s.App.Opinions(ctx, id, res)
+	d.SecondOpinion = app.Agree(d.Opinions, res)
 	for _, a := range r.Snapshot.Answerers {
 		d.Answerers = append(d.Answerers, a.ID)
 	}
@@ -801,6 +807,8 @@ type RunRow struct {
 	Scored             bool
 	Named, Recommended float64
 	Rank               int
+	// How often Jev agreed with the grader on this run, when [typesafe] has read it.
+	Agreement *app.Agreement
 }
 
 // HomeRow is one set on the dashboard: its card, and its latest day on each track.
@@ -816,10 +824,14 @@ func (s *Server) setPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	runs, _ := s.App.Runs.List(r.Context(), st.ID, 30)
+	agreement, _ := s.App.AgreementHistory(r.Context(), st.ID)
 	// Each finished run's search-track scores, as the dashboard shows them.
 	var rows []RunRow
 	for _, rn := range runs {
 		row := RunRow{Run: rn}
+		if ag, ok := agreement[rn.ID]; ok {
+			row.Agreement = &ag
+		}
 		if rn.Status == "done" {
 			if res, err := s.App.Runs.Results(r.Context(), rn.ID); err == nil {
 				var search []run.Result
@@ -844,7 +856,7 @@ func (s *Server) setPage(w http.ResponseWriter, r *http.Request) {
 	hist, _ := s.App.History(r.Context(), st, track, 30, window)
 	stab, _ := s.App.CitationStability(r.Context(), st, track, 30)
 	s.render(w, "set", map[string]any{"Set": st, "Runs": rows, "Spend": s.spend(r.Context()), "History": hist,
-		"Advice": s.App.SampleAdvice(r.Context(), st), "Windows": windowLinks(r, window), "Stability": stab, "Regrading": s.App.Regrading(st.ID)})
+		"Advice": s.App.SampleAdvice(r.Context(), st), "Windows": windowLinks(r, window), "Stability": stab, "Regrading": s.App.Regrading(st.ID), "Agreement": len(agreement) > 0})
 }
 
 func (s *Server) startRunForm(w http.ResponseWriter, r *http.Request) {

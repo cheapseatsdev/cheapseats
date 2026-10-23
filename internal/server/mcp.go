@@ -99,7 +99,7 @@ func (s *Server) mcpHandler() http.Handler {
 			}
 			return out, nil
 		})
-	addTool(srv, "get_run", "One run: rates per answerer and track (and without branded prompts), share of voice with positions, head to head, objections (wordings Jev judged the same count as one, with a wordings count), sources by kind and host, cited pages by type (listicle, comparison, review, docs, forum...), an outreach list of hosts cited without the brand (and, when [exa] has run the prospects pass, prospects: pages like the cited listicles that no answer cited, with whom each names), the brand's pages found but not cited, the fix list, net sentiment with top praise and objections, the run's themes, one line per prompt, and, when [exa] is configured, the neutral retrieval baseline per host (prompts a neutral index ranks it for against prompts the assistants found it for, read as content, query or both). Use get_result for a full answer.",
+	addTool(srv, "get_run", "One run: rates per answerer and track (and without branded prompts), share of voice with positions, head to head, objections (wordings Jev judged the same count as one, with a wordings count), sources by kind and host, cited pages by type (listicle, comparison, review, docs, forum...), an outreach list of hosts cited without the brand (and, when [exa] has run the prospects pass, prospects: pages like the cited listicles that no answer cited, with whom each names), the brand's pages found but not cited, the fix list, net sentiment with top praise and objections, the run's themes, one line per prompt, and, when [exa] is configured, the neutral retrieval baseline per host (prompts a neutral index ranks it for against prompts the assistants found it for, read as content, query or both), and, when [typesafe] has read the run, second_opinion: how many grades Jev agreed with, disagreed with or was unsure about, the agreement rate, and up to 10 disagreements. Use get_result for a full answer.",
 		func(ctx context.Context, a runArg) (any, error) {
 			d, err := s.runData(ctx, a.Run)
 			if err != nil {
@@ -107,7 +107,7 @@ func (s *Server) mcpHandler() http.Handler {
 			}
 			return runDigest(d), nil
 		})
-	addTool(srv, "get_result", "One answer in full: the text, its grade (with evidence, the sentence of the answer that most supports the verdict, checked to be in the text), every search, result URL and citation.",
+	addTool(srv, "get_result", "One answer in full: the text, its grade (with evidence, the sentence of the answer that most supports the verdict, checked to be in the text), every search, result URL and citation, and, when [typesafe] has read the run, second_opinion: Jev's verdict and evidence sentence beside the grader's, and whether they agree.",
 		func(ctx context.Context, a struct {
 			Run    string `json:"run" jsonschema:"run id"`
 			Result int64  `json:"result" jsonschema:"result id, from get_run"`
@@ -118,7 +118,10 @@ func (s *Server) mcpHandler() http.Handler {
 			}
 			for _, x := range res {
 				if x.ID == a.Result {
-					return x, nil
+					return struct {
+						run.Result
+						SecondOpinion *app.Opinion `json:"second_opinion,omitempty"`
+					}{x, s.App.Opinions(ctx, a.Run, res)[x.ID]}, nil
 				}
 			}
 			return nil, fmt.Errorf("run %s has no result %d", a.Run, a.Result)
@@ -580,6 +583,13 @@ func runDigest(d *RunData) any {
 	// The snapshot is everything that shaped the run, which /api/runs/{id} has in full.
 	r := *d.Run
 	r.Snapshot = run.Snapshot{}
+	// Jev's second opinion on the grades, with the disagreements cut to ten.
+	var second *app.Agreement
+	if d.SecondOpinion != nil {
+		ag := *d.SecondOpinion
+		ag.Disagreements = head(ag.Disagreements, 10)
+		second = &ag
+	}
 	return struct {
 		Run     *run.Run       `json:"run"`
 		Overall report.Rates   `json:"overall"`
@@ -601,13 +611,14 @@ func runDigest(d *RunData) any {
 		Fixes          []analysis.Fix      `json:"fixes"` // without claude_prompt: get_quick_wins has it
 		Insights       string              `json:"insights"`
 		Opinion        opinion.Report      `json:"opinion"`
+		SecondOpinion  *app.Agreement      `json:"second_opinion,omitempty"`
 		Prompts        []prompt            `json:"prompts"`
 		// The neutral retrieval baseline's host table, present only when [exa] searched the run's
 		// prompts: per host, the prompts a neutral index ranks it for against the prompts the
 		// assistants found it for, and the reading (content, query, both).
 		Neutral []app.BaselineHost `json:"neutral_retrieval,omitempty"`
 	}{&r, sum.Overall, sum.Slices, sum.Unbranded, sum.BrandedPrompts, sum.BrandRank(), voice, head(sum.HeadToHead, 10), head(sum.Objections, 10),
-		sum.Classes, sum.PageTypes, head(sum.Hosts, 10), head(sum.Outreach, 10), prospects, uncited, pages, fixes, d.Insights, d.Opinion, prompts, neutral}
+		sum.Classes, sum.PageTypes, head(sum.Hosts, 10), head(sum.Outreach, 10), prospects, uncited, pages, fixes, d.Insights, d.Opinion, second, prompts, neutral}
 }
 
 // auditDigest is audit_sites' answer: each site in a line or two, and the findings without info
