@@ -103,9 +103,9 @@ func TestAnAnswerThatNeverNamesTheBrandIsAbsent(t *testing.T) {
 	}
 }
 
-// Another product can share the brand's name: answers about trypopcorn.ai, Reclaim Protocol's
-// popcorn-oss and Bad Popcorn were graded "mentioned" for Popcorn, as Cheap Seats was then called
-// (run r-20261022-043102-ebd82f, results 671, 695, 699). The grader says so in other_product, and that makes the grade absent;
+// Another product can share the brand's name: answers about unrelated products with a name like
+// the brand's were graded "mentioned" for it (run r-20261022-043102-ebd82f, results 671, 695,
+// 699). The grader says so in other_product, and that makes the grade absent;
 // an answer that can't find the brand, without taking it for something else, still names it.
 func TestTheNameUsedForAnotherProductIsAbsent(t *testing.T) {
 	brand := config.Brand{Name: "Cheap Seats", Aliases: []string{"cheapseats.dev"}, About: "an open-source, self-hosted AI visibility tracker"}

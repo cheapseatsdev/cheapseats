@@ -1,5 +1,4 @@
-{{- /* The chart's name in resource names and labels. A release installed before the rename sets
-nameOverride=popcorn, so its Deployment selector and volume claim keep their names. */ -}}
+{{- /* The chart's name in resource names and labels. */ -}}
 {{- define "cheapseats.name" -}}
 {{- .Values.nameOverride | default .Chart.Name -}}
 {{- end -}}

@@ -49,45 +49,6 @@ say "upload"
 home=$(remote 'echo $HOME')
 user=$(remote whoami)
 dir="$home/cheapseats"
-# A VM set up before the rename keeps everything under ~/popcorn. Move it once, with the service
-# stopped, so the database, env file, backups and timers carry over under the new names. The old
-# binary can't run the moved files, so it's dropped: this deploy has nothing to roll back to, and
-# backups/pre-rename.db is the way back.
-if remote "test -d '$home/popcorn' && ! test -e '$dir'"; then
-	say "move ~/popcorn to ~/cheapseats"
-	remote bash -s <<'EOF'
-set -euo pipefail
-cd "$HOME"
-units=$(ls /etc/systemd/system/ | grep -E '^popcorn.*[.](service|timer)$' || true)
-for u in $units; do sudo systemctl disable --now "$u" >/dev/null 2>&1 || true; done
-cd popcorn
-mkdir -p backups
-sqlite3 data/popcorn.db ".backup 'backups/pre-rename.db'"
-sqlite3 data/popcorn.db 'PRAGMA wal_checkpoint(TRUNCATE);' >/dev/null
-for f in data/popcorn.db*; do mv "$f" "data/cheapseats${f#data/popcorn}"; done
-sed -i 's/^POPCORN_/CHEAPSEATS_/' popcorn.env
-mv popcorn.env cheapseats.env
-rm -f bin/popcorn bin/popcorn.prev bin/popcorn.new
-for f in bin/popcorn-*; do
-	[ -e "$f" ] || continue
-	n="bin/cheapseats${f#bin/popcorn}"
-	sed -e 's/popcorn/cheapseats/g; s/Popcorn/Cheap Seats/g' "$f" >"$n"
-	chmod +x "$n"
-	rm -f "$f"
-done
-cd "$HOME"
-mv popcorn cheapseats
-for u in $units; do
-	sed -e 's/popcorn/cheapseats/g; s/Popcorn/Cheap Seats/g' "/etc/systemd/system/$u" |
-		sudo tee "/etc/systemd/system/cheapseats${u#popcorn}" >/dev/null
-	sudo rm -f "/etc/systemd/system/$u"
-done
-sudo systemctl daemon-reload
-for u in $units; do
-	case $u in *.timer) sudo systemctl enable --now "cheapseats${u#popcorn}" >/dev/null ;; esac
-done
-EOF
-fi
 remote "mkdir -p '$dir/bin' '$dir/data' && rm -rf '$dir/config.new' && mkdir '$dir/config.new'"
 scp -q -o BatchMode=yes "$work/cheapseats" "$host:$dir/bin/cheapseats.new"
 remote "tar -x -C '$dir/config.new' && echo '$rev' > '$dir/config.new/REVISION'" <"$work/config.tar"

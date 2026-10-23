@@ -11,7 +11,7 @@ for (const a of document.querySelectorAll("header nav a")) {
   if (!button) return;
   const modes = ["system", "light", "dark"];
   let mode = "system";
-  try { const t = localStorage.getItem("cheapseats-theme") || localStorage.getItem("popcorn-theme"); if (t === "light" || t === "dark") mode = t; } catch {}
+  try { const t = localStorage.getItem("cheapseats-theme"); if (t === "light" || t === "dark") mode = t; } catch {}
   const show = () => {
     button.dataset.mode = mode;
     const next = modes[(modes.indexOf(mode) + 1) % modes.length];
@@ -24,7 +24,7 @@ for (const a of document.querySelectorAll("header nav a")) {
     if (mode === "system") delete document.documentElement.dataset.theme;
     else document.documentElement.dataset.theme = mode;
     try {
-      if (mode === "system") { localStorage.removeItem("cheapseats-theme"); localStorage.removeItem("popcorn-theme"); }
+      if (mode === "system") { localStorage.removeItem("cheapseats-theme"); }
       else localStorage.setItem("cheapseats-theme", mode);
     } catch {}
     show();

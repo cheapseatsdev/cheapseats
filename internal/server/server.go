@@ -66,7 +66,6 @@ type Server struct {
 	// different names or each sign-in signs the other out.
 	cookie string
 	// The name a sign-in before the rename set, honored and carried over to cookie.
-	oldCookie string
 	// Where links to this Cheap Seats point (CHEAPSEATS_PUBLIC_URL), for share links; see linkBase.
 	publicURL string
 	// A read-only copy (CHEAPSEATS_READONLY), such as a public demo: it serves pages and the JSON
@@ -79,7 +78,7 @@ type Server struct {
 }
 
 func New(a *app.App) (*Server, error) {
-	s := &Server{App: a, cookie: "cheapseats_token_" + a.Cfg.Brand.Slug(), oldCookie: "popcorn_token_" + a.Cfg.Brand.Slug(), authHeader: strings.TrimSpace(env.Get("AUTH_HEADER")),
+	s := &Server{App: a, cookie: "cheapseats_token_" + a.Cfg.Brand.Slug(), authHeader: strings.TrimSpace(env.Get("AUTH_HEADER")),
 		publicURL: strings.TrimRight(strings.TrimSpace(env.Get("PUBLIC_URL")), "/"), readOnly: env.Get("READONLY") != ""}
 	for _, t := range strings.Split(env.Get("TOKENS"), ",") {
 		if t = strings.TrimSpace(t); t != "" {
@@ -465,12 +464,6 @@ func (s *Server) auth(h http.Handler) http.Handler {
 		}
 		if c, err := r.Cookie(s.cookie); err == nil && s.validToken(c.Value) {
 			// Forms are same-origin only: the cookie is SameSite=Strict.
-			h.ServeHTTP(w, r)
-			return
-		}
-		if c, err := r.Cookie(s.oldCookie); err == nil && s.validToken(c.Value) {
-			s.setCookie(w, r, c.Value)
-			http.SetCookie(w, &http.Cookie{Name: s.oldCookie, Path: "/", MaxAge: -1})
 			h.ServeHTTP(w, r)
 			return
 		}

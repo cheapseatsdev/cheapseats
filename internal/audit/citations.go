@@ -223,13 +223,9 @@ func (c *robotsCache) allowed(ctx context.Context, u *url.URL) bool {
 	return allowsUs(e.r, path)
 }
 
-// allowsUs is whether robots.txt lets Cheap Seats fetch path: by its own token, or by the one from
-// before the rename when only that is named.
+// allowsUs is whether robots.txt lets Cheap Seats fetch path, by its token.
 func allowsUs(r *Robots, path string) bool {
-	ok, named := r.Allowed(Token, path)
-	if !named {
-		ok, _ = r.Allowed(OldToken, path)
-	}
+	ok, _ := r.Allowed(Token, path)
 	return ok
 }
 

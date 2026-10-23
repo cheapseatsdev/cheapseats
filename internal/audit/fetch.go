@@ -21,12 +21,8 @@ func UA() string {
 	return "Mozilla/5.0 (compatible; CheapSeats-Audit/" + version.String() + "; +https://cheapseats.dev)"
 }
 
-// Token is Cheap Seats' robots.txt product token. OldToken is the one from before the rename: a
-// robots.txt that names only it still applies.
-const (
-	Token    = "CheapSeats-Audit"
-	OldToken = "Popcorn-Audit"
-)
+// Token is Cheap Seats' robots.txt product token.
+const Token = "CheapSeats-Audit"
 
 // Fetcher makes polite requests: one user agent, a timeout, a size cap and a few at a time.
 type Fetcher struct {

@@ -351,9 +351,6 @@ func (c *Config) Cost(model string, u Usage) float64 {
 }
 
 func Load(path string) (*Config, error) {
-	if filepath.Base(path) == "cheapseats.toml" {
-		path = env.File(filepath.Dir(path), "cheapseats.toml", "popcorn.toml")
-	}
 	var c Config
 	md, err := toml.DecodeFile(path, &c)
 	if err != nil {
