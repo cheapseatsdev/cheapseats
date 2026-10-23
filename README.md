@@ -182,6 +182,8 @@ cheapseats regrade <set-id|run-id> [-since 28d] [-dry-run=false]
 cheapseats review <set-id> [-days 30] [-json] [-suggest]
                                        flat, noisy, off-target and duplicate prompts, and gaps, from
                                        stored answers (free; -suggest: one analyst call)
+cheapseats discover [-json]               competitors to consider, from sites similar to the
+                                       configured ones, as TOML to paste ([exa]; writes nothing)
 cheapseats check                          validate the config
 cheapseats plan <before> [<after>]        what a config change does to trends
 cheapseats migrate-config [dir]           give prompts ids (sets from before ids)
@@ -190,14 +192,16 @@ cheapseats version                        version and database schema
 
 ## API and MCP
 
-- JSON API under `/api/` (status, sets, runs, fixes, quick wins, fix attempts, rankings, citations, searches, prompt review, search probe, site audit, citation check, crawlers):
+- JSON API under `/api/` (status, sets, runs, fixes, quick wins, fix attempts, rankings, citations, searches, prompt review, search probe, site audit, citation check, crawlers, competitor suggestions):
   [reference](https://cheapseats.dev/docs/reference/).
 - MCP server at `/api/mcp` (Streamable HTTP). `get_run` includes net sentiment, themes and page
   types; `get_result` the grade's evidence quote; `get_citation_stability` has a set's run-to-run
   citation stability; `suggest_prompts` drafts new prompts for a set (one analyst call);
   `review_prompts` reviews a set's prompts from their answers (free; `suggest: true` adds one
   analyst call for proposed edits, [prompt review](docs/prompt-review.md)); `regrade`
-  re-grades stored answers ([re-grading](docs/regrading.md)), a dry run unless `dry_run` is false:
+  re-grades stored answers ([re-grading](docs/regrading.md)), a dry run unless `dry_run` is false;
+  `suggest_competitors` finds products worth adding to `[[competitors]]` from sites similar to
+  the configured ones (needs `[exa]`, [optional providers](docs/optional-providers.md)):
 
   ```bash
   claude mcp add --transport http cheapseats https://<host>/api/mcp --header "Authorization: Bearer <token>"

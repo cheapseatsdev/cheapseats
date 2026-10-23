@@ -57,6 +57,8 @@ const usage = `cheapseats: how AI assistants answer your buyers' questions.
   cheapseats review <set-id> [-days 30] [-json] [-suggest]
                                          flat, noisy, off-target and duplicate prompts, and gaps,
                                          from stored answers (free; -suggest: one analyst call)
+  cheapseats discover [-json]               competitors to consider, from sites similar to the
+                                         configured ones, as TOML to paste ([exa]; writes nothing)
   cheapseats audit [site...]                what AI crawlers can read on the brand's sites (free)
   cheapseats check-citations <run-id>       which pages the run cited name the brand, and which rivals
   cheapseats crawl import <logfile>...      count AI crawler fetches and AI referrals from access logs
@@ -400,6 +402,8 @@ func dispatch(ctx context.Context, cmd string, args []string) error {
 		return nil
 	case "review":
 		return reviewCmd(ctx, args)
+	case "discover":
+		return discoverCmd(ctx, args)
 	case "init":
 		return initCmd(ctx, args)
 	case "audit":
