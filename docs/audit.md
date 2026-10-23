@@ -1,7 +1,10 @@
 # Site audit, citation check and AI crawlers
 
 Three checks beside the runs. None of them calls a model: they're plain HTTP and your own logs, so
-they cost nothing.
+they cost nothing. The one exception is optional: with `[exa]` configured and `contents_fallback`
+on, a page that is empty without JavaScript, or served as a bot challenge, is read through Exa's
+contents API instead, a tenth of a cent a page, at most once a day, and marked `via: exa`
+([optional providers](optional-providers.md)).
 
 ## Site audit
 
@@ -54,6 +57,7 @@ empty without JavaScript" rather than only "this page wasn't cited".
 | `page.unreachable`, `page.status` | error | a page couldn't be fetched, or didn't answer 200 |
 | `page.challenge` | error | a page served a bot challenge instead of its content |
 | `page.needs-js` | error | under 200 characters of text in the HTML and an app mount point (`#root`, `#app`, `#__next`...): empty without JavaScript |
+| `page.needs-js`, `page.challenge` with `via: exa` | info | with the Exa fallback on, the page was read through Exa and has content; the empty HTML, or the challenge, is still what a crawler that runs no JavaScript gets |
 | `page.thin` | warning | under 200 characters of text in the HTML |
 | `page.noindex` | error | a robots meta tag or `X-Robots-Tag` says noindex |
 | `page.jsonld-invalid` | error | a JSON-LD block doesn't parse |
@@ -85,6 +89,12 @@ month). It reads the page's visible text and says whether it names the brand or 
 of the set's competitors. A page that names competitors but not you is marked **outreach**: the
 answers read it, and it leaves you out. Matching is by whole word, ignoring case: stricter than the
 grader's own check, so a short alias doesn't match inside another word.
+
+A page that is empty without JavaScript (under 200 characters of text and a `<script>`), or one
+that serves a bot challenge, names nobody over plain HTTP. With `[exa]` configured and
+`contents_fallback` on it is read through Exa instead, once a day, and the row carries `via: exa`
+(`(via Exa)` on the command line, a chip in the web UI). Without it, the row reads as it always
+did.
 
 ## AI crawlers
 

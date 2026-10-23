@@ -10,8 +10,8 @@ called, and switching one off later leaves every page as it was.
   a calibrated probability and a confidence. It cannot generate, count or do arithmetic, and it
   reads instructions literally. Input costs $0.042 per million tokens; output is free.
 - **[Exa](https://exa.ai)** is a web search API: a neutral index to ask what the web has, as
-  opposed to what an assistant found. A search is about $4 per thousand; page contents cost extra
-  and aren't fetched.
+  opposed to what an assistant found. A search is about $4 per thousand; page contents cost extra,
+  about $1 per thousand pages, and are fetched only as a fallback for a page plain HTTP can't read.
 
 ## Getting a key
 
@@ -208,6 +208,44 @@ size, and costs under half a cent; `both` costs that plus the Claude probe's few
 search_per_1k = 4
 ```
 
+### Reading a page through Exa (Exa)
+
+The site audit and the citation check read pages with plain HTTP, the way a crawler that runs no
+JavaScript does. That is the point of the audit, and it is also how both checks get fooled: a page
+that is an empty app shell without JavaScript reads as `page.needs-js` when the content is there
+once rendered, and a cited page that is a shell, or that serves a bot challenge to anything that
+isn't a browser, reads as naming nobody. Both are findings about a page the assistants read fine.
+
+With `[exa]` configured and `contents_fallback` on, such a page is read once more through Exa's
+contents endpoint, which renders it. The trigger is narrow: a 200 HTML page with under 200
+characters of visible text and a `<script>` or `<noscript>` in it, or a challenge page. The text
+Exa returns is kept in `exa_contents` for a day, so a page costs at most one read a day whichever
+check asks, and it stands in for the page's text. The citation row says whether the page names the
+brand and which competitors, with `via: "exa"`. On the audit, the page's text count is what Exa
+read, and the `page.needs-js` or `page.challenge` finding becomes an info one carrying
+`via: "exa"`: the content exists, and crawlers that run no JavaScript still see the empty HTML, so
+it stays on the page without going to the analyst as an error. The web UI and MCP show `via Exa`,
+and the CLI marks the page `(via Exa)`. Everything else is as before: a page plain HTTP reads is
+never sent to Exa, Exa failing to read a page leaves what plain HTTP got, and with the switch off,
+no key or no price, nothing is called and the checks behave exactly as they did.
+
+This is not a pass: it runs inside the two checks, which run on demand, and nothing reads Exa
+from a page. `audit` takes the reader as a function in its options (`audit.Options.Reader`,
+`audit.CiteOptions.Reader`), wired by `app` (`internal/app/contents.go`), so the package stays
+free of providers.
+
+```toml
+[exa]
+# contents_fallback = true
+
+[pricing.exa-contents]
+page_per_1k = 1
+```
+
+A citation check of 25 pages where three are shells reads three pages, a third of a cent, once a
+day; an audit of a site built as a single-page app reads its home page and up to ten sitemap
+pages, about a cent.
+
 ## Next, in order
 
 Each item below fits the six rules. They are ranked by how visible the gain is on our own data.
@@ -242,8 +280,6 @@ why-not-top, objections as text and the fix list stay on a generative model.
 2. A neutral retrieval baseline: each prompt as a plain search, compared with what the
    assistants searched and read. A competitor topping neutral retrieval is a content problem; one
    that only shows in the assistants' searches is a query problem.
-3. Contents as a fetch fallback for the site audit and citation check when a page is empty
-   without JavaScript.
 
 The strongest pairing is Exa finding candidate pages and Jev deciding whether each is a roundup
 in the category that names the brand, with code ranking the result: the citation-check pattern

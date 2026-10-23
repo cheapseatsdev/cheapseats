@@ -26,6 +26,7 @@ type CitedPage struct {
 	Target
 	Status      int      `json:"status"`
 	Skipped     string   `json:"skipped,omitempty"` // why it wasn't read: robots.txt, an error, not text
+	Via         string   `json:"via,omitempty"`     // "exa" when the text was read through Exa, plain HTTP having got an empty shell or a challenge
 	NamesBrand  bool     `json:"names_brand"`
 	Competitors []string `json:"competitors"`
 	// It names competitors but not the brand: the page to get into.
@@ -56,6 +57,9 @@ type CiteOptions struct {
 	// nothing; nil fetches every time.
 	DB  *sql.DB
 	Now func() time.Time
+	// Reads a page's text another way when plain HTTP got an app shell that is empty without
+	// JavaScript, or a bot challenge; nil reads nothing more, and what plain HTTP got is the result.
+	Reader Reader
 }
 
 // maxText is the most of a page's text kept for matching.
@@ -80,8 +84,8 @@ func CheckCitations(ctx context.Context, targets []Target, brand []string, compe
 	each(len(targets), func(i int) {
 		t := targets[i]
 		p := CitedPage{Target: t, Competitors: []string{}}
-		status, skipped, text := fetchText(ctx, o, robots, t.URL, day)
-		p.Status, p.Skipped = status, skipped
+		status, skipped, text, via := fetchText(ctx, o, robots, t.URL, day)
+		p.Status, p.Skipped, p.Via = status, skipped, via
 		if skipped == "" {
 			p.NamesBrand = NamesAny(text, brand)
 			for _, c := range competitors {
@@ -96,19 +100,42 @@ func CheckCitations(ctx context.Context, targets []Target, brand []string, compe
 	return out
 }
 
+// What plain HTTP got instead of the page, as stored in page_fetches' error column, and what a
+// Reader can read another way. A challenge is skipped, as it always was. A shell (a 200 HTML page
+// that is empty without JavaScript) was never skipped: with no Reader it reads as the little text it
+// has, naming nobody, exactly as before the fallback; the reason is kept in the row so a later
+// check the same day knows to read it through the Reader without fetching it again.
+const (
+	challengeReason = "it served a bot challenge"
+	shellReason     = "empty without JavaScript"
+)
+
 // fetchText is a page's visible text, from today's cache or fetched; skipped says why there's none.
-func fetchText(ctx context.Context, o CiteOptions, robots *robotsCache, u, day string) (status int, skipped, text string) {
+// A shell or a challenge is read through o.Reader when there is one, and via says so ("exa").
+func fetchText(ctx context.Context, o CiteOptions, robots *robotsCache, u, day string) (status int, skipped, text, via string) {
+	cached := false
 	if o.DB != nil {
-		if o.DB.QueryRowContext(ctx, `SELECT status, error, text FROM page_fetches WHERE url=? AND day=?`, u, day).Scan(&status, &skipped, &text) == nil {
-			return status, skipped, text
+		cached = o.DB.QueryRowContext(ctx, `SELECT status, error, text FROM page_fetches WHERE url=? AND day=?`, u, day).Scan(&status, &skipped, &text) == nil
+	}
+	if !cached {
+		status, skipped, text = fetchNow(ctx, o.Fetcher, robots, u)
+		if o.DB != nil && ctx.Err() == nil {
+			o.DB.ExecContext(ctx, `INSERT OR REPLACE INTO page_fetches (url, day, status, error, text, fetched_at) VALUES (?,?,?,?,?,?)`,
+				u, day, status, skipped, text, time.Now().UTC().Format(time.RFC3339))
 		}
 	}
-	status, skipped, text = fetchNow(ctx, o.Fetcher, robots, u)
-	if o.DB != nil && ctx.Err() == nil {
-		o.DB.ExecContext(ctx, `INSERT OR REPLACE INTO page_fetches (url, day, status, error, text, fetched_at) VALUES (?,?,?,?,?,?)`,
-			u, day, status, skipped, text, time.Now().UTC().Format(time.RFC3339))
+	switch skipped {
+	case shellReason, challengeReason:
+		if o.Reader != nil {
+			if read, _, ok := o.Reader(ctx, u); ok {
+				return status, "", clipText(read), ViaExa
+			}
+		}
+		if skipped == shellReason {
+			skipped = "" // what plain HTTP got: a page with a little text, as before the fallback
+		}
 	}
-	return status, skipped, text
+	return status, skipped, text, ""
 }
 
 func fetchNow(ctx context.Context, f *Fetcher, robots *robotsCache, raw string) (int, string, string) {
@@ -127,13 +154,17 @@ func fetchNow(ctx context.Context, f *Fetcher, robots *robotsCache, raw string) 
 		return r.Status, "it answered " + strconv.Itoa(r.Status), ""
 	}
 	if challenge(r) {
-		return r.Status, "it served a bot challenge", ""
+		return r.Status, challengeReason, ""
 	}
 	ct := r.ContentType()
 	if ct != "" && !strings.HasPrefix(ct, "text/") && !strings.Contains(ct, "html") && !strings.Contains(ct, "xml") {
 		return r.Status, "not a text page (" + ct + ")", ""
 	}
-	return r.Status, "", clipText(Text(r.Body, ct))
+	text := clipText(Text(r.Body, ct))
+	if html := strings.Contains(ct, "html") || ct == "" && looksHTML(r.Body); html && emptyShell(r.Body, runes(text)) {
+		return r.Status, shellReason, text
+	}
+	return r.Status, "", text
 }
 
 // clipText makes text valid UTF-8 (a Latin-1 page's bytes become U+FFFD, which matching reads as

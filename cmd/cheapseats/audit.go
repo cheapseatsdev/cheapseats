@@ -75,7 +75,7 @@ func auditCmd(ctx context.Context, args []string) error {
 			if f.Site != s.Site || f.Severity == audit.Info && !*info {
 				continue
 			}
-			fmt.Printf("  %-7s %-26s %s\n          %s\n          fix: %s\n", strings.ToUpper(string(f.Severity)), f.Check, f.URL, f.Message, f.Fix)
+			fmt.Printf("  %-7s %-26s %s%s\n          %s\n          fix: %s\n", strings.ToUpper(string(f.Severity)), f.Check, f.URL, viaMark(f.Via), f.Message, f.Fix)
 		}
 		fmt.Println()
 	}
@@ -92,6 +92,14 @@ func or(s, d string) string {
 		return d
 	}
 	return s
+}
+
+// viaMark says when a page's text was read through Exa rather than plain HTTP.
+func viaMark(via string) string {
+	if via == audit.ViaExa {
+		return " (via Exa)"
+	}
+	return ""
 }
 
 // checkCitationsCmd: cheapseats check-citations [-n 25] [-json] <run-id>
@@ -128,9 +136,9 @@ func checkCitationsCmd(ctx context.Context, args []string) error {
 		if p.Skipped != "" {
 			comps = "(" + p.Skipped + ")"
 		}
-		mark := ""
+		mark := viaMark(p.Via)
 		if p.Outreach {
-			mark = "  <- outreach"
+			mark += "  <- outreach"
 		}
 		fmt.Fprintf(w, "%d\t%d\t%s\t%s\t%s%s\n", p.Cited, p.Surfaced, names, comps, p.URL, mark)
 	}
