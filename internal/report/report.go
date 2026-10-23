@@ -238,6 +238,9 @@ type Summary struct {
 	Classes        []ClassUse   `json:"source_classes"`
 	PageTypes      []TypeUse    `json:"page_types"`
 	Outreach       []Outreach   `json:"outreach"`
+	// Each kind of source, and each page type within it, scored by how much the answers lean on
+	// it and how rarely the brand is in the answers that do (opportunities.go).
+	Opportunities []Opportunity `json:"opportunities"`
 	// The brand's pages that searches returned and no answer cited.
 	Uncited  []Page      `json:"found_not_cited"`
 	Sites    []SiteUse   `json:"sites"`
@@ -372,6 +375,7 @@ func BuildWith(brand config.Brand, results []run.Result, opt Options) Summary {
 	pageHost := map[string]string{}
 	hosts := map[string]*HostUse{}
 	hostCiters := map[string][]int{} // host -> the recs of answers citing it
+	byCell := cells{}                // class, and class and page type -> the answers citing it
 	classes := map[string]*ClassUse{}
 	for _, c := range ClassOrder {
 		classes[c] = &ClassUse{Class: c}
@@ -587,6 +591,7 @@ func BuildWith(brand config.Brand, results []run.Result, opt Options) Summary {
 			if !cited[p.URL] {
 				cited[p.URL] = true
 				p.Cited++
+				byCell.add(p, pageHost[p.URL], recIdx, r.PromptIdx)
 			}
 			if hk := pageHost[p.URL]; !citedHost[hk] {
 				citedHost[hk] = true
@@ -812,6 +817,7 @@ func BuildWith(brand config.Brand, results []run.Result, opt Options) Summary {
 		s.Outreach = append(s.Outreach, o)
 	}
 	sort.SliceStable(s.Outreach, func(i, j int) bool { return s.Outreach[i].Score > s.Outreach[j].Score })
+	s.Opportunities = byCell.opportunities(recs, competitor, voice, citations)
 
 	var idxs []int
 	for i := range promptText {

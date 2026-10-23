@@ -617,8 +617,10 @@ func runDigest(d *RunData) any {
 		// prompts: per host, the prompts a neutral index ranks it for against the prompts the
 		// assistants found it for, and the reading (content, query, both).
 		Neutral []app.BaselineHost `json:"neutral_retrieval,omitempty"`
+
+		Opportunities []report.Opportunity `json:"opportunities"`
 	}{&r, sum.Overall, sum.Slices, sum.Unbranded, sum.BrandedPrompts, sum.BrandRank(), voice, head(sum.HeadToHead, 10), head(sum.Objections, 10),
-		sum.Classes, sum.PageTypes, head(sum.Hosts, 10), head(sum.Outreach, 10), prospects, uncited, pages, fixes, d.Insights, d.Opinion, second, prompts, neutral}
+		sum.Classes, sum.PageTypes, head(sum.Hosts, 10), head(sum.Outreach, 10), prospects, uncited, pages, fixes, d.Insights, d.Opinion, second, prompts, neutral, head(sum.Opportunities, 10)}
 }
 
 // auditDigest is audit_sites' answer: each site in a line or two, and the findings without info
