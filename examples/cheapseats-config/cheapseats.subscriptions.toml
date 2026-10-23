@@ -183,7 +183,7 @@ max_samples = 1
 # its [pricing] entry below.
 # [typesafe]
 # model = "jev-1.14.0"
-# min_confidence = 0.8
+# min_confidence = 0.7   # Jev's probability that two names are one product
 #
 # [exa]
 # results = 3

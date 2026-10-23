@@ -53,23 +53,34 @@ unconfigured names, only the less established one is asked about, the one in few
 at a tie, the shorter, so "Scrunch" is asked about "Scrunch AI" and not the reverse. Up to eight
 names go in one request; a run's whole pass is usually one call and a fraction of a cent.
 
-Decisions land in `name_decisions`. `App.Aliases` reads them back, with the competitors' configured
-aliases, at `typesafe.min_confidence` (default 0.8), and `report.Options.Aliases` folds names and
-top picks on the board. A variant decided `none` is a product of its own and isn't asked again.
+Decisions land in `name_decisions`, each with Jev's probability for the option it chose: for a
+match, the probability that the two names are one product. `App.Aliases` reads them back, with the
+competitors' configured aliases, at `typesafe.min_confidence` (default 0.7), and
+`report.Options.Aliases` folds names and top picks on the board. A variant decided `none` is a
+product of its own and isn't asked again. `cheapseats fold <run-id>` runs the pass on a finished
+run and prints the matches with their probabilities.
+
+Gate on the chosen option's probability, not Jev's `confidence`: that statistic measures how
+concentrated the whole distribution is and shrinks with every extra candidate, so on a two-option
+question a 0.77 probability reads as 0.54. The first production pass gated on confidence and
+folded nothing.
 
 ```toml
 [typesafe]
 model = "jev-1.14.0"     # pin a version: aliases like jev-latest move
 # fold_names = true
-# min_confidence = 0.8
+# min_confidence = 0.7   # Jev's probability that two names are one product
 
 [pricing."jev-1.14.0"]
 input = 0.042
 ```
 
-What a first live call taught us: given only two bare names, Jev said 0.47 for "Scrunch" and
-"Scrunch AI", a shrug. With the category and a sentence of context per name it has something to
-judge. Give it state, not just strings.
+What the first live calls taught us: given only two bare names, Jev said 0.47 for "Scrunch" and
+"Scrunch AI", a shrug. With the category and a sentence of context per name it said 0.77. Give
+it state, not just strings; and expect a probability in the 0.7s, not a 0.95, for a match a person
+would call obvious. The first production pass decided 28 names in four requests for half a cent:
+25 were products of their own, three matched (Scrunch to Scrunch AI, Microsoft Copilot to Copilot,
+AI Mode to Google AI Mode).
 
 ### The coverage check (Exa)
 
@@ -79,7 +90,8 @@ configured, every prompt is searched once on Exa restricted to the brand's sites
 (`[[brand.sites]]` and `brand.domains`, hosts or host/path prefixes), and the pages found are
 stored per run and prompt in `coverage`. The run page shows them under each prompt with a status
 against that prompt's answers: `cited`, `retrieved` (a search returned it, no answer cited it) or
-`unseen`. `GET /api/runs/{id}` carries them as `coverage`, and MCP `get_run` as `own_pages` per
+`unseen`. `cheapseats coverage <run-id>` runs the pass on a finished run, searching only prompts
+not yet checked. `GET /api/runs/{id}` carries them as `coverage`, and MCP `get_run` as `own_pages` per
 prompt. Fifteen prompts is fifteen searches, about six cents.
 
 ```toml
@@ -91,8 +103,9 @@ prompt. Fifteen prompts is fifteen searches, about six cents.
 search_per_1k = 4
 ```
 
-The first live search for cheapseats.dev returned nothing: a neutral index hadn't picked up the
-new domain at all. That is the check doing its job.
+The first production pass searched all 11 prompts of the head-to-heads set for 4.4 cents and found
+no cheapseats.dev page for any of them: a neutral index hadn't picked up the new domain at all.
+That is the check doing its job, and the thing to fix is indexing, not writing.
 
 ## Next, in order
 

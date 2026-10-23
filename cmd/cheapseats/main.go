@@ -48,6 +48,8 @@ const usage = `cheapseats: how AI assistants answer your buyers' questions.
   cheapseats run <set-id>                   run one set and wait for it (costs money)
   cheapseats report <run-id> [-json]        rates, share of voice and top pages for a run
   cheapseats fixes <run-id> [-rebuild]      the run's fix list as markdown
+  cheapseats fold <run-id>                  put the run's new product names to Jev ([typesafe])
+  cheapseats coverage <run-id>              search the brand's sites for each prompt ([exa])
   cheapseats themes <run-id> [-rebuild]     what the run's answers praise and object to, grouped
   cheapseats regrade <set-id|run-id> [-since 28d] [-dry-run=false]
                                          grade stored answers again with today's grader, brand
@@ -322,6 +324,37 @@ func dispatch(ctx context.Context, cmd string, args []string) error {
 			return err
 		}
 		return printReport(a, fs.Arg(0), *js)
+	case "fold", "coverage":
+		if len(args) != 1 {
+			return fmt.Errorf("usage: cheapseats %s <run-id>", cmd)
+		}
+		a, err := open()
+		if err != nil {
+			return err
+		}
+		// Both clients budget through a.Runs.Budget themselves.
+		if cmd == "fold" {
+			if a.Cfg.TypeSafe == nil {
+				return errors.New("no [typesafe] in the config")
+			}
+			n, err := a.FoldNames(ctx, args[0])
+			fmt.Printf("asked Jev about %d new names\n", n)
+			if err != nil {
+				return err
+			}
+			for _, d := range mustDecisions(a, ctx) {
+				if d.Candidate != "" {
+					fmt.Printf("  %-32s -> %-24s %.2f%s\n", d.Variant, d.Display, d.Confidence, map[bool]string{true: "", false: "  (below the threshold)"}[d.Folds])
+				}
+			}
+			return nil
+		}
+		if a.Cfg.Exa == nil {
+			return errors.New("no [exa] in the config")
+		}
+		n, err := a.CheckCoverage(ctx, args[0])
+		fmt.Printf("searched %d prompts\n", n)
+		return err
 	case "fixes":
 		fs := flag.NewFlagSet("fixes", flag.ExitOnError)
 		rebuild := fs.Bool("rebuild", false, "rebuild the list first (one Opus call)")
@@ -723,4 +756,12 @@ func loadDotEnv(path string) {
 			os.Setenv(k, v)
 		}
 	}
+}
+
+func mustDecisions(a *app.App, ctx context.Context) []app.NameDecision {
+	d, err := a.NameDecisions(ctx)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "cheapseats:", err)
+	}
+	return d
 }

@@ -182,8 +182,8 @@ type TypeSafe struct {
 	// After each run, decide whether product names the grader wrote differently are one product,
 	// and fold them onto one name on the share-of-voice board. Unset means on.
 	FoldNames *bool `toml:"fold_names"`
-	// A fold needs at least this confidence from Jev (0 to 1, default 0.8). Changing it re-reads
-	// the stored decisions; nothing is asked again.
+	// A fold needs Jev's probability that the two names are one product to be at least this (0 to
+	// 1, default 0.7). Changing it re-reads the stored decisions; nothing is asked again.
 	MinConfidence float64 `toml:"min_confidence"`
 }
 
@@ -218,12 +218,12 @@ func (c *Config) TypeSafeModel() string {
 	return "jev-latest"
 }
 
-// FoldConfidence is the confidence a Jev name decision needs to fold two names.
+// FoldConfidence is the probability a Jev name decision needs to fold two names.
 func (c *Config) FoldConfidence() float64 {
 	if c.TypeSafe != nil && c.TypeSafe.MinConfidence > 0 {
 		return c.TypeSafe.MinConfidence
 	}
-	return 0.8
+	return 0.7
 }
 
 // CoverageResults is how many of the brand's pages the coverage check keeps per prompt.
