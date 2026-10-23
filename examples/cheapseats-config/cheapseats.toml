@@ -8,6 +8,9 @@ name = "Cheap Seats"
 aliases = ["CheapSeats", "cheapseats.dev", "cheapseatsdev/cheapseats"]
 # What the product is, so the grader can tell it apart from other things called "cheapseats".
 about = "Cheap Seats is an open-source, self-hosted tool that asks AI assistants a brand's buyer questions, grades whether they recommend the brand, and builds a ranked list of fixes."
+# The market, as a noun phrase: what the prompts are about, where `about` says what this one
+# product is. The prompt review's off-target check is asked against it ([typesafe]).
+category = "AI search visibility tools, which measure whether AI assistants recommend a brand"
 # Who asks the questions. The answerers are told they're answering this person's question.
 # Changing `about` or `audience` changes how answers are asked or graded, so every trend restarts.
 audience = "a product marketing lead"

@@ -201,6 +201,9 @@ func dispatch(ctx context.Context, cmd string, args []string) error {
 			if m := config.Missing(config.TypeSafeProvider); m != "" {
 				fmt.Printf("note: [typesafe] needs %s (or %s) at runtime; without it, these passes are skipped: %s\n", config.KeyVar(config.TypeSafeProvider), config.TypeSafeBaseURLVar, strings.Join(app.Configured(cfg, config.TypeSafeProvider), ", "))
 			}
+			if cfg.PromptReviewOn() && cfg.Brand.Category == "" {
+				fmt.Printf("note: [brand] category is empty, so the prompt review's off-target question is not asked; set it to the market in a noun phrase (\"AI search visibility tools\")\n")
+			}
 			if p, ok := cfg.Pricing[cfg.TypeSafeModel()]; !ok || p.Input <= 0 {
 				errs = append(errs, fmt.Errorf("[typesafe] model %q has no [pricing.%q] entry with a positive input price", cfg.TypeSafeModel(), cfg.TypeSafeModel()))
 			}

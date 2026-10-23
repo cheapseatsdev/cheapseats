@@ -137,7 +137,7 @@ func (a *App) DiscoverCompetitors(ctx context.Context) (Discovered, error) {
 	}
 	rows.Close()
 	askJev := a.Cfg.TypeSafe != nil && config.Missing(config.TypeSafeProvider) == ""
-	category := firstSentence(a.Cfg.Brand.About)
+	category := categoryOf(a.Cfg.Brand)
 	now := store.Now()
 	for _, h := range hosts {
 		f := byHost[h]

@@ -128,7 +128,7 @@ A config repo holds `cheapseats.toml` and `prompt-sets/*.toml`.
 [`examples/cheapseats-config`](examples/cheapseats-config) is a complete one, used when `CHEAPSEATS_CONFIG`
 is unset.
 
-- `[brand]`: name, aliases, `about`, `audience`, public `facts`, and `[[brand.sites]]` (url, kind, owner)
+- `[brand]`: name, aliases, `about`, `category`, `audience`, public `facts`, and `[[brand.sites]]` (url, kind, owner)
 - `[[answerers]]`: who answers, by provider:
 
   | provider | through | billed |

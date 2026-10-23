@@ -404,7 +404,11 @@ aliases = [`, Clean(s.Name), Clean(s.URL), q(s.Name))
 		b.WriteString("# TODO: check this, from the home page's description, is accurate and plain.\n")
 	}
 	fmt.Fprintf(&b, "about = %s\n", q(s.About))
-	b.WriteString(`# Who asks the questions, as a noun phrase with its article. The answerers are told they're
+	b.WriteString(`# The market, as a noun phrase: what the prompts are about, where about says what this one
+# product is. The prompt review's off-target check is asked against it ([typesafe]).
+# TODO: the category: e.g. AI search visibility tools
+# category = ""
+# Who asks the questions, as a noun phrase with its article. The answerers are told they're
 # answering this person's question. Changing about or audience restarts every trend, so settle them
 # before the first run.
 # TODO: who asks: e.g. a product marketing lead

@@ -80,11 +80,13 @@ func (f *fakeJevJudge) total() int {
 	return len(f.requests)
 }
 
-// judgeApp is providersApp with a five-prompt set: two near-duplicates sharing words, one off
-// target, one phrased as a how-does with no intent, one naming cheapseats.dev.
+// judgeApp is providersApp with a brand category (so the off-target question is asked) and a
+// five-prompt set: two near-duplicates sharing words, one off target, one phrased as a how-does
+// with no intent, one naming cheapseats.dev.
 func judgeApp(t *testing.T) (*App, sets.Set, *fakeJevJudge) {
 	t.Helper()
 	a, _ := providersApp(t)
+	a.Cfg.Brand.Category = "AI visibility trackers"
 	dir := filepath.Join(a.Cfg.Dir, "prompt-sets")
 	os.WriteFile(filepath.Join(dir, "five.toml"), []byte(`id = "five"
 name = "Five"
@@ -144,17 +146,21 @@ func TestJudgePromptsAsksEachQuestionOnceAndFlagsAtTheThreshold(t *testing.T) {
 			q := q.(map[string]any)
 			switch kind {
 			case JudgeDuplicate:
-				if !strings.HasPrefix(state["category"].(string), "An AI visibility tracker.") || state["a"] == "" || state["b"] == "" || q["type"] != "noul" {
+				if state["category"] != "AI visibility trackers" || state["a"] == "" || state["b"] == "" || q["type"] != "noul" {
 					t.Errorf("duplicate state: %v", state)
 				}
 			case JudgeOffTarget:
-				if state["audience"] != "a software developer" || state["category"] == "" || q["type"] != "noul" {
+				if state["audience"] != "a software developer" || state["category"] != "AI visibility trackers" || q["type"] != "noul" {
 					t.Errorf("off_target state: %v", state)
 				}
 			case JudgeIntent:
 				c := q["criteria"].(map[string]any)
-				if q["type"] != "choice" || c["selection"] == nil || c["info"] == nil {
-					t.Errorf("intent criteria: %v", q)
+				if q["type"] != "choice" || c["selection"] == nil || c["info"] == nil || state["category"] != "AI visibility trackers" {
+					t.Errorf("intent criteria: %v %v", q, state)
+				}
+				// Selection is about the answer naming a product, not the prompt's grammar.
+				if s := c["selection"].(string); !strings.Contains(s, "how do I") || !strings.Contains(s, "names a product") {
+					t.Errorf("selection criterion: %q", s)
 				}
 			case JudgeBranded:
 				b := state["brand"].(map[string]any)
@@ -180,6 +186,9 @@ func TestJudgePromptsAsksEachQuestionOnceAndFlagsAtTheThreshold(t *testing.T) {
 		t.Errorf("judged %d pending %d count %d first %+v", j.Judged, j.Pending, j.Count(), j.Duplicates[0])
 	}
 	if l := j.Duplicates[0].Line; l != "f1 and f2 may ask the same thing" {
+		t.Errorf("line %q", l)
+	}
+	if l := j.OffTarget[0].Line; l != "f3 may ask about something other than AI visibility trackers" {
 		t.Errorf("line %q", l)
 	}
 	if l := j.Branded[0].Line; !strings.Contains(l, "f5 may name the brand") {
@@ -262,9 +271,11 @@ func TestJudgeRunJudgesTheRunsSetAndIsRegistered(t *testing.T) {
 	if !ok || p.Name != "prompt-review" || p.Order != 30 || p.Provider != config.TypeSafeProvider || !p.On(a.Cfg) {
 		t.Fatalf("pass: %+v", p)
 	}
-	// Set s has two prompts sharing no meaningful word: three questions each, no pair.
+	// Set s has two prompts sharing no meaningful word, and the brand has no category: intent and
+	// branded per prompt, no pair, and no off-target question (against the description it would
+	// flag everything).
 	n, err := a.RunPass(context.Background(), p, id)
-	if err != nil || n != 6 || f.count(JudgeDuplicate) != 0 || f.count(JudgeBranded) != 2 {
+	if err != nil || n != 4 || f.count(JudgeDuplicate) != 0 || f.count(JudgeOffTarget) != 0 || f.count(JudgeBranded) != 2 {
 		t.Fatalf("pass asked %d (%v): %v", n, err, f.byKind)
 	}
 	if n, err := a.RunPass(context.Background(), p, id); err != nil || n != 0 {
@@ -272,7 +283,7 @@ func TestJudgeRunJudgesTheRunsSetAndIsRegistered(t *testing.T) {
 	}
 	// The review carries the judgments, without asking.
 	rev, err := a.Review(context.Background(), "s", 30)
-	if err != nil || rev.Jev == nil || rev.Jev.Judged != 6 || f.total() != 6 {
+	if err != nil || rev.Jev == nil || rev.Jev.Judged != 4 || f.total() != 4 {
 		t.Fatalf("review: %v jev %+v requests %d", err, rev.Jev, f.total())
 	}
 	// Without [typesafe], the review has no Jev section at all.
@@ -288,6 +299,46 @@ func TestJudgePromptsNeedsAKeyOrProxy(t *testing.T) {
 	t.Setenv(typesafe.KeyVar, "")
 	if _, err := a.JudgePrompts(context.Background(), set); err == nil || !strings.Contains(err.Error(), typesafe.KeyVar) {
 		t.Errorf("err %v", err)
+	}
+}
+
+// Setting the category afterwards asks the off-target question for every prompt and nothing
+// else; changing it re-asks only that; and the intent question, which takes the category as
+// context, is re-asked when the context it saw changes.
+func TestJudgePromptsAsksOffTargetOnlyWithACategory(t *testing.T) {
+	a, set, f := judgeApp(t)
+	ctx := context.Background()
+	a.Cfg.Brand.Category = ""
+	if j, err := a.JudgePrompts(ctx, set); err != nil || f.count(JudgeOffTarget) != 0 || j.Asked != 11 || len(j.OffTarget) != 0 {
+		t.Fatalf("without a category: asked %d (%v) %v", j.Asked, err, f.byKind)
+	}
+	a.Cfg.Brand.Category = "AI visibility trackers"
+	// off_target for five prompts, and intent again for five, since its context changed from the
+	// description to the category.
+	if j, err := a.JudgePrompts(ctx, set); err != nil || f.count(JudgeOffTarget) != 5 || f.count(JudgeIntent) != 10 || j.Asked != 10 || len(j.OffTarget) != 1 {
+		t.Fatalf("with a category: asked %d (%v) %v, off %d", j.Asked, err, f.byKind, len(j.OffTarget))
+	}
+	a.Cfg.Brand.Category = "AI search visibility tools"
+	if j, err := a.JudgePrompts(ctx, set); err != nil || f.count(JudgeOffTarget) != 10 || f.count(JudgeIntent) != 15 || f.count(JudgeBranded) != 5 || f.count(JudgeDuplicate) != 1 {
+		t.Fatalf("changing the category: asked %d (%v) %v", j.Asked, err, f.byKind)
+	}
+}
+
+// A question's key changes with its wording, so a rewrite of a question in judgeQuestions
+// re-asks it rather than reading last month's answers to a different question.
+func TestJudgeKeyHashesTheQuestionsWording(t *testing.T) {
+	q := typesafe.Question{Type: "noul", Instructions: "is it?"}
+	k := judgeKey(JudgeIntent, q, "a prompt")
+	if k != judgeKey(JudgeIntent, q, "a  prompt") {
+		t.Error("whitespace in the parts should not count")
+	}
+	if k == judgeKey(JudgeIntent, typesafe.Question{Type: "noul", Instructions: "is it really?"}, "a prompt") {
+		t.Error("reworded instructions should change the key")
+	}
+	c1 := typesafe.Question{Type: "choice", Criteria: map[string]any{"selection": "a", "info": "b"}}
+	c2 := typesafe.Question{Type: "choice", Criteria: map[string]any{"selection": "a", "info": "c"}}
+	if judgeKey(JudgeIntent, c1, "p") == judgeKey(JudgeIntent, c2, "p") {
+		t.Error("a changed criterion should change the key")
 	}
 }
 

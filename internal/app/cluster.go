@@ -156,7 +156,7 @@ func (a *App) ClusterPhrases(ctx context.Context, id string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	category := firstSentence(a.RunBrand(r).About)
+	category := categoryOf(a.RunBrand(r))
 	client := a.TypeSafe()
 	asked, cost := 0, 0.0
 	model := ""

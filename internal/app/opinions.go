@@ -112,7 +112,7 @@ func (a *App) SecondOpinions(ctx context.Context, id string) (int, error) {
 		// One answer per request, state limited to the two questions: the brand as the grader
 		// knew it, the question, the answer and, for the evidence, the sentences that name the
 		// brand.
-		state := map[string]any{"brand": brand.Name, "aliases": aliases, "about": brand.About, "category": firstSentence(brand.About), "question": x.Prompt, "answer": text}
+		state := map[string]any{"brand": brand.Name, "aliases": aliases, "about": brand.About, "category": categoryOf(brand), "question": x.Prompt, "answer": text}
 		questions := map[string]typesafe.Question{
 			"verdict": {
 				Type: "choice",

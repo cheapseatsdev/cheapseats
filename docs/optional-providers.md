@@ -471,16 +471,21 @@ has none; `intent` is set by hand and often wrong; and the branded check is a wh
 that misses "cheapseats.dev" or "cheap-seats". With `[typesafe]` configured, the prompts' wording
 itself is put to Jev, one question per request, four kinds: whether two prompts of the same intent
 that share a meaningful word would be served by one good answer (`duplicate`); whether a prompt
-asks about something other than the category from `brand.about`, with the audience in state
-(`off_target`); whether a prompt asks for a choice or an explanation (`intent`, a Choice over
-`selection` and `info` with the definitions the config uses); and, outside `head-to-heads`,
+asks about something other than `brand.category`, with the audience in state (`off_target`; not
+asked without a category, since against the product description in `brand.about` it flags every
+prompt that isn't about this one product); whether the answer that serves the buyer names a
+product in the category or names none (`intent`, a Choice over `selection` and `info`: a how-do-I
+question about a job those products do is a selection, since the useful answer points at one);
+and, outside `head-to-heads`,
 whether a prompt names the brand, a product of its maker or its domain in any spelling
 (`branded`, with the brand's name, aliases, description and sites in state).
 
 Each answer lands in `prompt_judgments` with Jev's probability, under a hash of exactly what the
-question saw: the prompt's text, or the pair's, plus the category and audience for `off_target`
-and the brand facts for `branded`. Rewording one prompt re-asks only its own questions and
-everything else costs nothing, so a `cheapseats check` that changes nothing asks nothing. Three
+question saw and how it was worded: the prompt's text, or the pair's, plus the category and
+audience for `off_target` and the brand facts for `branded`, and the question's own type,
+instructions and criteria. Rewording one prompt re-asks only its own questions, rewording a
+question here re-asks that question for every prompt, and everything else costs nothing, so a
+`cheapseats check` that changes nothing asks nothing. Three
 questions per prompt plus the plausible pairs: a 20-prompt set is about 70 requests the first
 time, a fraction of a cent, and nothing after.
 
