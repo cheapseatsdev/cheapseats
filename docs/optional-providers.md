@@ -64,8 +64,9 @@ hasn't been decided before, is put to Jev once: a Choice over the known products
 matches (shares a meaningful word, or one name contains the other), with a `none` option, given
 the category from `brand.about` and the sentence of an answer that named each product. Between two
 unconfigured names, only the less established one is asked about, the one in fewer answers or,
-at a tie, the shorter, so "Scrunch" is asked about "Scrunch AI" and not the reverse. Up to eight
-names go in one request; a run's whole pass is usually one call and a fraction of a cent.
+at a tie, the shorter, so "Scrunch" is asked about "Scrunch AI" and not the reverse. Each name is
+its own request, with only its candidates in the state; a run's pass is a few dozen calls and
+under a cent.
 
 Decisions land in `name_decisions`, each with Jev's probability for the option it chose: for a
 match, the probability that the two names are one product. `App.Aliases` reads them back, with the
@@ -94,7 +95,9 @@ What the first live calls taught us: given only two bare names, Jev said 0.47 fo
 the instruction that spacing, punctuation, a domain suffix, a company prefix or an "AI" suffix
 don't make a different product, it said 0.88 for "Otterly AI" and "Otterly.AI", 0.85 for
 "Microsoft Copilot" and "Copilot", 0.78 for "AI Mode" and "Google AI Mode", where the vaguer
-wording had given 0.53, 0.67 and 0.58. Give it state, and say what counts; it reads literally. The first production pass decided 28 names in four requests for half a cent:
+wording had given 0.53, 0.67 and 0.58. Give it state, and say what counts; it reads literally. And keep each request's state to the one
+question: eight names batched into one request scored the same pairs 0.15 to 0.3 lower than one
+name per request (Otterly AI: 0.59 batched, 0.88 alone). The first production pass decided 28 names in four requests for half a cent:
 25 were products of their own, three matched (Scrunch to Scrunch AI, Microsoft Copilot to Copilot,
 AI Mode to Google AI Mode).
 

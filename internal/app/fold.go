@@ -245,7 +245,11 @@ func (a *App) FoldNames(ctx context.Context, id string) (int, error) {
 
 	client := a.TypeSafe()
 	asked := 0
-	const batch = 8
+	// One name per request. Jev's accuracy falls as the state fills with detail unrelated to the
+	// question, and in production eight names in one request scored the same pairs 0.15 to 0.3
+	// lower than one at a time (Otterly AI vs Otterly.AI: 0.59 against 0.88). A request is a
+	// fraction of a cent, so the smaller state is worth it.
+	const batch = 1
 	for i := 0; i < len(asks); i += batch {
 		part := asks[i:min(i+batch, len(asks))]
 		state := map[string]any{"category": firstSentence(brand.About), "names": []any{}}
