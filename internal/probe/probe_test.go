@@ -33,7 +33,7 @@ func TestProbeReturnsTheToolResultVerbatim(t *testing.T) {
 		Answerers: []config.Answerer{{ID: "gpt", Provider: "openai", Model: "g"}, {ID: "claude", Provider: "anthropic", Model: "m"}},
 		Pricing:   map[string]config.Pricing{"m": {Input: 1, Output: 1, SearchPer1K: 10}},
 	}
-	res, err := Run(context.Background(), cfg, Input{Query: " sandbox claude code ", BlockedDomains: []string{"example.com"}})
+	res, err := Run(context.Background(), Deps{Cfg: cfg}, Input{Query: " sandbox claude code ", BlockedDomains: []string{"example.com"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +46,7 @@ func TestProbeReturnsTheToolResultVerbatim(t *testing.T) {
 	if res.CostUSD <= 0 {
 		t.Fatal("probe cost not priced")
 	}
-	if _, err := Run(context.Background(), cfg, Input{Query: "q", AllowedDomains: []string{"a"}, BlockedDomains: []string{"b"}}); err == nil {
+	if _, err := Run(context.Background(), Deps{Cfg: cfg}, Input{Query: "q", AllowedDomains: []string{"a"}, BlockedDomains: []string{"b"}}); err == nil {
 		t.Fatal("allowed and blocked together accepted")
 	}
 }

@@ -46,7 +46,7 @@ func TestExaEngineReturnsItsLinksInOrderWithTheDomains(t *testing.T) {
 		{"title": "C", "url": "https://c.example/"},
 	})
 	cfg := exaConfig()
-	res, err := Run(context.Background(), cfg, Input{Query: " sandbox claude code ", Engine: "exa", AllowedDomains: []string{"docs.cheapseats.example", "b.dev"}, Exa: client})
+	res, err := Run(context.Background(), Deps{cfg, client}, Input{Query: " sandbox claude code ", Engine: "exa", AllowedDomains: []string{"docs.cheapseats.example", "b.dev"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +84,7 @@ func TestExaEngineReturnsItsLinksInOrderWithTheDomains(t *testing.T) {
 	}
 
 	// Blocked domains go out as excludeDomains.
-	if _, err := Run(context.Background(), cfg, Input{Query: "q", Engine: "exa", BlockedDomains: []string{"reddit.com"}, Exa: client}); err != nil {
+	if _, err := Run(context.Background(), Deps{cfg, client}, Input{Query: "q", Engine: "exa", BlockedDomains: []string{"reddit.com"}}); err != nil {
 		t.Fatal(err)
 	}
 	req = (*got)[1]
@@ -100,11 +100,11 @@ func TestExaEngineNeedsTheExaTable(t *testing.T) {
 	client, got := fakeExa(t, nil)
 	cfg := exaConfig()
 	cfg.Exa = nil
-	_, err := Run(context.Background(), cfg, Input{Query: "q", Engine: "exa", Exa: client})
+	_, err := Run(context.Background(), Deps{cfg, client}, Input{Query: "q", Engine: "exa"})
 	if err == nil || err.Error() != "no [exa] in the config" {
 		t.Fatalf("err %v", err)
 	}
-	if _, err := Probe(context.Background(), cfg, Input{Query: "q", Engine: "both", Exa: client}); err == nil || !strings.Contains(err.Error(), "no [exa] in the config") {
+	if _, err := Probe(context.Background(), Deps{cfg, client}, Input{Query: "q", Engine: "both"}); err == nil || !strings.Contains(err.Error(), "no [exa] in the config") {
 		t.Fatalf("both without [exa]: %v", err)
 	}
 	if len(*got) != 0 {
@@ -112,13 +112,13 @@ func TestExaEngineNeedsTheExaTable(t *testing.T) {
 	}
 	// A client is the caller's job; a missing one is an error, not a nil dereference.
 	cfg.Exa = &config.Exa{}
-	if _, err := Run(context.Background(), cfg, Input{Query: "q", Engine: "exa"}); err == nil {
+	if _, err := Run(context.Background(), Deps{Cfg: cfg}, Input{Query: "q", Engine: "exa"}); err == nil {
 		t.Fatal("no client accepted")
 	}
-	if _, err := Run(context.Background(), cfg, Input{Query: "q", Engine: "bing"}); err == nil || !strings.Contains(err.Error(), `unknown engine "bing"`) {
+	if _, err := Run(context.Background(), Deps{cfg, client}, Input{Query: "q", Engine: "bing"}); err == nil || !strings.Contains(err.Error(), `unknown engine "bing"`) {
 		t.Fatalf("unknown engine: %v", err)
 	}
-	if _, err := Run(context.Background(), cfg, Input{Query: "q", Engine: "both"}); err == nil {
+	if _, err := Run(context.Background(), Deps{cfg, client}, Input{Query: "q", Engine: "both"}); err == nil {
 		t.Fatal("Run accepted both; it returns one result")
 	}
 }
@@ -170,7 +170,7 @@ func TestBothRunsTheTwoEnginesAndCompares(t *testing.T) {
 		{"title": "C", "url": "https://c.example/exa-only"},
 	})
 	cfg := exaConfig()
-	out, err := Probe(context.Background(), cfg, Input{Query: "best seats", Engine: "both", AllowedDomains: []string{"example"}, Exa: client})
+	out, err := Probe(context.Background(), Deps{cfg, client}, Input{Query: "best seats", Engine: "both", AllowedDomains: []string{"example"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -195,7 +195,7 @@ func TestBothRunsTheTwoEnginesAndCompares(t *testing.T) {
 		t.Errorf("exa request %v", (*got)[0])
 	}
 	// The default engine's result is a plain Result, as before.
-	if res, err := Probe(context.Background(), cfg, Input{Query: "best seats", Exa: client}); err != nil {
+	if res, err := Probe(context.Background(), Deps{cfg, client}, Input{Query: "best seats"}); err != nil {
 		t.Fatal(err)
 	} else if r, ok := res.(Result); !ok || r.Model != "m-1" {
 		t.Fatalf("%T %+v", res, res)
@@ -206,7 +206,7 @@ func TestBothRunsTheTwoEnginesAndCompares(t *testing.T) {
 	// Half a comparison is no comparison: an engine's failure is the caller's error.
 	down := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { http.Error(w, "bad key", 401) }))
 	defer down.Close()
-	if _, err := Probe(context.Background(), cfg, Input{Query: "best seats", Engine: "both", Exa: &exa.Client{URL: down.URL}}); err == nil || !strings.Contains(err.Error(), "401") {
+	if _, err := Probe(context.Background(), Deps{cfg, &exa.Client{URL: down.URL}}, Input{Query: "best seats", Engine: "both"}); err == nil || !strings.Contains(err.Error(), "401") {
 		t.Fatalf("Exa refused and both: %v", err)
 	}
 }

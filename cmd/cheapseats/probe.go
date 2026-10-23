@@ -31,8 +31,7 @@ func probeCmd(ctx context.Context, args []string) error {
 		return err
 	}
 	ctx = llm.WithOperation(llm.WithAccounting(ctx, a.Runs.Budget), "search-probe")
-	in.Exa = a.Exa()
-	out, err := probe.Probe(ctx, a.Cfg, in)
+	out, err := probe.Probe(ctx, probe.Deps{Cfg: a.Cfg, Exa: a.Exa()}, in)
 	if err != nil {
 		return err
 	}
