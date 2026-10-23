@@ -256,3 +256,24 @@ func TestOptionalProviders(t *testing.T) {
 		t.Error("key variables")
 	}
 }
+
+func TestCheckFactsSwitch(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "cheapseats.toml")
+	load := func(body string) (*Config, error) {
+		t.Helper()
+		os.WriteFile(p, []byte("[brand]\nname = \"X\"\n"+body), 0o644)
+		return Load(p)
+	}
+	if c, err := load(""); err != nil || c.CheckFactsOn() {
+		t.Fatalf("no facts, no check: %+v %v", c, err)
+	}
+	if c, err := load("facts = [\"X is free.\"]\n"); err != nil || !c.CheckFactsOn() {
+		t.Fatalf("facts listed: on by default: %+v %v", c, err)
+	}
+	if c, err := load("facts = [\"X is free.\"]\n[grader]\nmodel = \"m\"\ncheck_facts = false\n"); err != nil || c.CheckFactsOn() {
+		t.Fatalf("check_facts = false: %+v %v", c, err)
+	}
+	if _, err := load("[analyst]\ncheck_facts = true\n"); err == nil || !strings.Contains(err.Error(), "belongs in [grader]") {
+		t.Errorf("check_facts under [analyst]: %v", err)
+	}
+}

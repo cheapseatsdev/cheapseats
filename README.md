@@ -33,6 +33,9 @@ paid product. Upgrading from Popcorn needs no changes: see
 - Sums up what the answers say about you: **net sentiment** (the share of answers naming you that are
   positive, minus the share negative), the praise and objections heard most, and a few named
   **themes** with the competitor each one helps and a quote, from one cheap grader call a run.
+- Flags what the answers **got wrong about you**: each answer naming you is checked against the
+  `facts` you list, and the claims that contradict one are shown by fact, with the answer's own
+  words, and handed to the fix list as evidence ([docs](docs/misstatements.md)). No grade changes.
 - Ends each run with **Fix these first**: the exact page to create or change, what it must say, the
   prompts it should flip, effort, priority, the site it belongs on and its owner, plus a prompt to
   hand Claude Code.
@@ -139,7 +142,9 @@ is unset.
   adds it in `CHEAPSEATS_ANTHROPIC_BASE_URL`), or with `provider = "claude-code"` through the local
   `claude` CLI on your subscription. With subscription answerers too, a laptop needs no API key.
   The theme pass is one extra grader call per run (about $0.003 on Haiku, nothing on `claude-code`);
-  `[grader] themes = false` turns it off.
+  `[grader] themes = false` turns it off. With `[brand] facts` listed, each answer naming you is also
+  checked against them, one grader call per such answer ([fact check](docs/misstatements.md));
+  `[grader] check_facts = false` turns that off.
 - `[[competitors]]`: names (and aliases) the grader folds onto one, shared by every set, and their
   `domains`, so their pages count as theirs
 - `[sources]`: hosts to move between the kinds of source the run page sorts pages into
@@ -191,6 +196,7 @@ cheapseats classify <run-id>              type pages and class hosts the rules c
 cheapseats cluster <run-id>               put the run's new objection and praise wordings to Jev ([typesafe])
 cheapseats verdicts <run-id>              Jev's second opinion on each grade: the agreement rate and
                                        the disagreements ([typesafe])
+cheapseats misstatements <run-id>        check the answers naming you against [brand] facts
 cheapseats suggest-prompts <set-id> [-n 10]  new buyer questions as TOML to paste (one analyst call)
 cheapseats regrade <set-id|run-id> [-since 28d] [-dry-run=false]
                                        grade stored answers again with today's grader, brand and

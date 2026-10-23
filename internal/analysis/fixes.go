@@ -260,6 +260,7 @@ Don't propose generic marketing, brand campaigns, or anything you can't point at
 %[7]s`, brand, domain, cfg.Brand.About, facts, len(set.Prompts), set.Name, body, sites, triedText(brand, tried))
 	prompt += siteFindingsText(ctx, brand)
 	prompt += opportunitiesText(ctx, brand)
+	prompt += misstatementsText(ctx, brand)
 
 	var a Analysis
 	cost := 0.0
@@ -550,5 +551,28 @@ func siteFindingsText(ctx context.Context, brand string) string {
 		fmt.Fprintf(&b, "- %s\n", x)
 	}
 	b.WriteString("Use them as evidence where one explains why a page of ours wasn't surfaced or cited for a prompt (blocked crawlers, a page empty without JavaScript, noindex), and name the check in the claim. Don't propose a fix for a finding no prompt points at.\n")
+	return b.String()
+}
+
+type misstatementsKey struct{}
+
+// WithMisstatements gives Build the run's fact check (docs/misstatements.md): one line per public
+// fact the answers contradicted, with the prompts and a quote, as more evidence beside the answers.
+func WithMisstatements(ctx context.Context, lines []string) context.Context {
+	return context.WithValue(ctx, misstatementsKey{}, lines)
+}
+
+// misstatementsText lists the facts answers got wrong for the analyst, or "" when none did.
+func misstatementsText(ctx context.Context, brand string) string {
+	f, _ := ctx.Value(misstatementsKey{}).([]string)
+	if len(f) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "\nAnswers that named %s contradicted these public facts (the fact numbers are the public facts' above):\n", brand)
+	for _, x := range f {
+		fmt.Fprintf(&b, "- %s\n", x)
+	}
+	fmt.Fprintf(&b, "A fact the assistants get wrong is a page that doesn't state it plainly, or states it where they don't look. Use these as evidence for a positioning or fix-page fix on the page that should carry the fact, quote the fact in the claim, and make done_when \"no answer to prompts N, M contradicts fact X\". Don't propose a fix for a fact no answer got wrong.\n")
 	return b.String()
 }

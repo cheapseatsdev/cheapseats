@@ -33,7 +33,8 @@ cheapseats regrade <set-id|run-id> -since 90d -dry-run=false
   Re-grading only some of a set's runs moves the trend's break to before the oldest re-graded run.
 - **Not rebuilt**: the run's fix list and themes stay as they were; rebuild them with
   `cheapseats fixes <run-id> -rebuild` and `cheapseats themes <run-id> -rebuild` if you want them to
-  follow the new grades.
+  follow the new grades. The [fact check](misstatements.md) isn't rerun either (the answers
+  didn't change); `cheapseats misstatements <run-id>` reruns it.
 
 In the web UI, a set's page links to **Re-grade stored answers**, which shows the dry run (runs,
 answers, method change, estimated cost) and a button to start it in the background. Over MCP,
