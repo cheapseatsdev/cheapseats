@@ -100,3 +100,15 @@ func TestAskGivesUpOnAClientError(t *testing.T) {
 		t.Fatalf("err %v calls %d", err, calls)
 	}
 }
+
+func TestChosenIsTheChosenOptionsProbability(t *testing.T) {
+	if p := Chosen(Answer{Type: "noul", Noul: 0.8}); p != 0.8 {
+		t.Errorf("noul: %f", p)
+	}
+	if p := Chosen(Answer{Type: "choice", Choice: "c1", Confidence: 0.54, Probabilities: map[string]float64{"c0": 0.23, "c1": 0.77}}); p != 0.77 {
+		t.Errorf("choice: the chosen option's probability, not the confidence statistic: %f", p)
+	}
+	if p := Chosen(Answer{Type: "choice", Choice: "c1", Confidence: 0.54}); p != 0.54 {
+		t.Errorf("with no probabilities, the confidence: %f", p)
+	}
+}

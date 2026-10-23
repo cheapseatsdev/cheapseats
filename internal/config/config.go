@@ -179,11 +179,26 @@ type Owners struct {
 type TypeSafe struct {
 	// The model, a versioned id such as jev-1.14.0 (default jev-latest, an alias that moves).
 	Model string `toml:"model"`
-	// After each run, decide whether product names the grader wrote differently are one product,
-	// and fold them onto one name on the share-of-voice board. Unset means on.
+	// Each pass is on unless set false. Every pass runs after a run (or on demand from the CLI),
+	// stores its decisions, and never runs from a page (docs/optional-providers.md).
+	//
+	// Decide whether product names the grader wrote differently are one product, and fold them
+	// onto one name on the share-of-voice board.
 	FoldNames *bool `toml:"fold_names"`
-	// A fold needs Jev's probability that the two names are one product to be at least this (0 to
-	// 1, default 0.7). Changing it re-reads the stored decisions; nothing is asked again.
+	// Decide whether a new objection or praise phrase says the same thing as one already counted,
+	// so wordings of one complaint count as one.
+	ClusterPhrases *bool `toml:"cluster_phrases"`
+	// A second opinion on each grade's verdict and evidence sentence, stored beside the grader's.
+	SecondOpinions *bool `toml:"second_opinions"`
+	// Judge the prompts themselves: duplicates, off-target, intent and branded wording, as
+	// suggestions in cheapseats check and the prompt review.
+	PromptReview *bool `toml:"prompt_review"`
+	// Decide whether fixes from different sets ask for the same page, so quick wins show one card.
+	FixMatches *bool `toml:"fix_matches"`
+	// Type pages and class hosts the rule lists would call "other" or "editorial".
+	PageTypes *bool `toml:"page_types"`
+	// A decision takes effect when Jev's probability for the option it chose is at least this (0
+	// to 1, default 0.7). Changing it re-reads the stored decisions; nothing is asked again.
 	MinConfidence float64 `toml:"min_confidence"`
 }
 
@@ -196,18 +211,71 @@ type Exa struct {
 	Coverage *bool `toml:"coverage"`
 	// Results to keep per prompt (1 to 10, default 3).
 	Results int `toml:"results"`
+	// After each run, pages similar to the listicles and comparisons the answers leaned on, as
+	// outreach prospects. Unset means on.
+	Prospects *bool `toml:"prospects"`
+	// How many cited pages to start from (1 to 50, default 10) and how many similar pages to
+	// keep from each (1 to 25, default 5).
+	ProspectSeeds   int `toml:"prospect_seeds"`
+	ProspectResults int `toml:"prospect_results"`
+	// After each run, each prompt as a plain web search with no domain filter, the neutral
+	// retrieval baseline. Unset means on.
+	Baseline *bool `toml:"baseline"`
+	// Results to keep per prompt (1 to 25, default 10).
+	BaselineResults int `toml:"baseline_results"`
+	// Similar pages to keep per seed when discovering competitors on demand (1 to 25, default 10).
+	DiscoverResults int `toml:"discover_results"`
+	// Read a page's text through Exa when the site audit or the citation check gets a page that
+	// is empty without JavaScript; priced under [pricing.exa-contents] page_per_1k. Unset means on.
+	ContentsFallback *bool `toml:"contents_fallback"`
 }
 
-// FoldNamesOn reports whether runs end with Jev folding product names ([typesafe] present and
-// fold_names not false).
-func (c *Config) FoldNamesOn() bool {
-	return c.TypeSafe != nil && (c.TypeSafe.FoldNames == nil || *c.TypeSafe.FoldNames)
+// on is a pass switch: unset means on.
+func on(b *bool) bool { return b == nil || *b }
+
+// The Jev passes: each is on when [typesafe] is present and its switch isn't false.
+func (c *Config) FoldNamesOn() bool      { return c.TypeSafe != nil && on(c.TypeSafe.FoldNames) }
+func (c *Config) ClusterPhrasesOn() bool { return c.TypeSafe != nil && on(c.TypeSafe.ClusterPhrases) }
+func (c *Config) SecondOpinionsOn() bool { return c.TypeSafe != nil && on(c.TypeSafe.SecondOpinions) }
+func (c *Config) PromptReviewOn() bool   { return c.TypeSafe != nil && on(c.TypeSafe.PromptReview) }
+func (c *Config) FixMatchesOn() bool     { return c.TypeSafe != nil && on(c.TypeSafe.FixMatches) }
+func (c *Config) PageTypesOn() bool      { return c.TypeSafe != nil && on(c.TypeSafe.PageTypes) }
+
+// The Exa passes: each is on when [exa] is present and its switch isn't false.
+func (c *Config) CoverageOn() bool         { return c.Exa != nil && on(c.Exa.Coverage) }
+func (c *Config) ProspectsOn() bool        { return c.Exa != nil && on(c.Exa.Prospects) }
+func (c *Config) BaselineOn() bool         { return c.Exa != nil && on(c.Exa.Baseline) }
+func (c *Config) ContentsFallbackOn() bool { return c.Exa != nil && on(c.Exa.ContentsFallback) }
+
+// MinConfidence is the probability a Jev decision needs, for the option it chose, to take effect.
+// It is read every time a decision is used, never when it is stored.
+func (c *Config) MinConfidence() float64 {
+	if c.TypeSafe != nil && c.TypeSafe.MinConfidence > 0 {
+		return c.TypeSafe.MinConfidence
+	}
+	return 0.7
 }
 
-// CoverageOn reports whether runs end with Exa's coverage check ([exa] present and coverage not
-// false).
-func (c *Config) CoverageOn() bool {
-	return c.Exa != nil && (c.Exa.Coverage == nil || *c.Exa.Coverage)
+// ProspectSeeds, ProspectResults, BaselineResults and DiscoverResults are the Exa result counts,
+// or their defaults.
+func (c *Config) ProspectSeeds() int {
+	return exaCount(c, func(x *Exa) int { return x.ProspectSeeds }, 10)
+}
+func (c *Config) ProspectResults() int {
+	return exaCount(c, func(x *Exa) int { return x.ProspectResults }, 5)
+}
+func (c *Config) BaselineResults() int {
+	return exaCount(c, func(x *Exa) int { return x.BaselineResults }, 10)
+}
+func (c *Config) DiscoverResults() int {
+	return exaCount(c, func(x *Exa) int { return x.DiscoverResults }, 10)
+}
+
+func exaCount(c *Config, get func(*Exa) int, def int) int {
+	if c.Exa != nil && get(c.Exa) > 0 {
+		return get(c.Exa)
+	}
+	return def
 }
 
 // TypeSafeModel is the configured Jev model, or the default alias.
@@ -218,13 +286,8 @@ func (c *Config) TypeSafeModel() string {
 	return "jev-latest"
 }
 
-// FoldConfidence is the probability a Jev name decision needs to fold two names.
-func (c *Config) FoldConfidence() float64 {
-	if c.TypeSafe != nil && c.TypeSafe.MinConfidence > 0 {
-		return c.TypeSafe.MinConfidence
-	}
-	return 0.7
-}
+// FoldConfidence is MinConfidence, by the name the fold pass used first.
+func (c *Config) FoldConfidence() float64 { return c.MinConfidence() }
 
 // CoverageResults is how many of the brand's pages the coverage check keeps per prompt.
 func (c *Config) CoverageResults() int {
@@ -234,13 +297,14 @@ func (c *Config) CoverageResults() int {
 	return 3
 }
 
-// Pricing is USD per million tokens, and per 1,000 searches.
+// Pricing is USD per million tokens, per 1,000 searches, and per 1,000 pages read.
 type Pricing struct {
 	Input       float64 `toml:"input"`
 	Output      float64 `toml:"output"`
 	CacheRead   float64 `toml:"cache_read"`
 	CacheWrite  float64 `toml:"cache_write"`
 	SearchPer1K float64 `toml:"search_per_1k"`
+	PagePer1K   float64 `toml:"page_per_1k"`
 }
 
 // Usage is what one model call consumed.
@@ -250,6 +314,7 @@ type Usage struct {
 	CacheRead  int64 `json:"cache_read"`
 	CacheWrite int64 `json:"cache_write"`
 	Searches   int64 `json:"searches"`
+	Pages      int64 `json:"pages,omitempty"`
 }
 
 func (u *Usage) Add(o Usage) {
@@ -258,6 +323,7 @@ func (u *Usage) Add(o Usage) {
 	u.CacheRead += o.CacheRead
 	u.CacheWrite += o.CacheWrite
 	u.Searches += o.Searches
+	u.Pages += o.Pages
 }
 
 // Cost prices usage for a model; an unpriced model costs zero and is logged once at load.
@@ -269,7 +335,7 @@ func (c *Config) Cost(model string, u Usage) float64 {
 	m := 1e6
 	return float64(u.Input)*p.Input/m + float64(u.Output)*p.Output/m +
 		float64(u.CacheRead)*p.CacheRead/m + float64(u.CacheWrite)*p.CacheWrite/m +
-		float64(u.Searches)*p.SearchPer1K/1000
+		float64(u.Searches)*p.SearchPer1K/1000 + float64(u.Pages)*p.PagePer1K/1000
 }
 
 func Load(path string) (*Config, error) {
@@ -324,8 +390,21 @@ func Load(path string) (*Config, error) {
 	if t := c.TypeSafe; t != nil && (t.MinConfidence < 0 || t.MinConfidence > 1) {
 		return nil, fmt.Errorf("%s: typesafe.min_confidence must be between 0 and 1", path)
 	}
-	if x := c.Exa; x != nil && (x.Results < 0 || x.Results > 10) {
-		return nil, fmt.Errorf("%s: exa.results must be between 1 and 10", path)
+	if x := c.Exa; x != nil {
+		for _, r := range []struct {
+			name      string
+			v, lo, hi int
+		}{
+			{"results", x.Results, 1, 10},
+			{"prospect_seeds", x.ProspectSeeds, 1, 50},
+			{"prospect_results", x.ProspectResults, 1, 25},
+			{"baseline_results", x.BaselineResults, 1, 25},
+			{"discover_results", x.DiscoverResults, 1, 25},
+		} {
+			if r.v < 0 || r.v > r.hi {
+				return nil, fmt.Errorf("%s: exa.%s must be between %d and %d", path, r.name, r.lo, r.hi)
+			}
+		}
 	}
 	placed := map[string]string{}
 	for class, hosts := range c.Sources {
@@ -378,7 +457,7 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("invalid daily admission budget")
 	}
 	for m, p := range c.Pricing {
-		for _, v := range []float64{p.Input, p.Output, p.CacheRead, p.CacheWrite, p.SearchPer1K} {
+		for _, v := range []float64{p.Input, p.Output, p.CacheRead, p.CacheWrite, p.SearchPer1K, p.PagePer1K} {
 			if v < 0 || math.IsNaN(v) || math.IsInf(v, 0) {
 				return nil, fmt.Errorf("invalid price for %s", m)
 			}

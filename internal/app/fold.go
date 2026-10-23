@@ -22,6 +22,27 @@ import (
 // probability for the match, and Aliases reads them back for every report at today's threshold,
 // so no page ever calls Jev and switching it off leaves the board as it was.
 
+func init() {
+	RegisterPass(Pass{
+		Name: "fold-names", Command: "fold", Order: 10, Provider: config.TypeSafeProvider,
+		Usage: "put the run's new product names to Jev ([typesafe])",
+		On:    (*config.Config).FoldNamesOn,
+		Run:   (*App).FoldNames,
+		Print: func(a *App, ctx context.Context, id string, n int) {
+			fmt.Printf("asked Jev about %d new names\n", n)
+			decisions, err := a.NameDecisions(ctx)
+			if err != nil {
+				fmt.Println("cheapseats:", err)
+			}
+			for _, d := range decisions {
+				if d.Candidate != "" {
+					fmt.Printf("  %-32s -> %-24s %.2f%s\n", d.Variant, d.Display, d.Confidence, map[bool]string{true: "", false: "  (below the threshold)"}[d.Folds])
+				}
+			}
+		},
+	})
+}
+
 // aliasCache is the folding map, rebuilt after a decision is written or the process starts.
 type aliasCache struct {
 	mu    sync.Mutex

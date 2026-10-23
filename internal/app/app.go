@@ -48,21 +48,13 @@ func New(cfg *config.Config, db *store.DB) (*App, error) {
 		slog.Error("backfilling prompt ids", "err", err)
 	}
 	a.Runs.OnFinished = func(ctx context.Context, id string) {
-		// The optional providers first, so the fix list and insights see folded names and the
-		// coverage of each prompt; each is skipped, with a log line, when it isn't usable.
-		if cfg.FoldNamesOn() {
-			if _, err := a.FoldNames(ctx, id); err != nil {
-				slog.Error("fold names", "run", id, "err", err)
-			}
-		}
-		if cfg.CoverageOn() {
-			if _, err := a.CheckCoverage(ctx, id); err != nil {
-				slog.Error("coverage", "run", id, "err", err)
-			}
-		}
+		// The optional providers' passes first, so the fix list and insights see folded names and
+		// the coverage of each prompt; then the passes that read the fix list.
+		a.runPasses(ctx, id, true)
 		if err := a.BuildFixes(ctx, id); err != nil {
 			slog.Error("fix list", "run", id, "err", err)
 		}
+		a.runPasses(ctx, id, false)
 	}
 	return a, nil
 }

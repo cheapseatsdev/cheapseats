@@ -106,7 +106,9 @@ func TestUpgradeAddsProviderTables(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	for _, table := range []string{"name_decisions", "coverage"} {
+	// Schema 10 brought the first two; 11 the rest of the list.
+	for _, table := range []string{"name_decisions", "coverage", "phrase_clusters", "grade_opinions", "prompt_judgments",
+		"fix_matches", "page_judgments", "prospects", "retrieval_baseline", "competitor_suggestions", "exa_contents"} {
 		var n int
 		if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?`, table).Scan(&n); err != nil || n != 1 {
 			t.Errorf("table %s after upgrade: %d %v", table, n, err)
@@ -114,7 +116,7 @@ func TestUpgradeAddsProviderTables(t *testing.T) {
 	}
 	var v int
 	db.QueryRow(`PRAGMA user_version`).Scan(&v)
-	if v != Schema() || v != 10 {
+	if v != Schema() || v != 11 {
 		t.Errorf("schema %d", v)
 	}
 }

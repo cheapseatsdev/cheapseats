@@ -47,6 +47,21 @@ type Answer struct {
 	Probabilities map[string]float64 `json:"probabilities,omitempty"`
 }
 
+// Chosen is the probability Jev gave the option it chose: for a noul, the probability of yes;
+// for a choice or score, the chosen option's probability, or, when the response has none, its
+// confidence. Decisions are gated on this, never on Confidence, which measures how concentrated
+// the whole distribution is and shrinks with every extra option (a 0.77 on a two-option question
+// reads 0.54).
+func Chosen(a Answer) float64 {
+	if a.Type == "noul" {
+		return a.Noul
+	}
+	if p, ok := a.Probabilities[a.Choice]; ok {
+		return p
+	}
+	return a.Confidence
+}
+
 type Usage struct {
 	InputTokens  int64 `json:"input_tokens"`
 	OutputTokens int64 `json:"output_tokens"`

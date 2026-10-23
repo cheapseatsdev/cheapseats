@@ -20,6 +20,16 @@ import (
 // question (a documentation gap), or one does and the assistants never read it (a retrieval
 // gap). Report pages read the stored results and never search.
 
+func init() {
+	RegisterPass(Pass{
+		Name: "coverage", Command: "coverage", Order: 20, Provider: config.ExaProvider,
+		Usage: "search the brand's sites for each prompt ([exa])",
+		On:    (*config.Config).CoverageOn,
+		Run:   (*App).CheckCoverage,
+		Print: func(a *App, ctx context.Context, id string, n int) { fmt.Printf("searched %d prompts\n", n) },
+	})
+}
+
 // Exa is the search client, budgeted and priced through the config.
 func (a *App) Exa() *exa.Client { return &exa.Client{Budget: a.Runs.Budget, Cfg: a.Cfg} }
 

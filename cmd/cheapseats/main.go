@@ -48,8 +48,6 @@ const usage = `cheapseats: how AI assistants answer your buyers' questions.
   cheapseats run <set-id>                   run one set and wait for it (costs money)
   cheapseats report <run-id> [-json]        rates, share of voice and top pages for a run
   cheapseats fixes <run-id> [-rebuild]      the run's fix list as markdown
-  cheapseats fold <run-id>                  put the run's new product names to Jev ([typesafe])
-  cheapseats coverage <run-id>              search the brand's sites for each prompt ([exa])
   cheapseats themes <run-id> [-rebuild]     what the run's answers praise and object to, grouped
   cheapseats regrade <set-id|run-id> [-since 28d] [-dry-run=false]
                                          grade stored answers again with today's grader, brand
@@ -127,7 +125,7 @@ func open() (*app.App, error) {
 func dispatch(ctx context.Context, cmd string, args []string) error {
 	switch cmd {
 	case "help", "-h", "--help":
-		fmt.Print(usage)
+		fmt.Print(usage + "\n" + passUsage())
 		return nil
 	case "backup":
 		// A consistent copy of the live database (SQLite's VACUUM INTO), safe while serve runs.
@@ -195,7 +193,7 @@ func dispatch(ctx context.Context, cmd string, args []string) error {
 		// The optional providers: configured but not callable here is a note, like a missing key.
 		if cfg.TypeSafe != nil {
 			if m := config.Missing(config.TypeSafeProvider); m != "" {
-				fmt.Printf("note: [typesafe] needs %s (or %s) at runtime; without it, names aren't folded\n", config.KeyVar(config.TypeSafeProvider), config.TypeSafeBaseURLVar)
+				fmt.Printf("note: [typesafe] needs %s (or %s) at runtime; without it, these passes are skipped: %s\n", config.KeyVar(config.TypeSafeProvider), config.TypeSafeBaseURLVar, strings.Join(app.Configured(cfg, config.TypeSafeProvider), ", "))
 			}
 			if p, ok := cfg.Pricing[cfg.TypeSafeModel()]; !ok || p.Input <= 0 {
 				errs = append(errs, fmt.Errorf("[typesafe] model %q has no [pricing.%q] entry with a positive input price", cfg.TypeSafeModel(), cfg.TypeSafeModel()))
@@ -203,10 +201,13 @@ func dispatch(ctx context.Context, cmd string, args []string) error {
 		}
 		if cfg.Exa != nil {
 			if m := config.Missing(config.ExaProvider); m != "" {
-				fmt.Printf("note: [exa] needs %s (or %s) at runtime; without it, coverage isn't checked\n", config.KeyVar(config.ExaProvider), config.ExaBaseURLVar)
+				fmt.Printf("note: [exa] needs %s (or %s) at runtime; without it, these passes are skipped: %s\n", config.KeyVar(config.ExaProvider), config.ExaBaseURLVar, strings.Join(app.Configured(cfg, config.ExaProvider), ", "))
 			}
 			if p, ok := cfg.Pricing["exa-search"]; !ok || p.SearchPer1K <= 0 {
 				errs = append(errs, fmt.Errorf("[exa] needs a [pricing.exa-search] entry with a positive search_per_1k"))
+			}
+			if p, ok := cfg.Pricing["exa-contents"]; cfg.ContentsFallbackOn() && (!ok || p.PagePer1K <= 0) {
+				fmt.Printf("note: [exa] contents_fallback needs a [pricing.exa-contents] entry with page_per_1k; without one no page is read through Exa\n")
 			}
 		}
 		if err := errors.Join(errs...); err != nil {
@@ -324,37 +325,6 @@ func dispatch(ctx context.Context, cmd string, args []string) error {
 			return err
 		}
 		return printReport(a, fs.Arg(0), *js)
-	case "fold", "coverage":
-		if len(args) != 1 {
-			return fmt.Errorf("usage: cheapseats %s <run-id>", cmd)
-		}
-		a, err := open()
-		if err != nil {
-			return err
-		}
-		// Both clients budget through a.Runs.Budget themselves.
-		if cmd == "fold" {
-			if a.Cfg.TypeSafe == nil {
-				return errors.New("no [typesafe] in the config")
-			}
-			n, err := a.FoldNames(ctx, args[0])
-			fmt.Printf("asked Jev about %d new names\n", n)
-			if err != nil {
-				return err
-			}
-			for _, d := range mustDecisions(a, ctx) {
-				if d.Candidate != "" {
-					fmt.Printf("  %-32s -> %-24s %.2f%s\n", d.Variant, d.Display, d.Confidence, map[bool]string{true: "", false: "  (below the threshold)"}[d.Folds])
-				}
-			}
-			return nil
-		}
-		if a.Cfg.Exa == nil {
-			return errors.New("no [exa] in the config")
-		}
-		n, err := a.CheckCoverage(ctx, args[0])
-		fmt.Printf("searched %d prompts\n", n)
-		return err
 	case "fixes":
 		fs := flag.NewFlagSet("fixes", flag.ExitOnError)
 		rebuild := fs.Bool("rebuild", false, "rebuild the list first (one Opus call)")
@@ -439,7 +409,37 @@ func dispatch(ctx context.Context, cmd string, args []string) error {
 	case "crawl":
 		return crawlCmd(ctx, args)
 	}
-	return fmt.Errorf("unknown command %q\n\n%s", cmd, usage)
+	// The optional providers' passes, each on one finished run: cheapseats fold <run-id> and the
+	// rest. The clients budget through a.Runs.Budget themselves.
+	if p, ok := app.PassByCommand(cmd); ok {
+		if len(args) != 1 {
+			return fmt.Errorf("usage: cheapseats %s <run-id>", cmd)
+		}
+		a, err := open()
+		if err != nil {
+			return err
+		}
+		n, err := a.RunPass(ctx, p, args[0])
+		if p.Print != nil {
+			p.Print(a, ctx, args[0], n)
+		}
+		return err
+	}
+	return fmt.Errorf("unknown command %q\n\n%s", cmd, passUsage()+usage)
+}
+
+// passUsage is one help line per registered pass, in the usage text's layout.
+func passUsage() string {
+	var b strings.Builder
+	for _, p := range app.Passes() {
+		if p.Command != "" {
+			fmt.Fprintf(&b, "  %-41s %s\n", "cheapseats "+p.Command+" <run-id>", p.Usage)
+		}
+	}
+	if b.Len() == 0 {
+		return ""
+	}
+	return "Passes over a finished run (each also runs after every run when its provider is configured):\n\n" + b.String() + "\n"
 }
 
 // positionalLast moves a leading argument that isn't a flag to the end, so "themes <id> -rebuild"
@@ -756,12 +756,4 @@ func loadDotEnv(path string) {
 			os.Setenv(k, v)
 		}
 	}
-}
-
-func mustDecisions(a *app.App, ctx context.Context) []app.NameDecision {
-	d, err := a.NameDecisions(ctx)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "cheapseats:", err)
-	}
-	return d
 }
