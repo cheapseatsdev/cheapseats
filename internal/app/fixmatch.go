@@ -181,7 +181,7 @@ func (a *App) MatchFixes(ctx context.Context, id string) (int, error) {
 	}
 
 	client := a.TypeSafe()
-	category := firstSentence(a.Cfg.Brand.About)
+	category := categoryOf(a.Cfg.Brand)
 	cost := 0.0
 	// One pair per request, with nothing in the state but the two fixes and the category: Jev's
 	// probabilities fall as the state fills with detail unrelated to the question.

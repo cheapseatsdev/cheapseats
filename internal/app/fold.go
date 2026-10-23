@@ -158,7 +158,7 @@ func (a *App) FoldNames(ctx context.Context, id string) (int, error) {
 		knownKey[k] = true
 		known = append(known, candidate{key: k, display: strings.TrimSpace(display), context: context})
 	}
-	add(brand.Name, firstSentence(brand.About))
+	add(brand.Name, categoryOf(brand))
 	for _, c := range a.RunCompetitors(r) {
 		add(c.Name, "")
 		for _, al := range c.Aliases {
@@ -273,7 +273,7 @@ func (a *App) FoldNames(ctx context.Context, id string) (int, error) {
 	const batch = 1
 	for i := 0; i < len(asks); i += batch {
 		part := asks[i:min(i+batch, len(asks))]
-		state := map[string]any{"category": firstSentence(brand.About), "names": []any{}}
+		state := map[string]any{"category": categoryOf(brand), "names": []any{}}
 		questions := map[string]typesafe.Question{}
 		var namesState []any
 		for j, q := range part {
@@ -390,6 +390,15 @@ func sentenceWith(text, n string) string {
 		s = s[:300] + "…"
 	}
 	return s
+}
+
+// categoryOf is the category a pass puts in state: brand.category when set, else the first
+// sentence of brand.about (a product description, which is close enough for context).
+func categoryOf(b config.Brand) string {
+	if b.Category != "" {
+		return b.Category
+	}
+	return firstSentence(b.About)
 }
 
 func firstSentence(s string) string {

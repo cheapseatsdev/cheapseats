@@ -19,8 +19,11 @@ import (
 // duplicates and off-target prompts from a month of answers, so a new set has none; intent is
 // set by hand; the branded check is a whole-word match that misses "cheapseats.dev". With
 // [typesafe] configured, each prompt's wording is put to Jev once: four kinds of question, one
-// per request, each stored in prompt_judgments under a hash of what the question saw, so a
-// reworded prompt is asked its own questions again and nothing else costs anything. cheapseats
+// per request, each stored in prompt_judgments under a hash of what the question saw and how it
+// was worded, so a reworded prompt (or a reworded question) is asked again and nothing else costs
+// anything. The off-target question needs brand.category, the market in a noun phrase: asked
+// against the product description in brand.about it flags every prompt that isn't about this one
+// product, which is most of them, so without a category it isn't asked. cheapseats
 // check prints the flags as suggestions; the prompt review shows them in a read-only section;
 // after a run the pass judges the run's set, so new prompts are judged at their first run. No
 // page ever asks.
@@ -35,8 +38,8 @@ const (
 // JudgeKinds are the four questions, in the order they're asked and listed.
 var JudgeKinds = []struct{ Kind, Title, What string }{
 	{JudgeDuplicate, "Duplicates", "Two prompts of the same intent that one good answer would serve."},
-	{JudgeOffTarget, "Off target", "A prompt that asks about something other than what the brand does."},
-	{JudgeIntent, "Intent", "A prompt that reads as the other intent from the one it's set to."},
+	{JudgeOffTarget, "Off target", "A prompt that asks about something other than the brand's category (brand.category; not asked without it)."},
+	{JudgeIntent, "Intent", "A prompt that reads as the other intent from the one it's set to: the answer that serves the buyer names a product in the category (selection) or names none (info)."},
 	{JudgeBranded, "Branded", "Outside head-to-heads, a prompt that names the brand, a product of its maker or its domain, in any spelling."},
 }
 
@@ -235,7 +238,7 @@ func (a *App) judgeRows(ctx context.Context) (map[[2]string]judgeRow, error) {
 func (a *App) readJudgments(s sets.Set, qs []judgeQuestion, rows map[[2]string]judgeRow) PromptJudgments {
 	min := a.Cfg.MinConfidence()
 	j := PromptJudgments{SetID: s.ID, Duplicates: []PromptJudgment{}, OffTarget: []PromptJudgment{}, Intent: []PromptJudgment{}, Branded: []PromptJudgment{}, MinConfidence: min}
-	category := firstSentence(a.Cfg.Brand.About)
+	category := a.Cfg.Brand.Category
 	for _, q := range qs {
 		r, ok := rows[[2]string{q.kind, q.key}]
 		if !ok {
@@ -256,10 +259,7 @@ func (a *App) readJudgments(s sets.Set, qs []judgeQuestion, rows map[[2]string]j
 			f.Line = ids + " may ask the same thing"
 			f.Suggestion = "Merge them to save answers: keep one, retire the other."
 		case JudgeOffTarget:
-			f.Line = ids + " may ask about something other than what the brand does"
-			if category != "" {
-				f.Line = fmt.Sprintf("%s may ask about something other than %q", ids, strings.TrimSuffix(category, "."))
-			}
+			f.Line = fmt.Sprintf("%s may ask about something other than %s", ids, category)
 			f.Suggestion = "Add context to the prompt (the category, who is asking), or retire it."
 		case JudgeIntent:
 			// A flag only when Jev reads the prompt as the other intent from the one it's set to.
@@ -267,10 +267,10 @@ func (a *App) readJudgments(s sets.Set, qs []judgeQuestion, rows map[[2]string]j
 				continue
 			}
 			if r.choice == sets.Info {
-				f.Line = ids + ` reads as an explanation; consider intent = "info"`
+				f.Line = ids + ` reads as a question a good answer serves without naming a product; consider intent = "info"`
 				f.Suggestion = `Set intent = "info", so it's scored on being named rather than recommended.`
 			} else {
-				f.Line = ids + ` reads as a choice; consider dropping intent = "info"`
+				f.Line = ids + ` reads as a question a good answer names a product for; consider dropping intent = "info"`
 				f.Suggestion = `Drop intent = "info", so it's scored on being recommended.`
 			}
 		case JudgeBranded:
@@ -292,7 +292,7 @@ func (a *App) readJudgments(s sets.Set, qs []judgeQuestion, rows map[[2]string]j
 }
 
 // A judgeQuestion is one question about one prompt, or a pair, with the state it sees and the
-// key that state hashes to.
+// key that state and the question's wording hash to.
 type judgeQuestion struct {
 	kind     string
 	key      string
@@ -312,10 +312,12 @@ func (q judgeQuestion) ids() []string {
 // judgeQuestions is every question the set's prompts raise, in JudgeKinds order and set order:
 // duplicate over each pair of the same intent that shares a meaningful word, off_target and
 // intent per prompt, branded per prompt outside head-to-heads. Each key hashes exactly what the
-// question sees (the texts, and for off_target and branded the brand facts), so a reworded
-// prompt, or a changed brand description, re-asks only what it changes.
+// question sees (the texts, and for off_target and branded the brand facts) and the question's
+// own wording, so a reworded prompt, a changed category, or a change to a question here re-asks
+// only what it changes. off_target is asked only with brand.category set; the others take the
+// category as context and fall back to the description.
 func judgeQuestions(brand config.Brand, s sets.Set) []judgeQuestion {
-	category := firstSentence(brand.About)
+	category := categoryOf(brand)
 	var out []judgeQuestion
 	for i, p := range s.Prompts {
 		for _, o := range s.Prompts[i+1:] {
@@ -326,31 +328,37 @@ func judgeQuestions(brand config.Brand, s sets.Set) []judgeQuestion {
 			if a > b {
 				a, b = b, a
 			}
+			q := typesafe.Question{Type: "noul", Instructions: "`a` and `b` are two questions buyers might ask an AI assistant about `category`. One good answer would serve both: they ask for the same thing in other words, so a page that answers one answers the other. Two questions about the same subject that ask for different things (the price against the features, a comparison against a how-to, a product for a different kind of user) are different questions."}
 			out = append(out, judgeQuestion{
-				kind: JudgeDuplicate, key: judgeKey(JudgeDuplicate, a, b), prompts: []sets.Prompt{p, o},
+				kind: JudgeDuplicate, key: judgeKey(JudgeDuplicate, q, a, b), prompts: []sets.Prompt{p, o},
 				state:    map[string]any{"category": category, "a": p.Text, "b": o.Text},
-				question: typesafe.Question{Type: "noul", Instructions: "`a` and `b` are two questions buyers might ask an AI assistant about `category`. One good answer would serve both: they ask for the same thing in other words, so a page that answers one answers the other. Two questions about the same subject that ask for different things (the price against the features, a comparison against a how-to, a product for a different kind of user) are different questions."},
+				question: q,
 			})
 		}
 	}
-	if category != "" {
+	if brand.Category != "" {
 		for _, p := range s.Prompts {
+			q := typesafe.Question{Type: "noul", Instructions: "`prompt` is one of the questions asked of AI assistants to measure whether a product in `category` gets recommended; `audience` is who the questions are written as. `prompt` asks about something other than `category`: a good answer to it would have no reason to name a product in `category`. A question that asks for products, approaches or advice in `category` without naming the category is about `category`, and so is a question about a problem that products in `category` exist to solve, or about choosing between named products in it."}
 			out = append(out, judgeQuestion{
-				kind: JudgeOffTarget, key: judgeKey(JudgeOffTarget, p.Text, category, brand.Audience), prompts: []sets.Prompt{p},
-				state:    map[string]any{"category": category, "audience": brand.Audience, "prompt": p.Text},
-				question: typesafe.Question{Type: "noul", Instructions: "`prompt` is one of the questions asked of AI assistants to measure whether a product in `category` gets recommended; `audience` is who the questions are written as. `prompt` asks about something other than `category`: a good answer to it would have no reason to name a product in `category`. A question that asks for products, approaches or advice in `category` without naming the category is about `category`."},
+				kind: JudgeOffTarget, key: judgeKey(JudgeOffTarget, q, p.Text, brand.Category, brand.Audience), prompts: []sets.Prompt{p},
+				state:    map[string]any{"category": brand.Category, "audience": brand.Audience, "prompt": p.Text},
+				question: q,
 			})
 		}
 	}
+	// Intent is about what the grader scores, not the grammar: a how-do-I question from a buyer
+	// with a job that products in the category do is a selection, since the answer that serves
+	// the buyer names one.
 	for _, p := range s.Prompts {
+		q := typesafe.Question{Type: "choice", Instructions: "`prompt` is a question a buyer asks an AI assistant, and `category` is a kind of product. Which kind of answer serves the buyer?",
+			Criteria: map[string]any{
+				"selection": "an answer that names a product or tool in `category`: the buyer asks which to use, for the best ones, for alternatives to one, for a comparison, or how to do a job that products in `category` exist to do (how do I measure X, is there a way to Y, can I run Z), so the useful answer points at a product even when none was asked for",
+				sets.Info:   "an answer that names no product in `category`: the buyer asks what something is, how it works, whether a practice is worth doing, about a named product's own details, or how to do something no product in `category` does",
+			}}
 		out = append(out, judgeQuestion{
-			kind: JudgeIntent, key: judgeKey(JudgeIntent, p.Text), prompts: []sets.Prompt{p},
-			state: map[string]any{"category": category, "prompt": p.Text},
-			question: typesafe.Question{Type: "choice", Instructions: "`prompt` is a question a buyer asks an AI assistant about `category`. Which kind of answer does it ask for?",
-				Criteria: map[string]any{
-					"selection": "asks the assistant to choose or recommend: which product, tool or service to use, the best ones, alternatives to one, or a comparison, so a good answer names products",
-					sets.Info:   "asks for an explanation or a how-to: what something is, how it works, how to do something, or whether something is worth doing, so a good answer may name no product",
-				}},
+			kind: JudgeIntent, key: judgeKey(JudgeIntent, q, p.Text, category), prompts: []sets.Prompt{p},
+			state:    map[string]any{"category": category, "prompt": p.Text},
+			question: q,
 		})
 	}
 	if s.ID != sets.HeadToHeads {
@@ -361,20 +369,26 @@ func judgeQuestions(brand config.Brand, s sets.Set) []judgeQuestion {
 		sites = append(sites, brand.Domains...)
 		facts := []string{brand.Name, strings.Join(brand.Aliases, "\n"), brand.About, strings.Join(sites, "\n")}
 		for _, p := range s.Prompts {
+			q := typesafe.Question{Type: "noul", Instructions: "`prompt` names the brand `brand.name`, one of its `brand.aliases`, a product of its maker, or one of its web domains in `brand.sites`, in any spelling: with or without spaces, hyphens, punctuation or capitals, with a domain suffix, or as part of a web address. A question that only describes what the brand does (`brand.about`) without naming it does not name it."}
 			out = append(out, judgeQuestion{
-				kind: JudgeBranded, key: judgeKey(JudgeBranded, append([]string{p.Text}, facts...)...), prompts: []sets.Prompt{p},
+				kind: JudgeBranded, key: judgeKey(JudgeBranded, q, append([]string{p.Text}, facts...)...), prompts: []sets.Prompt{p},
 				state:    map[string]any{"brand": map[string]any{"name": brand.Name, "aliases": brand.Aliases, "about": brand.About, "sites": sites}, "prompt": p.Text},
-				question: typesafe.Question{Type: "noul", Instructions: "`prompt` names the brand `brand.name`, one of its `brand.aliases`, a product of its maker, or one of its web domains in `brand.sites`, in any spelling: with or without spaces, hyphens, punctuation or capitals, with a domain suffix, or as part of a web address. A question that only describes what the brand does (`brand.about`) without naming it does not name it."},
+				question: q,
 			})
 		}
 	}
 	return out
 }
 
-// judgeKey hashes what a question sees. Whitespace doesn't count, as in sets.Prompt.SHA.
-func judgeKey(kind string, parts ...string) string {
+// judgeKey hashes what a question sees and how it is worded (its type, instructions and
+// criteria, as JSON, which sorts the criteria), so a change to a question here re-asks it.
+// Whitespace in the parts doesn't count, as in sets.Prompt.SHA.
+func judgeKey(kind string, q typesafe.Question, parts ...string) string {
 	h := sha256.New()
 	h.Write([]byte(kind))
+	wording, _ := json.Marshal(q)
+	h.Write([]byte{0})
+	h.Write(wording)
 	for _, p := range parts {
 		h.Write([]byte{0})
 		h.Write([]byte(foldSpace(p)))

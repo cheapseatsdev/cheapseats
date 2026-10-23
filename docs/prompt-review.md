@@ -59,15 +59,15 @@ A prompt with no flag and enough data is listed as healthy.
 The flags above need a month of answers. With `[typesafe]` configured
 ([optional providers](optional-providers.md)), the prompts' wording alone is put to Jev, one
 question per request, and the answers are stored in `prompt_judgments` under a hash of what each
-question saw, so a prompt is asked about once per wording and a reworded prompt re-asks only its
-own questions. A flag shows when Jev's probability is at least `typesafe.min_confidence`
+question saw and how it was worded, so a prompt is asked about once per wording and a reworded
+prompt, or a reworded question, re-asks only its own questions. A flag shows when Jev's probability is at least `typesafe.min_confidence`
 (default 0.7); changing the threshold re-reads the stored answers and asks nothing.
 
 | Flag | Question | Suggestion |
 |---|---|---|
 | **duplicate** | Over each pair of prompts of the same intent that share a meaningful word: one good answer would serve both. | Merge them to save answers: keep one, retire the other. |
-| **off_target** | Per prompt, with the category (the first sentence of `brand.about`) and `brand.audience` in state: the prompt asks about something other than the category. | Add context to the prompt (the category, who is asking), or retire it. |
-| **intent** | Per prompt, a Choice over `selection` (asks the assistant to choose or recommend) and `info` (asks for an explanation or a how-to); flagged when it reads as the other intent from the one it's set to. | Set or drop `intent = "info"`. |
+| **off_target** | Per prompt, with `brand.category` and `brand.audience` in state: the prompt asks about something other than the category. Not asked without `brand.category`: against the product description in `brand.about` it flags every prompt that isn't about this one product. | Add context to the prompt (the category, who is asking), or retire it. |
+| **intent** | Per prompt, a Choice over `selection` (the answer that serves the buyer names a product in the category, including a how-do-I question about a job those products do) and `info` (it names none: what something is, how it works, whether a practice is worth doing); flagged when it reads as the other intent from the one it's set to. | Set or drop `intent = "info"`. |
 | **branded** | Per prompt outside `head-to-heads`, with the brand's name, aliases, description and sites in state: the prompt names the brand, a product of its maker or its domain in any spelling ("cheapseats.dev", "cheap-seats"). | Reword it as a buyer who hasn't heard of the brand would ask. |
 
 Who asks: `cheapseats check`, after its own checks, judges every set and prints one

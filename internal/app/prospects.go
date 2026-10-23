@@ -258,7 +258,7 @@ func (a *App) FindProspects(ctx context.Context, id string) (int, error) {
 	// [typesafe] is off or not callable here; the page is listed either way.
 	if a.Cfg.TypeSafe != nil && config.Missing(config.TypeSafeProvider) == "" {
 		jev := a.TypeSafe()
-		category := firstSentence(brand.About)
+		category := categoryOf(brand)
 		for i := range pages {
 			if ctx.Err() != nil {
 				break

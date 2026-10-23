@@ -215,7 +215,7 @@ func (a *App) ClassifyPages(ctx context.Context, id string) (int, error) {
 		return 0, err
 	}
 	brand := a.RunBrand(r)
-	category := firstSentence(brand.About)
+	category := categoryOf(brand)
 	// The rule classifier: the config's [sources], the lists and the rules, with no Jev in it, so
 	// a host is judged by what the rules alone say.
 	rules := report.NewClassifier(brand, a.RunCompetitors(r), a.Cfg.Sources)

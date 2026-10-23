@@ -58,6 +58,11 @@ type Brand struct {
 	// What the product is, in a sentence or two. The grader uses it to tell the brand apart from
 	// other things with the same name.
 	About string `toml:"about"`
+	// The market the brand competes in, as a noun phrase ("AI search visibility tools"): what the
+	// prompts are about, where About says what this one product is. The prompt review's
+	// off-target question is asked against it and not asked when it's empty; the other Jev and Exa
+	// passes use it as the category and fall back to About's first sentence.
+	Category string `toml:"category" json:",omitempty"`
 	// Public claims the analyst may build fixes on. Everything here is sent to the model, so list
 	// only what the brand says publicly today.
 	Facts []string `toml:"facts"`
