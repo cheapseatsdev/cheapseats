@@ -188,6 +188,8 @@ cheapseats match-fixes <run-id>           which sets' fixes ask for the same pag
 
 cheapseats classify <run-id>              type pages and class hosts the rules can't ([typesafe])
 cheapseats cluster <run-id>               put the run's new objection and praise wordings to Jev ([typesafe])
+cheapseats verdicts <run-id>              Jev's second opinion on each grade: the agreement rate and
+                                       the disagreements ([typesafe])
 cheapseats suggest-prompts <set-id> [-n 10]  new buyer questions as TOML to paste (one analyst call)
 cheapseats regrade <set-id|run-id> [-since 28d] [-dry-run=false]
                                        grade stored answers again with today's grader, brand and
@@ -207,8 +209,10 @@ cheapseats version                        version and database schema
 
 - JSON API under `/api/` (status, sets, runs, fixes, quick wins, fix attempts, rankings, citations, searches, prompt review, search probe, site audit, citation check, crawlers, competitor suggestions):
   [reference](https://cheapseats.dev/docs/reference/).
-- MCP server at `/api/mcp` (Streamable HTTP). `get_run` includes net sentiment, themes and page
-  types; `get_result` the grade's evidence quote; `get_citation_stability` has a set's run-to-run
+- MCP server at `/api/mcp` (Streamable HTTP). `get_run` includes net sentiment, themes, page
+  types and, with `[typesafe]`, Jev's second opinion on the grades (agreed, disagreed, unsure and
+  the disagreements); `get_result` the grade's evidence quote and Jev's verdict and sentence beside
+  it; `get_citation_stability` has a set's run-to-run
   citation stability; `suggest_prompts` drafts new prompts for a set (one analyst call);
   `review_prompts` reviews a set's prompts from their answers (free; `suggest: true` adds one
   analyst call for proposed edits, [prompt review](docs/prompt-review.md)); `regrade`
