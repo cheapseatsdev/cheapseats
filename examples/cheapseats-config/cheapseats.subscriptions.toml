@@ -181,8 +181,8 @@ max_samples = 1
 # brand's sites says which of your own pages answer it. Each needs its key (TYPESAFE_API_KEY,
 # EXA_API_KEY) or a key-adding proxy (CHEAPSEATS_TYPESAFE_BASE_URL, CHEAPSEATS_EXA_BASE_URL), and
 # its [pricing] entry below.
-# [typesafe]
-# model = "jev-1.14.0"
+# [typesafe]         # TypeSafe's free tier (2026-10): $5 of usage a month, far more than folding uses.
+# model = "jev-1.14.0"   # Keys: console.typesafe.ai/keys
 # min_confidence = 0.7   # Jev's probability that two names are one product
 #
 # [exa]              # Exa's free plan (2026-10): $10 of credits a month, about 2,500 searches; weekly

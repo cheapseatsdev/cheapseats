@@ -20,9 +20,10 @@ called, and switching one off later leaves every page as it was.
   with no payment method. At $4 per thousand searches that is 2,500 searches a month; the coverage
   check uses one search per prompt per run, so five sets of 15 to 20 prompts run weekly is about
   350 searches a month, well inside the free plan. Most people will never pay for this.
-- **TypeSafe**: make a key in the [console](https://console.typesafe.ai/keys). Input tokens are
-  $0.042 per million and a run's whole folding pass is a few thousand tokens, so a month of runs
-  is cents.
+- **TypeSafe**: make a key in the [console](https://console.typesafe.ai/keys). As of October 2026
+  the free tier is $5 of usage a month. Input tokens are $0.042 per million, so that is about 119
+  million tokens; a run's whole folding pass is a few thousand, so the free tier covers this use
+  many thousands of times over.
 
 On exe.dev, add each as an integration instead and point `CHEAPSEATS_TYPESAFE_BASE_URL` and
 `CHEAPSEATS_EXA_BASE_URL` at it; the VM then holds no key.
