@@ -10,9 +10,11 @@ changing it, and how a change is measured before it ships.
 For one answer, for the brand on the `Brand:` line and only that brand:
 
 - **verdict**: `recommended` (the brand is the answer's top pick or one of at most three primary
-  recommendations it actively endorses), `mentioned` (named, but as one option among many, in
-  passing, as a comparison point or with reservations) or `absent` (not named, aliases included).
-  The definitions are `grade.Definitions`, word for word what the grader is told.
+  recommendations it actively endorses), `mentioned` (the answer says something about the brand,
+  but only as one option among many, in passing, as a comparison point or with reservations) or
+  `absent` (not named, aliases included, or named only to say the answer can't find, verify or
+  doesn't know it). The definitions are `grade.Definitions`, word for word what the grader is
+  told.
 - **position**: where the brand comes in the order products are first named, or null.
 - **top_pick**: the one product the answer most strongly recommends, or null if it doesn't
   commit. A brand that is the top pick is always `recommended` (`results.top_pick`).
@@ -24,6 +26,15 @@ For one answer, for the brand on the `Brand:` line and only that brand:
   about the brand and why it preferred what it preferred, for themes and the fix list.
 - **evidence**: the one sentence of the answer that most supports the verdict, checked against
   the answer (`grade.Quote`) so it's only ever the answer's own words.
+
+**An echoed name is not visibility.** Questions that name the brand ("Cheap Seats or X for a
+small team?") get answers that repeat the name only to disclaim it: "I couldn't find a product
+called Cheap Seats", "I can't verify its pricing", then advice on how to evaluate it, or
+hypotheticals about what it might offer. The brand is in the question, not in the assistant's
+knowledge, so those answers are `absent`. They become `mentioned` only when the answer states
+something about the brand itself, a feature, a price, a quality or a fit, even hedged. Before
+this rule the grader split such answers between `absent` and `mentioned` from run to run, and
+the head-to-heads set read 84% visible for a brand no assistant knew.
 
 The grader reads the brand (name, aliases, about), the set's competitors, the question and the
 answer's text (`grade.Input`). It never sees the answer's citations or searches. Two rules apply
@@ -123,11 +134,16 @@ the labels on, a verdict confusion table (rows are labels, columns the grader), 
 that disagreed with both sides' evidence and the grader's reasoning.
 
 It **fails** when `verdict`, `top_pick` or `other_product` agrees on fewer than
-`-golden.threshold` of the records (default 0.90). `tone` is reported, not gated: it's the most
+`-golden.threshold` of the records (default 0.925). `tone` is reported, not gated: it's the most
 subjective field. The threshold is below 1.0 because the grader is a language model and doesn't
-grade the same answer the same way every time; the default is provisional until a pilot run
-against human labels sets it (run the test twice on the same labels: the agreement between the
-two runs is the noise floor, and the threshold belongs a little under it). Each record is graded
+grade the same answer the same way every time. The default comes from the first pilots on
+2026-10-23: under the old rubric the grader agreed with its own earlier verdicts on 90.0% of 80
+records, every miss an echoed-name answer; with the echoed-name rule, two runs: 98.8% and 96.2% on
+verdict (the misses all echoed-name answers the grader still read as mentioned), 100% on top
+pick, 98.8% and 97.5% on other product, 96.2% on tone. 0.925 sits two records under the worse
+run. Re-check it the same way
+after a method change (run the test twice on the same labels: the agreement between the two runs
+is the noise floor, and the threshold belongs a little under it). Each record is graded
 once per run; grading them several times would cost more and only sharpen a number the threshold
 already allows for.
 

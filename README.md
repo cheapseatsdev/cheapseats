@@ -41,7 +41,7 @@ are plain text in your own repo, so they come with you. Site and docs: [cheapsea
 - Grades every answer:
   - `recommended`: the top pick, or one of ≤3 primary recommendations it endorses
   - `mentioned`: named, but as one option among many, in passing, or with reservations
-  - `absent`: not named at all (an answer that names you only to say it couldn't find you is `mentioned`)
+  - `absent`: not named at all, or named only to say the assistant couldn't find or verify you
 - Records your position, the top pick, every product named (share of voice), "why not #1", objections,
   the strengths it credits you with, its tone about you (positive, neutral, mixed or negative), the
   sentence that backs the verdict (checked to be in the answer, and highlighted there), and every
