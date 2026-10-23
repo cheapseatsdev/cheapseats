@@ -19,13 +19,28 @@ func reviewCmd(ctx context.Context, args []string) error {
 	days := fs.Int("days", app.ReviewWindows[0], "window in days: 30, 60 or 90")
 	js := fs.Bool("json", false, "print JSON")
 	sg := fs.Bool("suggest", false, "also propose rewrites, retirements and additions (one analyst call)")
+	jev := fs.Bool("jev", false, "first put the prompts' wording to Jev ([typesafe]); the review then shows its flags")
 	fs.Parse(positionalLast(args))
 	if fs.NArg() != 1 {
-		return errors.New("usage: cheapseats review <set-id> [-days 30] [-json] [-suggest]")
+		return errors.New("usage: cheapseats review <set-id> [-days 30] [-json] [-suggest] [-jev]")
 	}
 	a, err := open()
 	if err != nil {
 		return err
+	}
+	if *jev {
+		if a.Cfg.TypeSafe == nil {
+			return errors.New("-jev needs [typesafe] in the config")
+		}
+		set, ok := a.Set(fs.Arg(0))
+		if !ok {
+			return fmt.Errorf("no prompt set %q", fs.Arg(0))
+		}
+		j, err := a.JudgePrompts(ctx, set)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(os.Stderr, "asked Jev %d questions about the prompts of %s; %d answered, %d not asked yet\n", j.Asked, set.ID, j.Judged, j.Pending)
 	}
 	rev, err := a.Review(ctx, fs.Arg(0), *days)
 	if err != nil {
@@ -72,6 +87,15 @@ func printReview(rev app.Review) {
 				fmt.Printf("\n  and %s: %s", f.Other, f.OtherText)
 			}
 			fmt.Printf("\n  %s\n  -> %s\n", f.Numbers, f.Suggestion)
+		}
+	}
+	if j := rev.Jev; j != nil {
+		fmt.Printf("\n## Jev (%d)\n", j.Count())
+		for _, f := range j.All() {
+			fmt.Printf("\n- %s: %s (%.2f)\n  -> %s\n", f.Kind, f.Line, f.Confidence, f.Suggestion)
+		}
+		if j.Pending > 0 {
+			fmt.Printf("\n%d questions not asked yet: cheapseats check, review -jev or the set's next run asks them.\n", j.Pending)
 		}
 	}
 	fmt.Printf("\n## Gaps (%d)\n", len(rev.Gaps))

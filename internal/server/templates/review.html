@@ -5,12 +5,17 @@
 
 <div class="kpis"><div class="kpi"><b>{{len .Prompts}}</b><small>prompts</small></div><div class="kpi"><b>{{len .Healthy}}</b><small>healthy</small></div><div class="kpi"><b>{{len .Findings}}</b><small>flags</small></div><div class="kpi"><b>{{len .Gaps}}</b><small>gaps</small></div><div class="kpi"><b>{{len .NotEnough}}</b><small title="Fewer than {{.MinRuns}} runs or {{.MinAnswers}} graded answers under one wording">not enough data yet</small></div></div>
 
-<nav class="runnav" aria-label="Sections">{{range .Sections}}<a href="#{{.Kind}}">{{.Title}} {{len .Items}}</a>{{end}}<a href="#gaps">Gaps {{len .Gaps}}</a><a href="#prompts">Every prompt</a></nav>
+<nav class="runnav" aria-label="Sections">{{range .Sections}}<a href="#{{.Kind}}">{{.Title}} {{len .Items}}</a>{{end}}{{with .Jev}}<a href="#jev">Jev {{.Count}}</a>{{end}}<a href="#gaps">Gaps {{len .Gaps}}</a><a href="#prompts">Every prompt</a></nav>
 
 {{range .Sections}}<h2 id="{{.Kind}}">{{.Title}} <span class="muted">{{len .Items}}</span></h2>
 <p class="sub">{{.What}}</p>
 {{if .Items}}<div class="scroll"><table><thead><tr><th>Prompt</th><th>Numbers</th><th>Suggestion</th></tr></thead><tbody>{{range .Items}}<tr><td>{{.Text}} <span class="muted mono">{{.Prompt}}</span>{{if .Other}}<br>{{.OtherText}} <span class="muted mono">{{.Other}}</span>{{end}}{{with .Variant}} <span class="chip">{{.}}</span>{{end}}</td><td class="small">{{.Numbers}}{{if .Products}}<br><span class="muted">{{range $i, $c := .Products}}{{if $i}}, {{end}}{{$c.Name}} ×{{$c.N}}{{end}}</span>{{end}}</td><td class="small">{{.Suggestion}}</td></tr>{{end}}</tbody></table></div>
 {{else}}<p class="muted small">None.</p>{{end}}{{end}}
+
+{{with .Jev}}<h2 id="jev">Jev <span class="muted">{{.Count}}</span></h2>
+<p class="sub">What Jev makes of the prompts' wording alone, before any answers: two prompts one good answer would serve, a prompt about something other than what the brand does, one that reads as the other intent from the one it's set to, one that names the brand in a spelling the word match misses. Stored by <span class="mono">cheapseats check</span>, <span class="mono">cheapseats review -jev</span> and after each run; this page asks nothing. Each flag shows Jev's probability; a flag needs {{.MinConfidence}}.{{if .Pending}} {{.Pending}} {{if eq .Pending 1}}question hasn't{{else}}questions haven't{{end}} been asked yet.{{end}}</p>
+{{if .Count}}<div class="scroll"><table><thead><tr><th>Flag</th><th>Prompt</th><th>Jev says</th><th>Suggestion</th></tr></thead><tbody>{{range .All}}<tr><td><span class="chip">{{.Kind}}</span></td><td>{{range $i, $t := .Texts}}{{if $i}}<br>{{end}}{{$t}} <span class="muted mono">{{index $.Prompts $i}}</span>{{end}}</td><td class="small">{{.Line}} <span class="muted">({{printf "%.2f" .Confidence}})</span></td><td class="small">{{.Suggestion}}</td></tr>{{end}}</tbody></table></div>
+{{else}}<p class="muted small">None{{if not .Judged}} yet{{end}}.</p>{{end}}{{end}}
 
 <h2 id="gaps">Gaps <span class="muted">{{len .Gaps}}</span></h2>
 <p class="sub">What the set's answers and searches keep coming back to that no prompt asks about: competitors and other products named often, and words the assistants add to searches across prompts. To measure one, paste its prompt into <span class="mono">prompt-sets/{{.File}}</span> by pull request and reword it as your buyers would ask; prompt ids are permanent, so pick one you'll keep.</p>

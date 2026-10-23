@@ -138,6 +138,9 @@ func reviewDigest(rev app.Review, edits *suggest.Edits) any {
 		"minimum": map[string]int{"runs": app.ReviewMinRuns, "answers": app.ReviewMinAnswers},
 		"flags":   flags, "gaps": gaps,
 	}
+	if rev.Jev != nil {
+		out["jev"] = rev.Jev
+	}
 	if edits != nil {
 		out["suggested"] = map[string]any{"diff": edits.Diff, "rewrites": len(edits.Rewrites), "retire": len(edits.Retire), "add": len(edits.Add), "dropped": edits.Dropped, "cost_usd": round2(edits.CostUSD)}
 	}

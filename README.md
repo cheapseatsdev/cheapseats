@@ -194,12 +194,13 @@ cheapseats suggest-prompts <set-id> [-n 10]  new buyer questions as TOML to past
 cheapseats regrade <set-id|run-id> [-since 28d] [-dry-run=false]
                                        grade stored answers again with today's grader, brand and
                                        competitors; a dry run with its cost unless -dry-run=false
-cheapseats review <set-id> [-days 30] [-json] [-suggest]
+cheapseats review <set-id> [-days 30] [-json] [-suggest] [-jev]
                                        flat, noisy, off-target and duplicate prompts, and gaps, from
-                                       stored answers (free; -suggest: one analyst call)
+                                       stored answers (free; -suggest: one analyst call; -jev: ask
+                                       Jev about the prompts' wording first)
 cheapseats discover [-json]               competitors to consider, from sites similar to the
                                        configured ones, as TOML to paste ([exa]; writes nothing)
-cheapseats check                          validate the config
+cheapseats check [-no-jev]                validate the config (with [typesafe], Jev's prompt suggestions)
 cheapseats plan <before> [<after>]        what a config change does to trends
 cheapseats migrate-config [dir]           give prompts ids (sets from before ids)
 cheapseats version                        version and database schema

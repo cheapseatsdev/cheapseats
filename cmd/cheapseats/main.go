@@ -42,7 +42,7 @@ const usage = `cheapseats: how AI assistants answer your buyers' questions.
   cheapseats sets                           list prompt sets
   cheapseats version                        this build's version
   cheapseats backup <file>                  a consistent copy of the database, safe while serve runs
-  cheapseats check                          validate cheapseats.toml and every prompt set
+  cheapseats check [-no-jev]                validate cheapseats.toml and every prompt set
   cheapseats plan <before> [<after>]        what a config change does to trends, for its pull request
   cheapseats migrate-config [dir]           give every prompt an id (prompt sets from before ids)
   cheapseats run <set-id>                   run one set and wait for it (costs money)
@@ -54,9 +54,10 @@ const usage = `cheapseats: how AI assistants answer your buyers' questions.
                                          and competitors (a dry run, its cost, unless -dry-run=false)
   cheapseats suggest-prompts <set-id> [-n 10]  new buyer questions for a set, as TOML to paste
                                          (one analyst call; writes nothing)
-  cheapseats review <set-id> [-days 30] [-json] [-suggest]
+  cheapseats review <set-id> [-days 30] [-json] [-suggest] [-jev]
                                          flat, noisy, off-target and duplicate prompts, and gaps,
-                                         from stored answers (free; -suggest: one analyst call)
+                                         from stored answers (free; -suggest: one analyst call;
+                                         -jev: ask Jev about the prompts' wording first)
   cheapseats discover [-json]               competitors to consider, from sites similar to the
                                          configured ones, as TOML to paste ([exa]; writes nothing)
   cheapseats audit [site...]                what AI crawlers can read on the brand's sites (free)
@@ -224,6 +225,9 @@ func dispatch(ctx context.Context, cmd string, args []string) error {
 			rev = "unknown commit"
 		}
 		fmt.Printf("ok: %s and %d prompt sets in %s (%s)\n", configPath(), len(all), dir, rev)
+		// Jev's suggestions about the prompts themselves (docs/prompt-review.md), when [typesafe]
+		// is configured and callable here; never a failure. -no-jev skips them.
+		judgeSuggestions(ctx, cfg, args)
 		return nil
 	case "plan":
 		// What a config change does, for its pull request: cheapseats plan <before> [<after>], each a
