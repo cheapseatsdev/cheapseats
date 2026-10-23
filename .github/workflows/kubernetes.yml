@@ -23,6 +23,10 @@ on:
   schedule:
     - cron: "0 9 * * *"   # 01:00 or 02:00 Pacific, every day
   workflow_dispatch:
+  # The merge queue requires this check on every entry; a workflow without this event never
+  # reports and the entry waits forever. Path filters don't apply here, so the queue runs the
+  # smoke test on each merge, in parallel with the Go tests and about as long.
+  merge_group:
 
 permissions:
   contents: read
