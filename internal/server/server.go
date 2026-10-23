@@ -66,6 +66,9 @@ type Server struct {
 	oldCookie string
 	// Where links to this Cheap Seats point (CHEAPSEATS_PUBLIC_URL), for share links; see linkBase.
 	publicURL string
+	// A read-only copy (CHEAPSEATS_READONLY), such as a public demo: it serves pages and the JSON
+	// API, refuses every change and MCP, and hides the controls that would make one.
+	readOnly bool
 	// The shared-report page, which has its own layout (no navigation to pages behind auth), and
 	// the limit on unknown tokens asked for.
 	share      *template.Template
@@ -74,7 +77,7 @@ type Server struct {
 
 func New(a *app.App) (*Server, error) {
 	s := &Server{App: a, cookie: "cheapseats_token_" + a.Cfg.Brand.Slug(), oldCookie: "popcorn_token_" + a.Cfg.Brand.Slug(), authHeader: strings.TrimSpace(env.Get("AUTH_HEADER")),
-		publicURL: strings.TrimRight(strings.TrimSpace(env.Get("PUBLIC_URL")), "/")}
+		publicURL: strings.TrimRight(strings.TrimSpace(env.Get("PUBLIC_URL")), "/"), readOnly: env.Get("READONLY") != ""}
 	for _, t := range strings.Split(env.Get("TOKENS"), ",") {
 		if t = strings.TrimSpace(t); t != "" {
 			s.tokens = append(s.tokens, t)
@@ -100,6 +103,7 @@ func New(a *app.App) (*Server, error) {
 		// An answer's grade key for the seat meter (see gradeKey), and its words.
 		"gradekey": func(g *grade.Grade) string { return gradeKey(g, a.Cfg.Brand.Name) },
 		"glabel":   func(k string) string { return strings.ReplaceAll(k, "-", " ") },
+		"readonly": func() bool { return s.readOnly },
 		// A commit, abbreviated.
 		"short": func(rev string) string {
 			if len(rev) > 10 {
@@ -317,7 +321,22 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/runs/{id}/citation-check", s.apiRunCitationCheck)
 	mux.HandleFunc("GET /api/crawlers", s.apiCrawlers)
 	mux.Handle("/api/mcp", s.mcpHandler())
-	return s.auth(logRequests(mux))
+	return s.auth(logRequests(s.refuseChanges(mux)))
+}
+
+// refuseChanges, on a read-only copy, answers 403 to anything but reading: every form and API call
+// that would start, change or delete something, and MCP, whose tools include those.
+func (s *Server) refuseChanges(h http.Handler) http.Handler {
+	if !s.readOnly {
+		return h
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if (r.Method != http.MethodGet && r.Method != http.MethodHead) || r.URL.Path == "/api/mcp" || r.URL.Path == "/login" {
+			http.Error(w, "This is a read-only copy of Cheap Seats: it can't change anything.", http.StatusForbidden)
+			return
+		}
+		h.ServeHTTP(w, r)
+	})
 }
 
 func logRequests(h http.Handler) http.Handler {

@@ -494,3 +494,35 @@ func TestSeatMeter(t *testing.T) {
 		t.Error("an ungraded answer got a meter")
 	}
 }
+
+// A read-only copy serves pages and the JSON API to anyone, and refuses every change and MCP.
+func TestReadOnly(t *testing.T) {
+	t.Setenv("CHEAPSEATS_TOKENS", "")
+	t.Setenv("CHEAPSEATS_READONLY", "1")
+	cfg := testConfig(t)
+	d, _ := store.Open(t.TempDir())
+	defer d.Close()
+	s, err := New(newApp(t, cfg, d))
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := s.Handler()
+	for _, c := range []struct {
+		method, path string
+		code         int
+	}{
+		{"GET", "/", 200}, {"GET", "/api/runs", 200}, {"GET", "/quick-wins", 200},
+		{"POST", "/sets/fix-ai-recommendations/run", 403}, {"POST", "/api/runs", 403},
+		{"POST", "/audit", 403}, {"DELETE", "/api/shares/x", 403}, {"POST", "/api/mcp", 403},
+		{"GET", "/api/mcp", 403}, {"POST", "/login", 403},
+	} {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(c.method, c.path, strings.NewReader(`{"set":"fix-ai-recommendations"}`)))
+		if rec.Code != c.code {
+			t.Errorf("%s %s: %d, want %d", c.method, c.path, rec.Code, c.code)
+		}
+		if c.path == "/" && (!strings.Contains(rec.Body.String(), `class="readonly"`) || !strings.Contains(rec.Body.String(), "read-only copy")) {
+			t.Error("no read-only banner")
+		}
+	}
+}
