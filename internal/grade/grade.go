@@ -5,6 +5,7 @@ package grade
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 	"unicode"
@@ -93,7 +94,7 @@ var Verdicts = []Verdict{Recommended, Mentioned, Absent}
 var Definitions = map[Verdict]string{
 	Recommended: "the answer presents the brand as its top pick, or as one of a small set (<=3) of primary recommendations it actively endorses for the user's situation.",
 	Mentioned:   "the brand is named but only as one option among many, in passing, as a comparison point, or with reservations.",
-	Absent:      "the brand is not named at all (aliases included). A bare alias that clearly means something else is not the brand.",
+	Absent:      "the brand is not named at all (aliases included). A bare alias that clearly means something else is not the brand. An answer that names the brand only to say it can't find or verify it has still named it: \"mentioned\", not absent.",
 }
 
 // definitions is the verdict block of System, one line per verdict.
@@ -163,6 +164,11 @@ func Answer(ctx context.Context, cfg *config.Config, set sets.Set, prompt, answe
 		g.notNamed(cfg.Brand.Name)
 	}
 	g.normalize(cfg.Brand.Name)
+	if g.Verdict == Absent && !g.OtherProduct {
+		if s := namedIn(answer, cfg.Brand); s != "" {
+			g.named(s)
+		}
+	}
 	if g.Verdict != Absent {
 		g.Evidence = Quote(answer, g.Evidence)
 	}
@@ -205,6 +211,90 @@ func namesBrand(answer string, b config.Brand) bool {
 		}
 	}
 	return false
+}
+
+// namedIn is the first sentence of the answer that names the brand or an alias as a whole word
+// ("cheap seats" in "the cheap seats at the back" counts, "seat" in "seats" doesn't), or "". It is
+// the strict counterpart of namesBrand: this one overrules the model the other way, so it must not
+// match by accident.
+func namedIn(answer string, b config.Brand) string {
+	for _, n := range append([]string{b.Name}, b.Aliases...) {
+		n = strings.TrimSpace(n)
+		if n == "" {
+			continue
+		}
+		re := regexp.MustCompile(`(?i)(^|[^\p{L}\p{N}])` + regexp.QuoteMeta(n) + `($|[^\p{L}\p{N}])`)
+		if loc := re.FindStringIndex(answer); loc != nil {
+			return sentenceAround(answer, loc[0])
+		}
+	}
+	return ""
+}
+
+// sentenceAround is the sentence of text containing offset i: from the previous sentence end or
+// line break to the next, trimmed of markdown emphasis and list marks.
+func sentenceAround(text string, i int) string {
+	terminal := func(c byte) bool { return c == '.' || c == '!' || c == '?' }
+	closing := func(c byte) bool { return strings.IndexByte(`*_"')]`, c) >= 0 }
+	// A sentence ends at terminal punctuation, closing marks aside, followed by a space or the end.
+	endsAt := func(j int) (int, bool) { // j is at terminal punctuation; returns the index after the sentence
+		k := j + 1
+		for k < len(text) && closing(text[k]) {
+			k++
+		}
+		if k == len(text) || text[k] == ' ' || text[k] == '\n' {
+			return k, true
+		}
+		return 0, false
+	}
+	start := i
+	for start > 0 {
+		c := text[start-1]
+		if c == '\n' {
+			break
+		}
+		if c == ' ' {
+			j := start - 2
+			for j >= 0 && closing(text[j]) {
+				j--
+			}
+			if j >= 0 && terminal(text[j]) {
+				break
+			}
+		}
+		start--
+	}
+	end := i
+	for end < len(text) {
+		c := text[end]
+		if c == '\n' {
+			break
+		}
+		if terminal(c) {
+			if k, ok := endsAt(end); ok {
+				end = k
+				break
+			}
+		}
+		end++
+	}
+	return strings.TrimSpace(strings.Trim(strings.TrimSpace(text[start:end]), "*_-#> "))
+}
+
+// named overrules an absent verdict for an answer that names the brand without taking it for
+// another product (the model's own other_product is false): "mentioned", as System defines it, with
+// the naming sentence as evidence. The grader sometimes reads "I couldn't find Cheap Seats" as
+// absent, and it isn't.
+func (g *Grade) named(sentence string) {
+	g.Verdict = Mentioned
+	g.Position = nil
+	g.Evidence = sentence
+	note := "The answer names the brand, so it is mentioned rather than absent."
+	if g.Reasoning == "" {
+		g.Reasoning = note
+	} else {
+		g.Reasoning = strings.TrimSpace(g.Reasoning) + " " + note
+	}
 }
 
 // notNamed makes the grade absent when the answer never names the brand, as System defines it. On a

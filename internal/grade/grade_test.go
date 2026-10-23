@@ -238,8 +238,56 @@ func TestEvidenceIsVerifiedAgainstTheAnswer(t *testing.T) {
 	if g, _, _ := Answer(context.Background(), cfg, sets.Set{}, "q", answer); g.Evidence != "" {
 		t.Errorf("an invented quote was kept: %q", g.Evidence)
 	}
-	reply = Grade{Verdict: Absent, Evidence: "Profound is"}
-	if g, _, _ := Answer(context.Background(), cfg, sets.Set{}, "q", answer); g.Evidence != "" {
-		t.Errorf("absent has no evidence: %q", g.Evidence)
+	// Absent (here because the name meant another product) carries no evidence.
+	reply = Grade{Verdict: Absent, OtherProduct: true, Evidence: "Profound is"}
+	if g, _, _ := Answer(context.Background(), cfg, sets.Set{}, "q", answer); g.Verdict != Absent || g.Evidence != "" {
+		t.Errorf("absent has no evidence: %+v", g)
+	}
+}
+
+// An answer that names the brand only to say it couldn't find or verify it has still named it. The
+// grader sometimes calls that absent; the grade is mentioned, with the naming sentence as evidence,
+// unless the model says the name meant another product.
+func TestNamingTheBrandToSayItCantBeFoundIsMentioned(t *testing.T) {
+	brand := config.Brand{Name: "Cheap Seats", Aliases: []string{"cheapseats.dev"}, About: "an open-source AI visibility tracker"}
+	answer := "I can give you a solid read on Gauge.\n\n**I don't have reliable information on a product called \"Cheap Seats\" in the AI visibility space.** It may be new. Gauge covers ChatGPT and Claude."
+	if got := namedIn(answer, brand); got != `I don't have reliable information on a product called "Cheap Seats" in the AI visibility space.` {
+		t.Errorf("sentence: %q", got)
+	}
+	for _, text := range []string{"The cheapseatsfoo tool is fine.", "Seats are cheap at the back.", "See cheapseats.devices for more."} {
+		if got := namedIn(text, brand); got != "" {
+			t.Errorf("%q should not name the brand: %q", text, got)
+		}
+	}
+	if got := namedIn("See cheapseats.dev/docs for more.", brand); got == "" {
+		t.Error("an alias followed by a path names the brand")
+	}
+
+	var reply Grade
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		text, _ := json.Marshal(reply)
+		json.NewEncoder(w).Encode(map[string]any{"content": []any{map[string]any{"type": "text", "text": string(text)}}})
+	}))
+	defer srv.Close()
+	old := llm.AnthropicURL
+	llm.AnthropicURL = srv.URL
+	defer func() { llm.AnthropicURL = old }()
+	t.Setenv("ANTHROPIC_API_KEY", "fake-key")
+	cfg := &config.Config{Brand: brand}
+
+	reply = Grade{Verdict: Absent, Named: []string{"Gauge"}, Reasoning: "The answer says it has no information on Cheap Seats."}
+	got, _, err := Answer(context.Background(), cfg, sets.Set{}, "How does Cheap Seats compare with Gauge?", answer)
+	if err != nil || got.Verdict != Mentioned || got.Position != nil || !strings.Contains(got.Evidence, "don't have reliable information") || !strings.Contains(got.Reasoning, "mentioned rather than absent") {
+		t.Fatalf("overrule: %+v %v", got, err)
+	}
+	// The model saying the name meant another product stands.
+	reply = Grade{Verdict: Absent, OtherProduct: true, Named: []string{"Gauge"}}
+	if got, _, _ := Answer(context.Background(), cfg, sets.Set{}, "How does Cheap Seats compare with Gauge?", answer); got.Verdict != Absent {
+		t.Errorf("other_product should keep it absent: %+v", got)
+	}
+	// And an answer that never names it is absent whatever the model says.
+	reply = Grade{Verdict: Absent}
+	if got, _, _ := Answer(context.Background(), cfg, sets.Set{}, "Is Gauge good?", "Gauge is a credible choice."); got.Verdict != Absent {
+		t.Errorf("unnamed: %+v", got)
 	}
 }
