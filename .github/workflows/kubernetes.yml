@@ -7,14 +7,19 @@ name: kubernetes
 on:
   push:
     branches: [main]
-    paths: &paths
+    paths:
       - charts/**
       - deploy/kind-smoke.sh
       - Dockerfile
       - go.mod
       - .github/workflows/kubernetes.yml
   pull_request:
-    paths: *paths
+    paths:
+      - charts/**
+      - deploy/kind-smoke.sh
+      - Dockerfile
+      - go.mod
+      - .github/workflows/kubernetes.yml
   schedule:
     - cron: "0 9 * * *"   # 01:00 or 02:00 Pacific, every day
   workflow_dispatch:
