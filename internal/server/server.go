@@ -1325,8 +1325,7 @@ func (s *Server) apiRankings(w http.ResponseWriter, r *http.Request) {
 // probe.Compare for both. The Exa client is the app's, so the call is budgeted like the passes.
 func (s *Server) probe(ctx context.Context, in probe.Input) (any, error) {
 	ctx = llm.WithOperation(llm.WithAccounting(ctx, s.App.Runs.Budget), "search-probe")
-	in.Exa = s.App.Exa()
-	return probe.Probe(ctx, s.App.Cfg, in)
+	return probe.Probe(ctx, probe.Deps{Cfg: s.App.Cfg, Exa: s.App.Exa()}, in)
 }
 
 func (s *Server) searchPage(w http.ResponseWriter, r *http.Request) {

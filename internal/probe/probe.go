@@ -16,6 +16,8 @@ import (
 	"github.com/cheapseatsdev/cheapseats/internal/llm"
 )
 
+// Input is one probe as a caller asks for it: the HTTP API's JSON body, the MCP tool's
+// arguments and the CLI's flags all decode into it. What the probe needs to run it is Deps.
 type Input struct {
 	Query string `json:"query"`
 	// Only return results from these domains. Can't be combined with BlockedDomains.
@@ -25,8 +27,14 @@ type Input struct {
 	// Which engine: claude (the default: the answerers' web search tool), exa (Exa's neutral
 	// index, when [exa] is configured), or both, which runs the two and compares their URLs.
 	Engine string `json:"engine,omitempty" jsonschema:"claude (default), exa, or both; exa and both need [exa] in the config"`
-	// Exa is the client for engine exa and both; the caller sets it (the probe never builds one).
-	Exa *exa.Client `json:"-"`
+}
+
+// Deps is what the probe runs with, kept apart from Input so nothing decoded from a request can
+// name a client or a config.
+type Deps struct {
+	Cfg *config.Config
+	// Exa is the client for engine exa and both; the caller builds it (the probe never does).
+	Exa *exa.Client
 }
 
 type Result struct {
@@ -58,7 +66,7 @@ func Model(cfg *config.Config) (string, error) {
 	return "", errors.New("the search probe needs a Claude answerer (anthropic or claude-code)")
 }
 
-func Run(ctx context.Context, cfg *config.Config, in Input) (Result, error) {
+func Run(ctx context.Context, d Deps, in Input) (Result, error) {
 	q := strings.TrimSpace(in.Query)
 	if q == "" {
 		return Result{}, errors.New("query is empty")
@@ -69,13 +77,13 @@ func Run(ctx context.Context, cfg *config.Config, in Input) (Result, error) {
 	switch in.Engine {
 	case "", EngineClaude:
 	case EngineExa:
-		return runExa(ctx, cfg, in, q)
+		return runExa(ctx, d, in, q)
 	case EngineBoth:
 		return Result{}, errors.New("engine both returns two results: use Both or Probe")
 	default:
 		return Result{}, fmt.Errorf("unknown engine %q: claude, exa or both", in.Engine)
 	}
-	model, err := Model(cfg)
+	model, err := Model(d.Cfg)
 	if err != nil {
 		return Result{}, err
 	}
@@ -101,7 +109,7 @@ func Run(ctx context.Context, cfg *config.Config, in Input) (Result, error) {
 	if res.Model == "" {
 		res.Model = model
 	}
-	res.CostUSD = cfg.Cost(model, answer.ParseAnthropic(resp).Usage)
+	res.CostUSD = d.Cfg.Cost(model, answer.ParseAnthropic(resp).Usage)
 	var callID string
 	for _, raw := range llm.List(resp["content"]) {
 		b := llm.Map(raw)

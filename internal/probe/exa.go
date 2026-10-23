@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/cheapseatsdev/cheapseats/internal/answer"
-	"github.com/cheapseatsdev/cheapseats/internal/config"
 	"github.com/cheapseatsdev/cheapseats/internal/exa"
 	"github.com/cheapseatsdev/cheapseats/internal/report"
 )
@@ -42,17 +41,17 @@ type Compare struct {
 
 // Probe runs the input's engine and returns a Result for claude and exa, or a Compare for both,
 // for callers that only encode or print it.
-func Probe(ctx context.Context, cfg *config.Config, in Input) (any, error) {
+func Probe(ctx context.Context, d Deps, in Input) (any, error) {
 	if in.Engine == EngineBoth {
-		return Both(ctx, cfg, in)
+		return Both(ctx, d, in)
 	}
-	return Run(ctx, cfg, in)
+	return Run(ctx, d, in)
 }
 
 // Both runs the query on Claude and Exa at once and compares what they return. Either engine
 // failing fails the comparison: half a comparison would read as the other half's finding.
-func Both(ctx context.Context, cfg *config.Config, in Input) (Compare, error) {
-	if err := exaReady(cfg, in); err != nil {
+func Both(ctx context.Context, d Deps, in Input) (Compare, error) {
+	if err := exaReady(d); err != nil {
 		return Compare{}, err // before the Claude call, which would cost money for nothing
 	}
 	type out struct {
@@ -63,12 +62,12 @@ func Both(ctx context.Context, cfg *config.Config, in Input) (Compare, error) {
 	go func() {
 		c := in
 		c.Engine = EngineClaude
-		r, err := Run(ctx, cfg, c)
+		r, err := Run(ctx, d, c)
 		ch <- out{r, err}
 	}()
 	e := in
 	e.Engine = EngineExa
-	exaRes, exaErr := Run(ctx, cfg, e)
+	exaRes, exaErr := Run(ctx, d, e)
 	claude := <-ch
 	if claude.err != nil {
 		return Compare{}, claude.err
@@ -115,11 +114,11 @@ func compare(a, b []answer.Link) (both, onlyA, onlyB []string) {
 }
 
 // exaReady is what the Exa engine needs before anything is called.
-func exaReady(cfg *config.Config, in Input) error {
-	if cfg.Exa == nil {
+func exaReady(d Deps) error {
+	if d.Cfg.Exa == nil {
 		return errors.New("no [exa] in the config")
 	}
-	if in.Exa == nil {
+	if d.Exa == nil {
 		return errors.New("the probe was given no Exa client")
 	}
 	return nil
@@ -128,8 +127,8 @@ func exaReady(cfg *config.Config, in Input) error {
 // runExa is the query on Exa with the allowed domains as includeDomains and the blocked ones as
 // excludeDomains. It needs [exa] in the config and a client from the caller; the client itself
 // wants a key (or a proxy) and a [pricing.exa-search] entry when it is budgeted.
-func runExa(ctx context.Context, cfg *config.Config, in Input, q string) (Result, error) {
-	if err := exaReady(cfg, in); err != nil {
+func runExa(ctx context.Context, d Deps, in Input, q string) (Result, error) {
+	if err := exaReady(d); err != nil {
 		return Result{}, err
 	}
 	start := time.Now()
@@ -140,7 +139,7 @@ func runExa(ctx context.Context, cfg *config.Config, in Input, q string) (Result
 	if len(in.BlockedDomains) > 0 {
 		res.ToolInput["excludeDomains"] = in.BlockedDomains
 	}
-	resp, err := in.Exa.Run(ctx, "search-probe", exa.Query{Text: q, Include: in.AllowedDomains, Exclude: in.BlockedDomains, N: ExaResults})
+	resp, err := d.Exa.Run(ctx, "search-probe", exa.Query{Text: q, Include: in.AllowedDomains, Exclude: in.BlockedDomains, N: ExaResults})
 	res.DurationMS = time.Since(start).Milliseconds()
 	if err != nil {
 		return Result{}, err
