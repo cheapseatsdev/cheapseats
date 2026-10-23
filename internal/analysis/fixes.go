@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/cheapseatsdev/cheapseats/internal/config"
 	"github.com/cheapseatsdev/cheapseats/internal/grade"
 	"github.com/cheapseatsdev/cheapseats/internal/llm"
+	"github.com/cheapseatsdev/cheapseats/internal/report"
 	"github.com/cheapseatsdev/cheapseats/internal/run"
 	"github.com/cheapseatsdev/cheapseats/internal/sets"
 )
@@ -257,6 +259,7 @@ Don't propose generic marketing, brand campaigns, or anything you can't point at
 %[9]s
 %[7]s`, brand, domain, cfg.Brand.About, facts, len(set.Prompts), set.Name, body, sites, triedText(brand, tried))
 	prompt += siteFindingsText(ctx, brand)
+	prompt += opportunitiesText(ctx, brand)
 
 	var a Analysis
 	cost := 0.0
@@ -464,6 +467,68 @@ func Markdown(set sets.Set, fixes []Fix) string {
 }
 
 func Decode(s string) []Fix { var f []Fix; json.Unmarshal([]byte(s), &f); return f }
+
+type opportunitiesKey struct{}
+
+// WithOpportunities gives Build the run's source opportunities (report.Summary.Opportunities):
+// which kinds of page carry the citations, and how rarely the answers citing them name the brand.
+func WithOpportunities(ctx context.Context, opps []report.Opportunity) context.Context {
+	return context.WithValue(ctx, opportunitiesKey{}, opps)
+}
+
+// opportunitiesText lists the biggest source opportunities for the analyst, or "" when there are
+// none: at most five, page types before the class they're in, each with a gap above zero.
+func opportunitiesText(ctx context.Context, brand string) string {
+	opps, _ := ctx.Value(opportunitiesKey{}).([]report.Opportunity)
+	typed := map[string]bool{}
+	for _, o := range opps {
+		if o.Type != "" && o.Gap > 0 {
+			typed[o.Class] = true
+		}
+	}
+	var lines []string
+	for _, o := range opps {
+		if o.Gap <= 0 || (o.Type == "" && typed[o.Class]) {
+			continue
+		}
+		kind := o.Class + " pages"
+		if o.Type != "" {
+			kind = o.Class + " " + o.Type + " pages"
+		}
+		if o.Owned {
+			kind = brand + "'s own " + strings.TrimPrefix(kind, o.Class+" ")
+		}
+		var prompts []string
+		for _, p := range o.Prompts {
+			prompts = append(prompts, fmt.Sprint(p+1))
+		}
+		named := "none"
+		if n := int(math.Round(o.BrandPresence * float64(o.Answers))); n > 0 {
+			named = fmt.Sprintf("%d of %d", n, o.Answers)
+		}
+		comp := fmt.Sprintf("%d name a competitor", int(math.Round(o.CompetitorPresence*float64(o.Answers))))
+		if len(o.Competitors) > 0 {
+			var cs []string
+			for _, c := range o.Competitors {
+				cs = append(cs, fmt.Sprintf("%s %d", c.Name, c.N))
+			}
+			comp += " (" + strings.Join(cs, ", ") + ")"
+		}
+		lines = append(lines, fmt.Sprintf("- %s (%s): %.0f%% of the citations, %d answers on prompts %s; %s name %s; %s.",
+			kind, strings.Join(o.Hosts, ", "), 100*o.CitationShare, o.Answers, strings.Join(prompts, ", "), named, brand, comp))
+		if len(lines) == 5 {
+			break
+		}
+	}
+	if len(lines) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "\nWhere the answers' citations come from, by kind of site and page type, and how many of the answers citing each kind name %s (biggest gap first):\n", brand)
+	b.WriteString(strings.Join(lines, "\n"))
+	fmt.Fprintf(&b, "\nA kind of page that carries much of the citations and rarely names %s is one decision, not one host at a time: for somebody else's pages, one outreach fix naming the host that carries the kind most, with the kind and its share in the claim; for %s's own, a new page of that kind. Only where the prompts it carries are ones %s loses.\n", brand, brand, brand)
+	return b.String()
+}
 
 type siteFindingsKey struct{}
 

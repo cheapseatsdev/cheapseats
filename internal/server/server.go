@@ -650,6 +650,10 @@ type RunData struct {
 	HostsMore  int                 `json:"-"`
 	Outreach   []report.Outreach   `json:"-"`
 	Uncited    []report.Page       `json:"-"`
+
+	// The source opportunities, cut the same way.
+	Opportunities []report.Opportunity `json:"-"`
+
 	// The run's share links, and one just made, whose link is shown this once.
 	Shares   []app.Share `json:"-"`
 	NewShare *NewShare   `json:"-"`
@@ -756,6 +760,7 @@ func (s *Server) runData(ctx context.Context, id string) (*RunData, error) {
 	d.Hosts = head(d.Summary.Hosts, hostRows)
 	d.HostsMore = len(d.Summary.Hosts) - len(d.Hosts)
 	d.Outreach = head(d.Summary.Outreach, outreachRows)
+	d.Opportunities = head(d.Summary.Opportunities, 15)
 	d.Uncited = head(d.Summary.Uncited, uncitedRows)
 	d.Shares, _ = s.App.Shares(ctx, id)
 	return d, nil

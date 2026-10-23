@@ -96,6 +96,20 @@ So `/blog/notion-vs-obsidian` is a comparison and `/blog/best-note-apps` a listi
 is beats where it's filed. The run page lists the types after the kinds of site; MCP `get_run`
 carries `page_types` and each top page's `page_type`.
 
+### Opportunities
+
+The two together, scored (`opportunities`): each kind of site, and each page type within it, with
+its share of the run's citations (`citation_share`), the answers citing any page of it
+(`answers`), and of those, the share naming the brand (`brand_presence`) and the share naming a
+competitor (`competitor_presence`, with `competitors_named`). **Gap** is citation share × (1 −
+brand presence): a kind of page the answers lean on and that rarely names the brand scores highest.
+A row is owned (`own`: the brand's pages, so the fix is writing that kind of page) or earned
+(everyone else's, so the fix is getting onto them). A cell with fewer than 3 citations isn't
+listed on its own; its citations still count toward its kind of site. Each row carries its most
+cited hosts and the prompts its citing answers were for. The analyst gets the top rows beside the
+answers, so an outreach or new-page fix can name the kind of page and its share rather than one
+host. It's a view over the stored citations and grades: no model call, and no change to any trend.
+
 ## Configuring it
 
 Competitors' sites, in `[[competitors]]` in cheapseats.toml or a prompt set:

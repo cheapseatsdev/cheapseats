@@ -72,8 +72,9 @@ A run's scores per track, and every prompt against every assistant:
 </picture>
 
 Below them: share of voice (named rate, true share, position), head to head against each
-competitor, the objections answers raise, and where the answers' sources come from, with the
-third-party hosts cited without you. [Reading a run](docs/reading-a-run.md) defines every number.
+competitor, the objections answers raise, and where the answers' sources come from: the kinds of
+page that carry the citations and how rarely they name you, and the third-party hosts cited without
+you. [Reading a run](docs/reading-a-run.md) defines every number.
 
 Quick wins: every fix across your sets, filterable by site, gap and set:
 
