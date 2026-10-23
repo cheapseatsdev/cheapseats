@@ -178,10 +178,11 @@ concurrency = 6
 # daily_hour_utc = 13
 
 # How often the schedule runs each tier, in days. Recall only moves when models change and search
-# moves with the web over days to weeks, so weekly is usually enough; daily mostly buys a smoother
-# trend line, at seven times the answers.
+# moves with the web over days to weeks, so weekly is usually enough. Every other day for the core
+# sets buys a smoother trend line at about three and a half times the answers; daily rarely adds
+# more than noise.
 [tiers.core]
-every_days = 1
+every_days = 2
 
 [tiers.plg]
 every_days = 7

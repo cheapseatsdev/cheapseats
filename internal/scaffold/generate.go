@@ -475,9 +475,9 @@ concurrency = 4
 # UTC hour for the daily runs. Off until you've reviewed a manual run.
 # daily_hour_utc = 13
 
-# How often the schedule runs each tier, in days.
+# How often the schedule runs each tier, in days: core sets every other day, the rest weekly.
 [tiers.core]
-every_days = 1
+every_days = 2
 
 [tiers.plg]
 every_days = 7
