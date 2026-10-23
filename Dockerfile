@@ -4,7 +4,7 @@
 #
 # The image has no config: a deployment builds its own on top of it (FROM this image, COPY its
 # config repo to /config), or mounts a checkout at /config. See docs/deploying.md.
-FROM --platform=$BUILDPLATFORM golang:1.25-bookworm AS build
+FROM --platform=$BUILDPLATFORM golang:1.26-bookworm AS build
 ARG TARGETOS TARGETARCH
 ARG VERSION=dev
 WORKDIR /src
