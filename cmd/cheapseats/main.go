@@ -604,7 +604,11 @@ func printReport(a *app.App, id string, asJSON bool) error {
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", x.Answerer, x.Track, pr(x.TopPick), pr(x.Recommended), pr(x.Visible))
 	}
 	w.Flush()
-	fmt.Printf("\nShare of voice (%s is #%d):\n", a.Cfg.Brand.Name, s.BrandRank())
+	if rank := s.BrandRank(); rank == 0 {
+		fmt.Printf("\nShare of voice (%s not named in any answer):\n", a.Cfg.Brand.Name)
+	} else {
+		fmt.Printf("\nShare of voice (%s is #%d):\n", a.Cfg.Brand.Name, rank)
+	}
 	for i, v := range s.Voice {
 		if i == 10 {
 			break
