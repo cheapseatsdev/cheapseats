@@ -17,6 +17,8 @@ week's work cost, what went wrong more than once, and what should the other agen
   human-authored messages (type `user`, string or text content, skip anything starting with `<`)
   for corrections and repeats: "no", "wrong", "again", "I restarted", "you never", "get us back
   on main". Those are the lessons.
+- Releases published in the window (`gh api repos/cheapseatsdev/cheapseats/releases`): a release
+  bundles a night's branches, so its body, not the commit list, is what shipped to deployments.
 - The repo's CLAUDE.md and `.claude/hooks/`, to see which lessons are already rules.
 
 Transcripts are private and may name customers. Nothing from them reaches the repo, an issue or a

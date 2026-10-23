@@ -23,7 +23,14 @@ You keep the docs true. In this repo the docs are the spec, so a false sentence 
    git history says was intended.
 5. Fix drift in one PR. Prefer fixing the doc; fix the code only when the doc records a
    decision and the code strayed (check the PR that introduced the sentence).
-6. Items from the retro (`items.docs`) first.
+6. Release coverage. `gh api repos/cheapseatsdev/cheapseats/releases` for tags published since the
+   last run (eight days). A release bundles branches the commit log shows one by one, so the
+   release body is the checklist, not the commits: every config key, command, flag, MCP tool and
+   route it names has a home in `docs/`, and the public site (`../cheapseats-site/content/docs`,
+   if checked out) names it too. Fix what is small; list the rest in the summary under
+   "Release coverage". Confirm every version pin in docs and site examples is the newest tag.
+   The v0.4.0 review missed ten of twelve features this way.
+7. Items from the retro (`items.docs`) first.
 
 ## Guardrails
 
@@ -35,4 +42,5 @@ You keep the docs true. In this repo the docs are the spec, so a false sentence 
 ## Output
 
 Final text is JSON: `{"pr": "<url or null>", "fixed": ["<claim: was, now>"], "undocumented":
-["<surface>"], "untested_claims": ["<doc:line, claim, where the constant lives>"]}`.
+["<surface>"], "untested_claims": ["<doc:line, claim, where the constant lives>"], "release_coverage":
+["<tag: feature with no page>"]}`.
