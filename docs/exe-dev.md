@@ -43,8 +43,8 @@ which signs people in by email. Because it's a whole VM, its answerers can be th
 
 3. **Deploy** (below), with `SEED_DB=path/to/cheapseats.db` the first time to start from an existing
    database. The deploy also makes a `cheapseats-cli` user for the `claude` and `codex` CLIs to run
-   as: each carries a shell the model can use, and this keeps the VM's env file, database and
-   logins out of a prompt-injected answer's reach.
+   as: each is an agent with tools the model drives, and this keeps the VM's env file, database
+   and logins out of a prompt-injected answer's reach whatever a CLI update adds.
 
 4. **Log the CLIs in** as that user, if your answerers use them. The subscription is whoever logs
    in. (Logins made before the CLI user existed move over on the first deploy.)

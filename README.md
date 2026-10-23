@@ -234,9 +234,10 @@ cheapseats version                        version and database schema
   writes. It serves the pages and JSON API to anyone, may listen beyond localhost with no tokens,
   refuses every change and MCP, hides the controls, and runs and schedules nothing.
 - `CHEAPSEATS_CLI_USER`: run the `claude` and `codex` CLIs as this user through `sudo`. The CLIs
-  carry a shell the model drives, and get only the environment they need either way (never this
-  process's keys or tokens; `CHEAPSEATS_CLI_ENV` names more to pass); a separate user keeps this
-  user's files out of reach too. `deploy/exe-dev.sh` sets one up.
+  are agents with tools the model drives; Cheap Seats switches off what it can (Claude's tool
+  list, Codex's shell and image tools) and gives them only the environment they need either way
+  (never this process's keys or tokens; `CHEAPSEATS_CLI_ENV` names more to pass). A separate user
+  keeps this user's files out of reach whatever a CLI update adds. `deploy/exe-dev.sh` sets one up.
 
 ## Deploying
 

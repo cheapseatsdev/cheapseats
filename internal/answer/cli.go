@@ -10,9 +10,10 @@ package answer
 //
 // Each call runs in an empty temp directory, keeps no session, and gets only the environment it
 // needs (cliEnv): not the provider's API key, so it can't fall back to billing the API, and not
-// the tokens and keys this process holds, since both CLIs carry a shell the model can use and
-// only the brief tells it not to. CHEAPSEATS_CLI_USER runs the CLIs as another user through
-// sudo, which keeps this user's files out of reach as well (deploy/exe-dev.sh sets it up).
+// the tokens and keys this process holds, since each CLI is an agent with tools the model
+// drives, and what's switched off today may not be tomorrow. CHEAPSEATS_CLI_USER runs the CLIs
+// as another user through sudo, which keeps this user's files out of reach as well
+// (deploy/exe-dev.sh sets it up).
 
 import (
 	"bufio"
@@ -271,7 +272,9 @@ func askCodex(ctx context.Context, model string, track Track, sys, prompt string
 	brief := codexBrief + " " + sys
 	// These are global flags and must precede `exec`. The read-only sandbox prevents apply_patch
 	// writes; disabling view_image and shell_tool also keeps prompt-controlled tool calls from
-	// reading local files. Approval is never interactive in this unattended answerer.
+	// reading local files. Approval is never interactive in this unattended answerer. The
+	// sub-agent and JavaScript orchestration tools stay: no switch in codex 0.163 removes them
+	// (not --disable multi_agent, not agents.max_depth), and neither reads files on its own.
 	args := []string{"--disable", "view_image", "--disable", "shell_tool", "--ask-for-approval", "never"}
 	if track == Search {
 		brief += " " + SearchPolicy
