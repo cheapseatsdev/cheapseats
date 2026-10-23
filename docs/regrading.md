@@ -3,7 +3,8 @@
 A change to what the grader reads (its prompt or model, the brand's name, aliases or `about`, a
 set's competitors) starts a new method, and trends start over with it. Re-grading grades the
 answers older runs already have again, as they would be graded today, so those runs join the new
-method's trend from their own dates on. Answers are never asked again.
+method's trend from their own dates on. Answers are never asked again. What the grader decides,
+and how a grader change is measured before it ships, is in [grading](grading.md).
 
 ```bash
 cheapseats regrade <set-id|run-id> [-since 28d]          # a dry run: what it would do and cost
