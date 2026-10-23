@@ -18,9 +18,9 @@ import (
 // Folding product names (docs/optional-providers.md). The grader writes product names as the
 // answers do, so one product can sit on the share-of-voice board twice ("Scrunch", "Scrunch AI").
 // After a run, with [typesafe] configured, each new name is put to Jev once: which known product,
-// if any, is this another name for? The decisions are stored (name_decisions) and Aliases reads
-// them back for every report at today's confidence threshold, so no page ever calls Jev and
-// switching it off leaves the board as it was.
+// if any, is this another name for? The decisions are stored (name_decisions) with Jev's
+// probability for the match, and Aliases reads them back for every report at today's threshold,
+// so no page ever calls Jev and switching it off leaves the board as it was.
 
 // aliasCache is the folding map, rebuilt after a decision is written or the process starts.
 type aliasCache struct {
@@ -284,8 +284,16 @@ func (a *App) FoldNames(ctx context.Context, id string) (int, error) {
 					cand, disp = q.candidates[ci].key, q.candidates[ci].display
 				}
 			}
+			// What's stored is Jev's probability for the option it chose: for a match, how likely
+			// the two names are one product. (Its confidence statistic measures how concentrated
+			// the whole distribution is and shrinks with every extra candidate, so a 0.77 on a
+			// two-option question reads 0.54; it isn't the quantity to gate on.)
+			p, ok := ans.Probabilities[ans.Choice]
+			if !ok {
+				p = ans.Confidence
+			}
 			if _, err := a.DB.ExecContext(ctx, `INSERT OR REPLACE INTO name_decisions(variant, candidate, display, confidence, source, decided_at) VALUES (?,?,?,?,'jev',?)`,
-				q.variant, cand, disp, ans.Confidence, now); err != nil {
+				q.variant, cand, disp, p, now); err != nil {
 				return asked, err
 			}
 			asked++

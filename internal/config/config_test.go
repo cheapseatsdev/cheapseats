@@ -197,7 +197,7 @@ func TestOptionalProviders(t *testing.T) {
 	if c.FoldNamesOn() || c.CoverageOn() || c.TypeSafe != nil || c.Exa != nil {
 		t.Error("absent tables mean off")
 	}
-	if c.TypeSafeModel() != "jev-latest" || c.FoldConfidence() != 0.8 || c.CoverageResults() != 3 {
+	if c.TypeSafeModel() != "jev-latest" || c.FoldConfidence() != 0.7 || c.CoverageResults() != 3 {
 		t.Error("defaults")
 	}
 	os.WriteFile(p, []byte("[brand]\nname = \"Acme\"\n[typesafe]\nmodel = \"jev-1.14.0\"\nmin_confidence = 0.9\n[exa]\nresults = 5\n"), 0o644)

@@ -130,7 +130,7 @@ func TestFoldNamesStoresJevsDecisionAndFoldsTheBoard(t *testing.T) {
 		// Whatever is asked, say the first candidate, confidently.
 		answers := map[string]any{}
 		for q := range req["questions"].(map[string]any) {
-			answers[q] = map[string]any{"type": "choice", "choice": "c0", "confidence": 0.93, "probabilities": map[string]float64{"c0": 0.95, "none": 0.05}}
+			answers[q] = map[string]any{"type": "choice", "choice": "c0", "confidence": 0.9, "probabilities": map[string]float64{"c0": 0.95, "none": 0.05}}
 		}
 		json.NewEncoder(w).Encode(map[string]any{"model": "jev-1.14.0", "answers": answers, "usage": map[string]any{"input_tokens": 500, "output_tokens": 10}})
 	}))
@@ -166,8 +166,8 @@ func TestFoldNamesStoresJevsDecisionAndFoldsTheBoard(t *testing.T) {
 	}
 	var decided []NameDecision
 	decided, _ = a.NameDecisions(ctx)
-	if len(decided) != 1 || decided[0].Variant != "scrunch" || decided[0].Display != "Scrunch AI" || !decided[0].Folds {
-		t.Fatalf("decisions %+v", decided)
+	if len(decided) != 1 || decided[0].Variant != "scrunch" || decided[0].Display != "Scrunch AI" || !decided[0].Folds || decided[0].Confidence != 0.95 {
+		t.Fatalf("the stored value is the chosen option's probability, not the confidence statistic: %+v", decided)
 	}
 	if al := a.Aliases(); al["scrunch"] != "Scrunch AI" || al["tryprofound"] != "Profound" {
 		t.Errorf("aliases %v", al)

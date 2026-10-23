@@ -3,9 +3,9 @@
 --
 -- name_decisions: whether a product name the grader wrote is another name for a known product,
 -- decided after a run by TypeSafe's Jev (source 'jev') or by hand ('manual'), so the
--- share-of-voice board can fold the two onto one row. confidence is Jev's confidence in the
--- decision; the threshold that makes it a fold is read from the config, so changing it re-reads
--- the decisions and asks nothing again. A variant decided 'none' (candidate '') is a product of
+-- share-of-voice board can fold the two onto one row. confidence is Jev's probability for the
+-- option it chose (for a match, that the two names are one product); the threshold that makes it
+-- a fold is read from the config, so changing it re-reads the decisions and asks nothing again. A variant decided 'none' (candidate '') is a product of
 -- its own, and isn't asked about again until a new candidate appears.
 CREATE TABLE name_decisions (
     variant TEXT NOT NULL,         -- the name as the grader wrote it, lower-cased
