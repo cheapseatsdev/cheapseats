@@ -20,9 +20,10 @@ called, and switching one off later leaves every page as it was.
   with no payment method. At $4 per thousand searches that is 2,500 searches a month; the coverage
   check uses one search per prompt per run, so five sets of 15 to 20 prompts run weekly is about
   350 searches a month, well inside the free plan. Most people will never pay for this.
-- **TypeSafe**: make a key in the [console](https://console.typesafe.ai/keys). Input tokens are
-  $0.042 per million and a run's whole folding pass is a few thousand tokens, so a month of runs
-  is cents.
+- **TypeSafe**: make a key in the [console](https://console.typesafe.ai/keys). As of October 2026
+  the free tier is $5 of usage a month. Input tokens are $0.042 per million, so that is about 119
+  million tokens; a run's whole folding pass is a few thousand, so the free tier covers this use
+  many thousands of times over.
 
 On exe.dev, add each as an integration instead and point `CHEAPSEATS_TYPESAFE_BASE_URL` and
 `CHEAPSEATS_EXA_BASE_URL` at it; the VM then holds no key.
@@ -64,8 +65,9 @@ hasn't been decided before, is put to Jev once: a Choice over the known products
 matches (shares a meaningful word, or one name contains the other), with a `none` option, given
 the category from `brand.about` and the sentence of an answer that named each product. Between two
 unconfigured names, only the less established one is asked about, the one in fewer answers or,
-at a tie, the shorter, so "Scrunch" is asked about "Scrunch AI" and not the reverse. Up to eight
-names go in one request; a run's whole pass is usually one call and a fraction of a cent.
+at a tie, the shorter, so "Scrunch" is asked about "Scrunch AI" and not the reverse. Each name is
+its own request, with only its candidates in the state; a run's pass is a few dozen calls and
+under a cent.
 
 Decisions land in `name_decisions`, each with Jev's probability for the option it chose: for a
 match, the probability that the two names are one product. `App.Aliases` reads them back, with the
@@ -94,7 +96,9 @@ What the first live calls taught us: given only two bare names, Jev said 0.47 fo
 the instruction that spacing, punctuation, a domain suffix, a company prefix or an "AI" suffix
 don't make a different product, it said 0.88 for "Otterly AI" and "Otterly.AI", 0.85 for
 "Microsoft Copilot" and "Copilot", 0.78 for "AI Mode" and "Google AI Mode", where the vaguer
-wording had given 0.53, 0.67 and 0.58. Give it state, and say what counts; it reads literally. The first production pass decided 28 names in four requests for half a cent:
+wording had given 0.53, 0.67 and 0.58. Give it state, and say what counts; it reads literally. And keep each request's state to the one
+question: eight names batched into one request scored the same pairs 0.15 to 0.3 lower than one
+name per request (Otterly AI: 0.59 batched, 0.88 alone). The first production pass decided 28 names in four requests for half a cent:
 25 were products of their own, three matched (Scrunch to Scrunch AI, Microsoft Copilot to Copilot,
 AI Mode to Google AI Mode).
 
