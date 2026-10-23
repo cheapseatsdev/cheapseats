@@ -4,24 +4,30 @@ for (const a of document.querySelectorAll("header nav a")) {
   if (href === "/" ? location.pathname === "/" : location.pathname.startsWith(href)) a.setAttribute("aria-current", "page");
 }
 
-// The OS's light or dark until the toggle picks one, which this browser then remembers.
+// The theme: the system's until the toggle picks one, cycling system, light, dark. A pick is
+// remembered in this browser; back to system forgets it.
 (function () {
   const button = document.querySelector(".theme-toggle");
   if (!button) return;
-  const os = window.matchMedia("(prefers-color-scheme: dark)");
-  const current = () => document.documentElement.dataset.theme || (os.matches ? "dark" : "light");
-  const label = () => {
-    const dark = current() === "dark";
-    button.setAttribute("aria-label", dark ? "Switch to light theme" : "Switch to dark theme");
+  const modes = ["system", "light", "dark"];
+  let mode = "system";
+  try { const t = localStorage.getItem("cheapseats-theme") || localStorage.getItem("popcorn-theme"); if (t === "light" || t === "dark") mode = t; } catch {}
+  const show = () => {
+    button.dataset.mode = mode;
+    const next = modes[(modes.indexOf(mode) + 1) % modes.length];
+    button.setAttribute("aria-label", `Theme: ${mode}. Switch to ${next}.`);
     button.title = button.getAttribute("aria-label");
   };
-  label();
-  os.addEventListener("change", label);
+  show();
   button.addEventListener("click", () => {
-    const next = current() === "dark" ? "light" : "dark";
-    document.documentElement.dataset.theme = next;
-    try { localStorage.setItem("cheapseats-theme", next); } catch {}
-    label();
+    mode = modes[(modes.indexOf(mode) + 1) % modes.length];
+    if (mode === "system") delete document.documentElement.dataset.theme;
+    else document.documentElement.dataset.theme = mode;
+    try {
+      if (mode === "system") { localStorage.removeItem("cheapseats-theme"); localStorage.removeItem("popcorn-theme"); }
+      else localStorage.setItem("cheapseats-theme", mode);
+    } catch {}
+    show();
   });
 })();
 
