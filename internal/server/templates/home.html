@@ -1,20 +1,49 @@
 {{define "title"}}{{end}}{{define "body"}}
-<h1>Does AI recommend {{brand}}?</h1>
-<p class="sub">Buyer questions, asked of each assistant with and without web search, graded for whether {{brand}} is the top pick, recommended, merely named, or left out.</p>
-{{if .Progress}}<h2>In progress</h2>
-<div class="grid">{{range .Progress}}{{template "progress" .}}{{end}}</div>
-{{end}}<h2>Prompt sets</h2>
-<p class="sub">Each set's latest day. Named: the share of answers that mention {{brand}}; recommended: one of its primary picks; each prompt counts once. Rank is {{brand}}'s place on the share-of-voice board in search answers. Click a heading to sort. Today's spend {{money (index .Spend "spent_today_usd")}} of {{money (index .Spend "daily_budget_usd")}}.</p>
-<div class="scroll"><table class="sets sortable">
-<thead><tr><th data-sort="text">Set</th><th data-sort="num" class="num">Named <span class="muted">search</span></th><th data-sort="num" class="num">Recommended <span class="muted">search</span></th><th data-sort="num" class="num">Named <span class="muted">recall</span></th><th data-sort="num" class="num">Rank</th><th data-sort="text">Latest</th></tr></thead>
+<div class="page-heading">
+  <div><p class="eyebrow">Dashboard / {{brand}}</p><h1>Does AI recommend {{brand}}?</h1><p class="sub">See which buyer questions you win, then decide what to fix.</p></div>
+  <div class="page-actions"><a class="btn" href="/quick-wins">View quick wins →</a></div>
+</div>
+<div class="meta-row">
+  <span>{{len .Rows}} prompt sets</span>
+  <span>Latest saved day per set and track</span>
+  <span class="budget">Today's spend <b>{{money (index .Spend "spent_today_usd")}}</b> of {{money (index .Spend "daily_budget_usd")}}</span>
+  <details class="help-disclosure" id="dashboard-method"><summary>How to read this</summary><p>Buyer questions are asked of each assistant with and without web search. <b>Recommended</b> means {{brand}} is one of an answer's primary picks; <b>named</b> means it appears in the answer. Each prompt counts once. Search uses the web; recall does not. Rank is {{brand}}'s place on the share-of-voice board in search answers. Compare sets separately: each asks a different group of questions. Changes compare the prompts both days asked; a grey change is within noise.</p></details>
+</div>
+
+{{if .Progress}}
+<section aria-labelledby="in-progress"><div class="section-heading"><h2 id="in-progress">In progress</h2></div>
+<div class="grid">{{range .Progress}}{{template "progress" .}}{{end}}</div></section>
+{{end}}
+
+<section aria-labelledby="prompt-sets">
+<div class="section-heading"><div><h2 id="prompt-sets">Prompt-set performance</h2><p class="section-note">Latest saved results for each prompt set. Select a column heading to sort.</p></div><a href="/rankings">View rankings →</a></div>
+<p class="table-scroll-hint">Scroll to see all metrics.</p>
+<div class="scroll table-panel"><table class="sets sortable">
+<thead>
+<tr><th scope="col" rowspan="2" data-sort="text" data-column="0">Prompt set</th><th scope="colgroup" colspan="3">Search</th><th scope="colgroup" colspan="1">Recall</th><th scope="col" rowspan="2" data-sort="text" data-column="5">Latest run</th></tr>
+<tr><th scope="col" data-sort="num" data-column="1" class="num">Recommended</th><th scope="col" data-sort="num" data-column="2" class="num">Named</th><th scope="col" data-sort="num" data-column="3" class="num">Rank</th><th scope="col" data-sort="num" data-column="4" class="num">Named</th></tr>
+</thead>
 <tbody>{{range .Rows}}<tr>
-<td data-v="{{.Set.Name}}"><a href="/sets/{{.Set.ID}}">{{.Set.Name}}</a> <span class="chip">{{.Set.Tier}}</span>{{if .Older}} <span class="chip" title="The set's prompts have changed since its latest run">older prompts</span>{{end}}</td>
-{{with .Search}}<td class="num" data-v="{{.Mean.Visible}}"><b>{{pct .Mean.Visible}}</b>{{with .Compare}} <small class="{{if .WithinNoise}}noise{{else}}muted{{end}}" title="vs the day before, on {{.Common}} of {{.Of}} prompts: {{pts .Visible}} {{margin .VisibleMargin}} (95%){{if .WithinNoise}}, within noise{{end}}">{{pts .Visible}}</small>{{end}}</td><td class="num" data-v="{{.Mean.Recommended}}">{{pct .Mean.Recommended}}</td>{{else}}<td class="num" data-v="-1"><span class="muted">–</span></td><td class="num" data-v="-1"><span class="muted">–</span></td>{{end}}
+<td data-v="{{.Set.Name}}"><a href="/sets/{{.Set.ID}}">{{.Set.Name}}</a><span class="set-meta">{{.Set.Tier}}{{if .Older}} <span class="chip" title="The set's prompts have changed since its latest run">older prompts</span>{{end}}</span></td>
+{{with .Search}}
+<td class="num" data-v="{{.Mean.Recommended}}"><strong>{{pct .Mean.Recommended}}</strong>{{with .Compare}} <small class="{{if .RecommendedWithinNoise}}noise{{else}}muted{{end}}" title="vs the day before, on {{.Common}} of {{.Of}} prompts: {{pts .Recommended}} {{margin .RecommendedMargin}} (95%){{if .RecommendedWithinNoise}}, within noise{{end}}">{{pts .Recommended}}</small>{{end}}</td>
+<td class="num" data-v="{{.Mean.Visible}}">{{pct .Mean.Visible}}{{with .Compare}} <small class="{{if .WithinNoise}}noise{{else}}muted{{end}}" title="vs the day before, on {{.Common}} of {{.Of}} prompts: {{pts .Visible}} {{margin .VisibleMargin}} (95%){{if .WithinNoise}}, within noise{{end}}">{{pts .Visible}}</small>{{end}}</td>
+<td class="num" data-v="{{if .Rank}}{{.Rank}}{{else}}9999{{end}}">{{if not .Rank}}<span class="muted" title="Not named in any search answer">–</span>{{else if gt .Rank 20}}<span class="muted" title="#{{.Rank}}">below 20</span>{{else}}#{{.Rank}}{{end}}{{if .RankWithinNoise}} <span class="noise small" title="moved, but within noise">±</span>{{else if gt .DeltaRank 0}} <span class="v-recommended">{{icon "arrow-up" 14}}{{.DeltaRank}}<span class="sr"> places up</span></span>{{else if lt .DeltaRank 0}} <span class="down">{{icon "arrow-down" 14}}{{neg .DeltaRank}}<span class="sr"> places down</span></span>{{end}}</td>
+{{else}}
+<td class="num" data-v="-1"><span class="muted">–</span></td><td class="num" data-v="-1"><span class="muted">–</span></td><td class="num" data-v="9999"><span class="muted">–</span></td>
+{{end}}
 {{with .Recall}}<td class="num" data-v="{{.Mean.Visible}}">{{pct .Mean.Visible}}</td>{{else}}<td class="num" data-v="-1"><span class="muted">–</span></td>{{end}}
-{{with .Search}}<td class="num" data-v="{{if .Rank}}{{.Rank}}{{else}}9999{{end}}">{{if not .Rank}}<span class="muted" title="Not named in any search answer">–</span>{{else if gt .Rank 20}}<span class="muted" title="#{{.Rank}}">below 20</span>{{else}}#{{.Rank}}{{end}}{{if .RankWithinNoise}} <span class="noise small" title="moved, but within noise">±</span>{{else if gt .DeltaRank 0}} <span class="v-recommended">{{icon "arrow-up" 14}}{{.DeltaRank}}<span class="sr"> places up</span></span>{{else if lt .DeltaRank 0}} <span class="down">{{icon "arrow-down" 14}}{{neg .DeltaRank}}<span class="sr"> places down</span></span>{{end}}</td>{{else}}<td class="num" data-v="9999"><span class="muted">–</span></td>{{end}}
 <td data-v="{{with .Baseline}}{{.CreatedAt}}{{end}}">{{with .Running}}<a href="/runs/{{.RunID}}" class="s-running">{{sicon "running"}}{{.Stage}} {{.Done}}/{{.Total}}</a>{{else}}{{with .Baseline}}<a href="/runs/{{.ID}}" class="nowrap" title="{{day .CreatedAt}} UTC">{{slice .CreatedAt 0 10}}</a>{{else}}<form class="inline" method="post" action="/sets/{{.Set.ID}}/run"><button class="ghost small">{{icon "play"}}Run now</button></form>{{end}}{{end}}</td>
-</tr>{{end}}</tbody></table></div>
-<h2>Fix these first</h2>
-{{if .QuickWins}}<div class="scroll"><table><tr><th>Fix</th><th>Set</th><th>Priority</th><th>Gap</th><th>Effort</th></tr>{{range .QuickWins}}<tr><td><a href="/runs/{{.RunID}}#fix-{{.Rank}}">{{.Title}}</a><div class="muted mono">{{.Target}}</div></td><td>{{.SetName}}</td><td><span class="chip p-{{.Priority}}">{{.Priority}}</span></td><td>{{.Gap}}</td><td>{{.Effort}}</td></tr>{{end}}</table></div>
-<p><a href="/quick-wins">All quick wins →</a></p>{{else}}<p class="muted">Fix lists appear after a run finishes.</p>{{end}}
+</tr>{{else}}<tr><td colspan="6" class="muted">No prompt sets yet.</td></tr>{{end}}</tbody></table></div>
+</section>
+
+<section aria-labelledby="first-fixes">
+<div class="section-heading"><div><h2 id="first-fixes">Fix these first</h2><p class="section-note">The top fixes from each set's latest finished run.</p></div><a href="/quick-wins">All quick wins →</a></div>
+{{if .QuickWins}}<div class="fix-list">{{range .QuickWins}}
+<article class="fix-item">
+  <div class="fix-title"><a href="/runs/{{.RunID}}#fix-{{.Rank}}">{{.Title}}</a><div class="fix-meta"><span class="mono">{{.Target}}</span><span>{{.Gap}} · {{.SetName}}</span></div></div>
+  <div class="fix-facts"><span class="chip p-{{.Priority}} fix-priority">{{.Priority}}</span><span>Effort {{.Effort}}</span><span>Could flip {{len .Prompts}} {{if eq (len .Prompts) 1}}prompt{{else}}prompts{{end}}</span></div>
+</article>
+{{end}}</div>{{else}}<p class="muted">Fix lists appear after a run finishes.</p>{{end}}
+</section>
 {{end}}

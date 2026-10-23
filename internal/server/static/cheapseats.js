@@ -126,8 +126,11 @@ document.addEventListener("submit", (e) => {
 // values; again to reverse. The choice survives the live refresh.
 (function () {
   const chosen = new Map(); // table index -> [column, direction]
+  const column = (th) => Number(th.dataset.column ?? th.cellIndex);
   function sort(table, col, dir) {
-    const th = table.tHead.rows[0].cells[col];
+    const headings = [...table.querySelectorAll("thead th[data-sort]")];
+    const th = headings.find((h) => column(h) === col);
+    if (!th || !table.tBodies[0]) return;
     const num = th.dataset.sort === "num";
     const body = table.tBodies[0];
     const rows = [...body.rows];
@@ -137,7 +140,7 @@ document.addEventListener("submit", (e) => {
       return dir === "ascending" ? c : -c;
     });
     for (const r of rows) body.appendChild(r);
-    for (const h of table.tHead.rows[0].cells) h.removeAttribute("aria-sort");
+    for (const h of headings) h.removeAttribute("aria-sort");
     th.setAttribute("aria-sort", dir);
   }
   function prepare() {
@@ -150,7 +153,7 @@ document.addEventListener("submit", (e) => {
   function pick(th) {
     const table = th.closest("table");
     const i = [...document.querySelectorAll("table.sortable")].indexOf(table);
-    const col = th.cellIndex;
+    const col = column(th);
     const prev = chosen.get(i);
     // Numbers start high-to-low, names A-Z.
     const first = th.dataset.sort === "num" ? "descending" : "ascending";
@@ -172,6 +175,20 @@ document.addEventListener("submit", (e) => {
   window.addEventListener("DOMContentLoaded", prepare);
   document.addEventListener("cheapseats:refreshed", prepare);
 })();
+
+// Navigation menus dismiss with Escape or a click outside, keeping native details keyboard use.
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  for (const menu of document.querySelectorAll(".nav-more[open]")) {
+    if (menu.contains(document.activeElement)) menu.querySelector("summary").focus();
+    menu.open = false;
+  }
+});
+document.addEventListener("click", (e) => {
+  for (const menu of document.querySelectorAll(".nav-more[open]")) {
+    if (!menu.contains(e.target) || e.target.closest?.(".nav-menu a")) menu.open = false;
+  }
+});
 
 // Trend charts: a crosshair that snaps to the nearest day, with that day's values; arrow keys do
 // the same when the chart has focus. Text goes in with textContent: notes name prompts and models.
