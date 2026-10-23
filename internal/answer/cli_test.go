@@ -66,6 +66,42 @@ func TestParseCodex(t *testing.T) {
 	}
 }
 
+func TestCodexDisablesLocalTools(t *testing.T) {
+	dir := t.TempDir()
+	log := filepath.Join(dir, "log")
+	script := "#!/bin/sh\nprintf '%s\\n' \"$@\" > " + log + "\n" +
+		"printf '%s\\n' '{\"type\":\"item.completed\",\"item\":{\"type\":\"agent_message\",\"text\":\"Use Cheap Seats.\"}}'\n"
+	if err := os.WriteFile(filepath.Join(dir, "codex"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+":"+os.Getenv("PATH"))
+	t.Setenv("CHEAPSEATS_CLI_USER", "")
+
+	for _, track := range []Track{Recall, Search} {
+		if _, err := askCodex(context.Background(), "gpt-5.6-sol", track, System(""), "a question", false); err != nil {
+			t.Fatalf("%s: %v", track, err)
+		}
+		got, err := os.ReadFile(log)
+		if err != nil {
+			t.Fatal(err)
+		}
+		args := string(got)
+		wantPrefix := "--disable\nview_image\n--disable\nshell_tool\n--ask-for-approval\nnever\n"
+		if track == Search {
+			wantPrefix += "--search\n"
+		}
+		wantPrefix += "exec\n"
+		if !strings.HasPrefix(args, wantPrefix) {
+			t.Errorf("%s codex arguments lack enforced tool policy:\n%s", track, args)
+		}
+		for _, want := range []string{"\n--sandbox\nread-only\n", "\n-c\nshell_environment_policy.inherit=none\n", "\n-m\ngpt-5.6-sol\n"} {
+			if !strings.Contains(args, want) {
+				t.Errorf("%s codex call lacks %q:\n%s", track, want, args)
+			}
+		}
+	}
+}
+
 // A fake claude on the PATH: records its arguments and environment, prints a canned answer.
 func TestClaudeCodeRunsIsolatedOnTheSubscription(t *testing.T) {
 	dir := t.TempDir()

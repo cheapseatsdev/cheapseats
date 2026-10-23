@@ -5,8 +5,8 @@ package answer
 //
 //   - claude-code: `claude -p` in safe mode (none of your CLAUDE.md, hooks, skills or MCP
 //     servers), with WebSearch and WebFetch on the search track and no tools on recall.
-//   - codex: `codex exec` with your config ignored, a read-only sandbox, and live web search
-//     on the search track.
+//   - codex: `codex exec` with your config ignored, local read and shell tools disabled, a
+//     read-only sandbox, and live web search on the search track.
 //
 // Each call runs in an empty temp directory, keeps no session, and gets only the environment it
 // needs (cliEnv): not the provider's API key, so it can't fall back to billing the API, and not
@@ -269,7 +269,10 @@ const codexBrief = "Answer the question below as a chat assistant would. Do not 
 
 func askCodex(ctx context.Context, model string, track Track, sys, prompt string, insist bool) (Answer, error) {
 	brief := codexBrief + " " + sys
-	var args []string
+	// These are global flags and must precede `exec`. The read-only sandbox prevents apply_patch
+	// writes; disabling view_image and shell_tool also keeps prompt-controlled tool calls from
+	// reading local files. Approval is never interactive in this unattended answerer.
+	args := []string{"--disable", "view_image", "--disable", "shell_tool", "--ask-for-approval", "never"}
 	if track == Search {
 		brief += " " + SearchPolicy
 		if insist {
@@ -279,7 +282,7 @@ func askCodex(ctx context.Context, model string, track Track, sys, prompt string
 	} else {
 		brief += " Answer from what you already know; do not look anything up."
 	}
-	// The sandbox stops writes, not reads or commands; a command it does run gets no environment.
+	// A defense-in-depth empty environment also applies if a future CLI adds another command tool.
 	args = append(args, "exec", "--json", "--ephemeral", "--ignore-user-config", "--ignore-rules",
 		"--skip-git-repo-check", "--sandbox", "read-only", "-c", "shell_environment_policy.inherit=none",
 		"-m", model, brief+"\n\nQuestion: "+prompt)
