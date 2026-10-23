@@ -1,9 +1,9 @@
 name: kubernetes
 
 # Installs the chart on kind the way a client deploys, and checks it serves, keeps its data
-# across restarts, upgrades, and rolls back a broken config. It takes as long as the whole test
-# job and the files it exercises change rarely, so it runs when they change, nightly against
-# main, and by hand; the Go tests run on every push in ci.yml.
+# across restarts, upgrades, and rolls back a broken config. It runs on every pull request and
+# merge-queue entry (the main ruleset requires it), on pushes to main that touch what it
+# exercises, nightly, and by hand.
 on:
   push:
     branches: [main]
@@ -13,13 +13,10 @@ on:
       - Dockerfile
       - go.mod
       - .github/workflows/kubernetes.yml
+  # Every pull request: the check is required by the main ruleset, and a required check that
+  # does not run never passes, so a path filter here kept Go-only PRs out of the merge queue.
+  # It runs beside the Go tests and takes about as long, so a PR waits no longer for it.
   pull_request:
-    paths:
-      - charts/**
-      - deploy/kind-smoke.sh
-      - Dockerfile
-      - go.mod
-      - .github/workflows/kubernetes.yml
   schedule:
     - cron: "0 9 * * *"   # 01:00 or 02:00 Pacific, every day
   workflow_dispatch:
