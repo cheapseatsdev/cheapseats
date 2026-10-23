@@ -99,7 +99,7 @@ func (s *Server) mcpHandler() http.Handler {
 			}
 			return out, nil
 		})
-	addTool(srv, "get_run", "One run: rates per answerer and track (and without branded prompts), share of voice with positions, head to head, objections, sources by kind and host, cited pages by type (listicle, comparison, review, docs, forum...), an outreach list of hosts cited without the brand, the brand's pages found but not cited, the fix list, net sentiment with top praise and objections, the run's themes, one line per prompt, and, when [exa] is configured, the neutral retrieval baseline per host (prompts a neutral index ranks it for against prompts the assistants found it for, read as content, query or both). Use get_result for a full answer.",
+	addTool(srv, "get_run", "One run: rates per answerer and track (and without branded prompts), share of voice with positions, head to head, objections, sources by kind and host, cited pages by type (listicle, comparison, review, docs, forum...), an outreach list of hosts cited without the brand (and, when [exa] has run the prospects pass, prospects: pages like the cited listicles that no answer cited, with whom each names), the brand's pages found but not cited, the fix list, net sentiment with top praise and objections, the run's themes, one line per prompt, and, when [exa] is configured, the neutral retrieval baseline per host (prompts a neutral index ranks it for against prompts the assistants found it for, read as content, query or both). Use get_result for a full answer.",
 		func(ctx context.Context, a runArg) (any, error) {
 			d, err := s.runData(ctx, a.Run)
 			if err != nil {
@@ -563,6 +563,20 @@ func runDigest(d *RunData) any {
 	if d.Baseline != nil {
 		neutral = head(d.Baseline.Hosts, 10)
 	}
+	// Prospects: the url, whom it names, and why it's listed; /api/runs/{id} has the rows.
+	type prospect struct {
+		URL   string   `json:"url"`
+		Names []string `json:"names"`
+		Why   string   `json:"why"`
+	}
+	var prospects []prospect
+	for _, p := range head(d.Prospects, 10) {
+		names := append([]string{}, p.Competitors...)
+		if p.NamesBrand {
+			names = append([]string{"the brand"}, names...)
+		}
+		prospects = append(prospects, prospect{p.URL, names, p.Why()})
+	}
 	// The snapshot is everything that shaped the run, which /api/runs/{id} has in full.
 	r := *d.Run
 	r.Snapshot = run.Snapshot{}
@@ -581,6 +595,7 @@ func runDigest(d *RunData) any {
 		PageTypes      []report.TypeUse    `json:"page_types"`
 		Hosts          []report.HostUse    `json:"top_hosts"`
 		Outreach       []report.Outreach   `json:"outreach"`
+		Prospects      []prospect          `json:"prospects,omitempty"`
 		Uncited        []string            `json:"found_not_cited"`
 		Pages          []report.Page       `json:"top_pages"`
 		Fixes          []analysis.Fix      `json:"fixes"` // without claude_prompt: get_quick_wins has it
@@ -592,7 +607,7 @@ func runDigest(d *RunData) any {
 		// assistants found it for, and the reading (content, query, both).
 		Neutral []app.BaselineHost `json:"neutral_retrieval,omitempty"`
 	}{&r, sum.Overall, sum.Slices, sum.Unbranded, sum.BrandedPrompts, sum.BrandRank(), voice, head(sum.HeadToHead, 10), head(sum.Objections, 10),
-		sum.Classes, sum.PageTypes, head(sum.Hosts, 10), head(sum.Outreach, 10), uncited, pages, fixes, d.Insights, d.Opinion, prompts, neutral}
+		sum.Classes, sum.PageTypes, head(sum.Hosts, 10), head(sum.Outreach, 10), prospects, uncited, pages, fixes, d.Insights, d.Opinion, prompts, neutral}
 }
 
 // auditDigest is audit_sites' answer: each site in a line or two, and the findings without info

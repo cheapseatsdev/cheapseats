@@ -622,6 +622,9 @@ type RunData struct {
 	// The neutral retrieval baseline (pages per prompt and the host table), when [exa] has
 	// searched this run's prompts.
 	Baseline *app.Baseline `json:"baseline,omitempty"`
+	// Pages like the cited listicles that no answer cited (the prospects pass), when [exa] has
+	// run it; gated at today's threshold.
+	Prospects []app.Prospect `json:"prospects,omitempty"`
 	// The work submitted for this run's fixes, and for earlier fixes for the same pages, and when
 	// the fix list was built (FixAttempts.Status).
 	Attempts app.FixAttempts `json:"-"`
@@ -689,6 +692,7 @@ func (s *Server) runData(ctx context.Context, id string) (*RunData, error) {
 	d.Opinion = s.App.Runs.Opinion(ctx, id, res)
 	d.Coverage = s.App.Coverage(ctx, id, res)
 	d.Baseline = s.App.Baseline(ctx, id, res)
+	d.Prospects = s.App.Prospects(ctx, id, res)
 	for _, a := range r.Snapshot.Answerers {
 		d.Answerers = append(d.Answerers, a.ID)
 	}
