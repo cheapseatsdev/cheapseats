@@ -59,7 +59,7 @@
 {{with .Objections}}<h2 id="objections">Objections</h2>
 <p class="sub">Concerns the answers that name {{brand}} raised about it, folded so the same phrase counts once, most common first.</p>
 <div class="scroll"><table><thead><tr><th>Objection</th><th class="num">Answers</th><th>For example</th></tr></thead>
-<tbody>{{range .}}<tr><td>{{.Text}}</td><td class="num">{{.Answers}}</td><td><a href="#prompt-{{add .Prompt 1}}">{{.PromptText}}</a></td></tr>{{end}}</tbody></table></div>
+<tbody>{{range .}}<tr><td>{{.Text}}{{if gt .Wordings 1}} <span class="muted small" title="wordings Jev judged to say the same thing">({{.Wordings}} wordings)</span>{{end}}</td><td class="num">{{.Answers}}</td><td><a href="#prompt-{{add .Prompt 1}}">{{.PromptText}}</a></td></tr>{{end}}</tbody></table></div>
 {{if gt (len $d.Summary.Objections) (len .)}}<p class="muted small">Showing the {{len .}} most common; the rest are in the JSON export.</p>{{end}}{{end}}
 
 {{if .Hosts}}<h2 id="sources">Sources</h2>

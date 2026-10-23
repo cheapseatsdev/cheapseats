@@ -689,7 +689,7 @@ func (s *Server) runData(ctx context.Context, id string) (*RunData, error) {
 	s.App.DB.QueryRowContext(ctx, `SELECT insights, fixes_at FROM runs WHERE id=?`, id).Scan(&insights, &fixesAt)
 	d.Insights, d.FixesAt = insights.String, fixesAt.String
 	d.Progress = s.App.RunProgress(ctx, id)
-	d.Opinion = s.App.Runs.Opinion(ctx, id, res)
+	d.Opinion = s.App.Opinion(ctx, id, res)
 	d.Coverage = s.App.Coverage(ctx, id, res)
 	d.Baseline = s.App.Baseline(ctx, id, res)
 	d.Prospects = s.App.Prospects(ctx, id, res)

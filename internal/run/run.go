@@ -748,13 +748,18 @@ func (e *Engine) Themes(ctx context.Context, id string) (*opinion.Themes, error)
 // Opinion is what the run's answers say about the brand: the sentiment of results, which are the
 // run's (or a slice of them), and its stored theme pass.
 func (e *Engine) Opinion(ctx context.Context, id string, results []Result) opinion.Report {
+	return e.OpinionWith(ctx, id, results, opinion.Options{})
+}
+
+// OpinionWith is Opinion with the sentiment counted through opt (app.PhraseOptions).
+func (e *Engine) OpinionWith(ctx context.Context, id string, results []Result, opt opinion.Options) opinion.Report {
 	var grades []*grade.Grade
 	for _, x := range results {
 		if x.Status == "done" {
 			grades = append(grades, x.Grade)
 		}
 	}
-	rep := opinion.Report{Sentiment: opinion.Summarize(grades)}
+	rep := opinion.Report{Sentiment: opinion.SummarizeWith(grades, opt)}
 	t, err := e.Themes(ctx, id)
 	if err != nil {
 		slog.Warn("reading themes", "run", id, "err", err)
