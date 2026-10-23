@@ -40,10 +40,9 @@ header nav a:hover{color:var(--pc-text)}
 header nav a[aria-current="page"]{color:var(--pc-text);border-bottom-color:var(--pc-primary)}
 .theme-toggle{background:transparent;color:var(--pc-muted);border:1px solid var(--pc-border);border-radius:8px;padding:5px;display:inline-flex}
 .theme-toggle:hover{color:var(--pc-text);background:var(--pc-chip)}
-/* The toggle shows what it switches to: a moon while light, a sun while dark. */
-.theme-toggle .sun{display:none}
-:root[data-theme="dark"] .theme-toggle .sun{display:inline-flex}:root[data-theme="dark"] .theme-toggle .moon{display:none}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .theme-toggle .sun{display:inline-flex}:root:not([data-theme="light"]) .theme-toggle .moon{display:none}}
+/* The toggle shows the theme it's on: system (a monitor), light (a sun) or dark (a moon). */
+.theme-toggle span{display:none}
+.theme-toggle:not([data-mode]) .t-system,.theme-toggle[data-mode="system"] .t-system,.theme-toggle[data-mode="light"] .t-light,.theme-toggle[data-mode="dark"] .t-dark{display:inline-flex}
 
 main{max-width:1180px;margin:0 auto;padding:24px 16px 80px}
 h1{font-size:24px;letter-spacing:-.02em;margin:0 0 4px}h2{font-size:17px;margin:32px 0 10px}h3{font-size:15px;margin:0 0 6px}
