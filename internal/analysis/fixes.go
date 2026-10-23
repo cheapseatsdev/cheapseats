@@ -300,7 +300,7 @@ Don't propose generic marketing, brand campaigns, or anything you can't point at
 func results2text(brand config.Brand, set sets.Set, results []run.Result) string {
 	byPrompt := map[int][]run.Result{}
 	for _, r := range results {
-		if r.Status == "done" && r.Grade != nil {
+		if r.Graded() {
 			byPrompt[r.PromptIdx] = append(byPrompt[r.PromptIdx], r)
 		}
 	}

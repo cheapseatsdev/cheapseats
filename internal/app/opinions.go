@@ -102,7 +102,7 @@ func (a *App) SecondOpinions(ctx context.Context, id string) (int, error) {
 	client := a.TypeSafe()
 	asked, total := 0, 0.0
 	for _, x := range results {
-		if x.Status != "done" || x.Grade == nil || x.Answer == nil || decided[x.ID] || ctx.Err() != nil {
+		if !x.Graded() || x.Answer == nil || decided[x.ID] || ctx.Err() != nil {
 			continue
 		}
 		text, cut := capAnswer(x.Answer.Text, answerCap)

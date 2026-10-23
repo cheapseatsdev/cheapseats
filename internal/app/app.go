@@ -103,11 +103,11 @@ func (a *App) BuildFixes(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	if r.Status != "done" {
+	if r.Status != run.Done {
 		return fmt.Errorf("the fix list needs a finished run")
 	}
 	for _, x := range results {
-		if x.Status != "done" || x.Grade == nil {
+		if !x.Graded() {
 			return fmt.Errorf("analysis requires all results graded")
 		}
 	}
@@ -362,7 +362,7 @@ func (a *App) Resume(ctx context.Context, ids []string) {
 		if ctx.Err() != nil {
 			return
 		}
-		if a.Runs.Status(ctx, id) != "queued" || a.Runs.IsActive(id) {
+		if a.Runs.Status(ctx, id) != run.Queued || a.Runs.IsActive(id) {
 			continue // cancelled or retried meanwhile
 		}
 		r, err := a.Runs.Get(ctx, id)
@@ -460,9 +460,9 @@ func (a *App) runDue(ctx context.Context, now time.Time) {
 		if err := a.Runs.Execute(ctx, r.ID); err != nil {
 			slog.Error("scheduled run", "set", s.ID, "err", err)
 		}
-		var status string
+		var status run.Status
 		a.DB.QueryRowContext(ctx, `SELECT status FROM runs WHERE id=?`, r.ID).Scan(&status)
-		if status == "budget" {
+		if status == run.OverBudget {
 			return // nothing else will fit today
 		}
 	}

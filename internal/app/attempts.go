@@ -27,23 +27,13 @@ type Attempt struct {
 	Rank      int          `json:"rank"`
 	Fix       analysis.Fix `json:"fix"`
 	URL       string       `json:"url"`
-	State     string       `json:"state"`
+	State     AttemptState `json:"state"`
 	Note      string       `json:"note,omitempty"`
 	By        string       `json:"by,omitempty"`
 	CreatedAt string       `json:"created_at"`
 	UpdatedAt string       `json:"updated_at"`
 	Outcome   Outcome      `json:"outcome"`
 }
-
-// Attempt states, and Open, the status of a fix with no attempt that's still standing.
-const (
-	Proposed  = "proposed"
-	Accepted  = "accepted"
-	Withdrawn = "withdrawn"
-	Open      = "open"
-)
-
-func validState(s string) bool { return s == Proposed || s == Accepted || s == Withdrawn }
 
 // FixStatus is where a fix stands given the attempts recorded on it (newest first): its newest
 // attempt's state, or open when it has none or the newest was withdrawn. FixAttempts.Status also
@@ -52,7 +42,7 @@ func FixStatus(attempts []Attempt) string {
 	if len(attempts) == 0 || attempts[0].State == Withdrawn {
 		return Open
 	}
-	return attempts[0].State
+	return string(attempts[0].State)
 }
 
 // Outcome is what the runs of the set since an attempt show for the prompts its fix meant to
@@ -254,10 +244,11 @@ func (a *App) MarkFix(ctx context.Context, runID string, rank int, link, state, 
 	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
 		return Attempt{}, fmt.Errorf("a link to the commit or pull request is required, as an http(s) URL")
 	}
-	if state == "" {
-		state = Proposed
+	st := AttemptState(state)
+	if st == "" {
+		st = Proposed
 	}
-	if !validState(state) {
+	if !validState(st) {
 		return Attempt{}, fmt.Errorf("state is proposed, accepted or withdrawn, not %q", state)
 	}
 	r, err := a.Runs.Get(ctx, runID)
@@ -270,7 +261,8 @@ func (a *App) MarkFix(ctx context.Context, runID string, rank int, link, state, 
 			continue
 		}
 		now := store.Now()
-		at := Attempt{RunID: runID, SetID: r.SetID, Rank: rank, Fix: f, URL: u.String(), State: state, Note: strings.TrimSpace(note), By: by, CreatedAt: now, UpdatedAt: now}
+		at := Attempt{RunID: runID, SetID: r.SetID, Rank: rank, Fix: f, URL: u.String(), State: st, Note: strings.TrimSpace(note), By: by, CreatedAt: now, UpdatedAt: now}
+		AttemptTransitions.Check("fix_attempts", newAttempt, at.State)
 		res, err := a.DB.ExecContext(ctx, `INSERT INTO fix_attempts(run_id,set_id,fix_rank,fix,target_key,url,state,note,marked_by,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
 			at.RunID, at.SetID, at.Rank, mustJSON(f), TargetKey(f.Target), at.URL, at.State, at.Note, at.By, at.CreatedAt, at.UpdatedAt)
 		if err != nil {
@@ -292,7 +284,7 @@ func (a *App) triedFor(ctx context.Context, setID string) []analysis.Tried {
 		if at.State == Withdrawn {
 			continue
 		}
-		out = append(out, analysis.Tried{Title: at.Fix.Title, Target: at.Fix.Target, URL: at.URL, State: at.State, Outcome: at.Outcome.Summary()})
+		out = append(out, analysis.Tried{Title: at.Fix.Title, Target: at.Fix.Target, URL: at.URL, State: string(at.State), Outcome: at.Outcome.Summary()})
 		if len(out) == 10 {
 			break
 		}
@@ -303,10 +295,15 @@ func (a *App) triedFor(ctx context.Context, setID string) []analysis.Tried {
 // SetAttemptState moves an attempt on: proposed to accepted when the pull request merges, or to
 // withdrawn when it's closed, which reopens its fix.
 func (a *App) SetAttemptState(ctx context.Context, id int64, state string) error {
-	if !validState(state) {
+	st := AttemptState(state)
+	if !validState(st) {
 		return fmt.Errorf("state is proposed, accepted or withdrawn, not %q", state)
 	}
-	res, err := a.DB.ExecContext(ctx, `UPDATE fix_attempts SET state=?, updated_at=? WHERE id=?`, state, store.Now(), id)
+	var from AttemptState
+	if err := a.DB.QueryRowContext(ctx, `SELECT state FROM fix_attempts WHERE id=?`, id).Scan(&from); err == nil {
+		AttemptTransitions.Check("fix_attempts", from, st)
+	}
+	res, err := a.DB.ExecContext(ctx, `UPDATE fix_attempts SET state=?, updated_at=? WHERE id=?`, st, store.Now(), id)
 	if err != nil {
 		return err
 	}
@@ -387,7 +384,7 @@ func (fa FixAttempts) Status(runID string, f analysis.Fix, fixesAt string) strin
 	}
 	for _, at := range fa.Earlier(runID, f) {
 		if at.State != Withdrawn && at.CreatedAt >= fixesAt {
-			return at.State
+			return string(at.State)
 		}
 	}
 	return Open

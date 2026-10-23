@@ -20,7 +20,7 @@ func (s *Server) doneRuns(ctx context.Context) []run.Run {
 	all, _ := s.App.Runs.List(ctx, "", 50)
 	var out []run.Run
 	for _, r := range all {
-		if r.Status == "done" {
+		if r.Status == run.Done {
 			out = append(out, r)
 		}
 	}

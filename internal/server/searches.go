@@ -35,7 +35,7 @@ func (s *Server) searchData(ctx context.Context, id string, pool bool) (*SearchD
 			if len(d.Pooled) == poolRuns {
 				break
 			}
-			if x.ID != r.ID && x.Status == "done" && x.Method == r.Method && x.CreatedAt <= r.CreatedAt {
+			if x.ID != r.ID && x.Status == run.Done && x.Method == r.Method && x.CreatedAt <= r.CreatedAt {
 				d.Pooled = append(d.Pooled, x)
 			}
 		}
@@ -75,7 +75,7 @@ func (s *Server) searchesPage(w http.ResponseWriter, r *http.Request) {
 func (s *Server) setSearchesPage(w http.ResponseWriter, r *http.Request) {
 	runs, _ := s.App.Runs.List(r.Context(), r.PathValue("id"), 30)
 	for _, x := range runs {
-		if x.Status == "done" {
+		if x.Status == run.Done {
 			http.Redirect(w, r, "/runs/"+x.ID+"/searches?pool=1", http.StatusSeeOther)
 			return
 		}

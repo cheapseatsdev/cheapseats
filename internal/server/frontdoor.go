@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/cheapseatsdev/cheapseats/internal/app"
+	"github.com/cheapseatsdev/cheapseats/internal/run"
 	"github.com/cheapseatsdev/cheapseats/internal/sets"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -68,13 +69,13 @@ type doorSet struct {
 }
 
 type doorRun struct {
-	ID          string   `json:"id"`
-	Status      string   `json:"status"`
-	CreatedAt   string   `json:"created_at"`
-	AgeDays     float64  `json:"age_days"`
-	Named       *float64 `json:"named,omitempty"`
-	Recommended *float64 `json:"recommended,omitempty"`
-	Rank        int      `json:"share_of_voice_rank,omitempty"`
+	ID          string     `json:"id"`
+	Status      run.Status `json:"status"`
+	CreatedAt   string     `json:"created_at"`
+	AgeDays     float64    `json:"age_days"`
+	Named       *float64   `json:"named,omitempty"`
+	Recommended *float64   `json:"recommended,omitempty"`
+	Rank        int        `json:"share_of_voice_rank,omitempty"`
 }
 
 type doorSpend struct {
@@ -146,7 +147,7 @@ func (s *Server) frontDoor(ctx context.Context) FrontDoor {
 			finished++
 		}
 		switch {
-		case c.Running != nil || ds.LastRun != nil && (ds.LastRun.Status == "queued" || ds.LastRun.Status == "running"):
+		case c.Running != nil || ds.LastRun != nil && ds.LastRun.Status.InFlight():
 			ds.Status = Running
 			running = append(running, ds)
 		case ds.LastFinished == nil:

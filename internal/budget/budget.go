@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/cheapseatsdev/cheapseats/internal/config"
+	"github.com/cheapseatsdev/cheapseats/internal/state"
 	"github.com/cheapseatsdev/cheapseats/internal/store"
 	"math"
 	"time"
@@ -44,7 +45,8 @@ func (c *Controller) Reserve(ctx context.Context, kind, model string, amount flo
 		return nil, ctx.Err()
 	}
 	day := time.Now().UTC().Format("2006-01-02")
-	res, err := c.DB.ExecContext(ctx, `INSERT INTO spend_events(created_at,kind,model,amount_usd,state) SELECT ?,?,?,?,'reserved' WHERE ?<=0 OR (SELECT COALESCE(SUM(amount_usd),0) FROM spend_events WHERE substr(created_at,1,10)=?)+?<=?`, store.Now(), kind, model, amount, c.Cfg.Budget.DailyUSD, day, amount, c.Cfg.Budget.DailyUSD)
+	Transitions.Check("spend_events", state.Start, Reserved)
+	res, err := c.DB.ExecContext(ctx, `INSERT INTO spend_events(created_at,kind,model,amount_usd,state) SELECT ?,?,?,?,? WHERE ?<=0 OR (SELECT COALESCE(SUM(amount_usd),0) FROM spend_events WHERE substr(created_at,1,10)=?)+?<=?`, store.Now(), kind, model, amount, Reserved, c.Cfg.Budget.DailyUSD, day, amount, c.Cfg.Budget.DailyUSD)
 	if err != nil {
 		<-c.gate
 		return nil, err
@@ -72,16 +74,17 @@ func (l *Lease) Finish(amount float64, known bool) error {
 	}
 	l.released = true
 	defer func() { <-l.c.gate }()
-	state := "settled"
+	st := Settled
 	if !known {
 		amount = max(amount, l.reserved)
-		state = "unknown"
+		st = Unknown
 	}
 	if amount < 0 || math.IsNaN(amount) || math.IsInf(amount, 0) {
 		amount = l.reserved
-		state = "unknown"
+		st = Unknown
 	}
-	_, err := l.c.DB.Exec(`UPDATE spend_events SET amount_usd=?,state=? WHERE id=?`, amount, state, l.id)
+	Transitions.Check("spend_events", Reserved, st)
+	_, err := l.c.DB.Exec(`UPDATE spend_events SET amount_usd=?,state=? WHERE id=?`, amount, st, l.id)
 	return err
 }
 func (c *Controller) Allowance() float64 {

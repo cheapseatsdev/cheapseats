@@ -553,7 +553,7 @@ func (s *Server) cards(ctx context.Context, progress []app.Progress) []SetCard {
 		}
 		for i := range runs {
 			r := &runs[i]
-			if r.Status != "done" || r.Profile == "" {
+			if r.Status != run.Done || r.Profile == "" {
 				continue
 			}
 			res, err := s.App.Runs.Results(ctx, r.ID)
@@ -562,7 +562,7 @@ func (s *Server) cards(ctx context.Context, progress []app.Progress) []SetCard {
 			}
 			complete := len(res) > 0
 			for _, x := range res {
-				if x.Status != "done" || x.Grade == nil {
+				if !x.Graded() {
 					complete = false
 				}
 			}
@@ -735,7 +735,7 @@ func (s *Server) runData(ctx context.Context, id string) (*RunData, error) {
 		if !ok1 || !ok2 {
 			continue
 		}
-		v := x.Status
+		v := string(x.Status)
 		if x.Grade != nil {
 			v = gradeKey(x.Grade, s.App.Cfg.Brand.Name)
 		}
@@ -837,7 +837,7 @@ func (s *Server) setPage(w http.ResponseWriter, r *http.Request) {
 		if ag, ok := agreement[rn.ID]; ok {
 			row.Agreement = &ag
 		}
-		if rn.Status == "done" {
+		if rn.Status == run.Done {
 			if res, err := s.App.Runs.Results(r.Context(), rn.ID); err == nil {
 				var search []run.Result
 				for _, x := range res {
@@ -944,8 +944,8 @@ func (s *Server) runPage(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) rebuildFixesForm(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	run, err := s.App.Runs.Get(r.Context(), id)
-	if err != nil || run.Status != "done" || s.App.Runs.IsActive(id) {
+	rn, err := s.App.Runs.Get(r.Context(), id)
+	if err != nil || rn.Status != run.Done || s.App.Runs.IsActive(id) {
 		http.Error(w, "complete idle run required", http.StatusConflict)
 		return
 	}
@@ -1094,7 +1094,7 @@ func (s *Server) quickWinsPage(w http.ResponseWriter, r *http.Request) {
 	for _, st := range s.App.Sets() {
 		setV, setL = append(setV, st.ID), append(setL, st.Name)
 	}
-	status := []string{app.Open, app.Proposed, app.Accepted}
+	status := []string{app.Open, string(app.Proposed), string(app.Accepted)}
 	priority := []string{"urgent", "high", "medium", "low"}
 	rows := []filterRow{
 		row("Status", "status", f.Status, status, status, func(v string) app.QuickWinFilter { x := f; x.Status = v; return x }),
@@ -1212,7 +1212,7 @@ func (s *Server) apiStartRun(w http.ResponseWriter, r *http.Request) {
 		httpErr(w, err, 400)
 		return
 	}
-	writeJSON(w, map[string]string{"id": started.ID, "status": started.Status})
+	writeJSON(w, map[string]string{"id": started.ID, "status": string(started.Status)})
 }
 
 func (s *Server) apiRun(w http.ResponseWriter, r *http.Request) {
@@ -1234,8 +1234,8 @@ func (s *Server) apiFixes(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) apiRebuildFixes(w http.ResponseWriter, r *http.Request) {
-	run, err := s.App.Runs.Get(r.Context(), r.PathValue("id"))
-	if err != nil || run.Status != "done" || s.App.Runs.IsActive(run.ID) {
+	rn, err := s.App.Runs.Get(r.Context(), r.PathValue("id"))
+	if err != nil || rn.Status != run.Done || s.App.Runs.IsActive(rn.ID) {
 		httpErr(w, fmt.Errorf("complete idle run required"), 409)
 		return
 	}
@@ -1411,7 +1411,7 @@ func (s *Server) exportCSV(w http.ResponseWriter, r *http.Request) {
 		branded[p.Idx] = p.Branded
 	}
 	for _, x := range d.Results {
-		row := []string{strconv.FormatInt(x.ID, 10), strconv.Itoa(x.PromptIdx + 1), x.Prompt, x.Answerer, x.Model, string(x.Track), x.Status, "", "", "", "", "", "", "", "", fmt.Sprintf("%.4f", x.CostUSD), ""}
+		row := []string{strconv.FormatInt(x.ID, 10), strconv.Itoa(x.PromptIdx + 1), x.Prompt, x.Answerer, x.Model, string(x.Track), string(x.Status), "", "", "", "", "", "", "", "", fmt.Sprintf("%.4f", x.CostUSD), ""}
 		if g := x.Grade; g != nil {
 			row[7] = string(g.Verdict)
 			if g.Position != nil {

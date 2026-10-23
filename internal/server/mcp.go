@@ -73,7 +73,7 @@ func (s *Server) mcpHandler() http.Handler {
 			if err != nil {
 				return nil, err
 			}
-			return map[string]string{"id": r.ID, "status": r.Status}, nil
+			return map[string]string{"id": r.ID, "status": string(r.Status)}, nil
 		})
 	addTool(srv, "list_runs", "Recent runs, newest first, with status and headline rates.",
 		func(ctx context.Context, a struct {
@@ -96,7 +96,7 @@ func (s *Server) mcpHandler() http.Handler {
 			for _, x := range runs {
 				res, _ := s.App.Runs.Results(ctx, x.ID)
 				sum := s.App.Summary(&x, res)
-				out = append(out, row{x.ID, x.Name, x.SetID, x.Status, x.CreatedAt, sum.Overall, sum.BrandRank()})
+				out = append(out, row{x.ID, x.Name, x.SetID, string(x.Status), x.CreatedAt, sum.Overall, sum.BrandRank()})
 			}
 			return out, nil
 		})
@@ -493,7 +493,7 @@ type RunWait struct {
 	ID            string        `json:"id"`
 	SetID         string        `json:"set_id"`
 	Name          string        `json:"name"`
-	Status        string        `json:"status"`
+	Status        run.Status    `json:"status"`
 	Finished      bool          `json:"finished"`
 	TimedOut      bool          `json:"timed_out"`
 	WaitedSeconds int           `json:"waited_seconds"`
@@ -531,7 +531,7 @@ func (s *Server) waitForRun(ctx context.Context, id string, timeout int) (*RunWa
 		if r.Error != nil {
 			out.Error = *r.Error
 		}
-		inFlight := r.Status == "queued" || r.Status == "running" || s.App.Runs.IsActive(id)
+		inFlight := r.Status.InFlight() || s.App.Runs.IsActive(id)
 		if !inFlight {
 			if p := s.App.RunProgress(ctx, id); p != nil {
 				inFlight = true
@@ -549,7 +549,7 @@ func (s *Server) waitForRun(ctx context.Context, id string, timeout int) (*RunWa
 		if out.Progress == nil {
 			out.Progress = s.App.RunProgress(ctx, id)
 		}
-		if r.Status == "queued" && !s.App.Runs.IsActive(id) {
+		if r.Status == run.Queued && !s.App.Runs.IsActive(id) {
 			out.Note = "queued, and nothing is running it: a run left from a restart; retry it from the web UI"
 		}
 		if left := time.Until(deadline); left <= 0 {
@@ -642,7 +642,7 @@ func runDigest(d *RunData) any {
 			if r.PromptIdx != p.Idx {
 				continue
 			}
-			v := r.Status
+			v := string(r.Status)
 			if r.Grade != nil {
 				v = string(r.Grade.Verdict)
 			}

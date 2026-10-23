@@ -425,7 +425,7 @@ func newDay(r *run.Run, brand config.Brand, date string, results []run.Result) d
 		if x.Sample+1 > d.samples[x.Answerer] && !r.Snapshot.Sampling.IsExtra(x.PromptID, x.Answerer, x.Track, x.Sample) {
 			d.samples[x.Answerer] = x.Sample + 1
 		}
-		if x.Status != "done" || x.Grade == nil {
+		if !x.Graded() {
 			continue
 		}
 		if d.tallies[x.PromptID] == nil {
@@ -792,15 +792,16 @@ func (a *App) attemptMarks(ctx context.Context, setID string) []AttemptMark {
 	defer rows.Close()
 	var out []AttemptMark
 	for rows.Next() {
-		var fix, link, state, created, updated string
+		var fix, link, created, updated string
+		var state AttemptState
 		if rows.Scan(&fix, &link, &state, &created, &updated) != nil {
 			continue
 		}
 		var f analysis.Fix
 		json.Unmarshal([]byte(fix), &f)
-		out = append(out, AttemptMark{Date: created[:min(10, len(created))], State: Proposed, Title: f.Title, URL: link})
+		out = append(out, AttemptMark{Date: created[:min(10, len(created))], State: string(Proposed), Title: f.Title, URL: link})
 		if state == Accepted {
-			out = append(out, AttemptMark{Date: updated[:min(10, len(updated))], State: Accepted, Title: f.Title, URL: link})
+			out = append(out, AttemptMark{Date: updated[:min(10, len(updated))], State: string(Accepted), Title: f.Title, URL: link})
 		}
 	}
 	return out
