@@ -500,19 +500,14 @@ threshold; opening it never asks. The pass also runs after every run on the run'
 # prompt_review = true
 ```
 
-## Next, in order
+## What's next
 
-Each item below fits the six rules. They are ranked by how visible the gain is on our own data.
+Every item on the first list has shipped: seven Jev passes and five uses of Exa, each in its
+own file under `internal/app`, each a `Pass` or an on-demand command, each read from SQLite by
+the pages and never called from one. What's left is use, not building: a few weeks of runs will
+say which thresholds want moving, which passes earn their place on the run page, and which
+decisions are worth a manual override (`source = 'manual'` is reserved for it in every table and
+nothing writes it yet).
 
-**Jev, judgments over data the run already has**
-
-
-Not Jev: anything that produces a list or a sentence. The named-products list, reasoning,
+Not Jev, still: anything that produces a list or a sentence. The named-products list, reasoning,
 why-not-top, objections as text and the fix list stay on a generative model.
-
-**Exa, web evidence the run doesn't have**
-
-
-The strongest pairing is Exa finding candidate pages and Jev deciding what each is, with code
-ranking the result: the citation-check pattern applied to outreach, which is what the prospects
-pass does.
