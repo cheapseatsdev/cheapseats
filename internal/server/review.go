@@ -58,8 +58,9 @@ func (s *Server) reviewPage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), code)
 		return
 	}
-	// Reading the page is a review; a HEAD (which GET routes match too) isn't, nor is the JSON.
-	if r.Method == http.MethodGet {
+	// Reading the page is a review; a HEAD (which GET routes match too) isn't, nor is the JSON,
+	// nor is anyone's visit to a read-only copy.
+	if r.Method == http.MethodGet && !s.readOnly {
 		s.App.MarkReviewed(r.Context(), d.SetID)
 	}
 	s.render(w, "review", d)

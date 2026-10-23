@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
-	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -420,8 +419,10 @@ func (a *siteAudit) checkSitemap(ctx context.Context) []string {
 	}
 	// The sample: evenly spread through the sitemap, so it reaches more than one section.
 	var on []string
+	seen := map[string]bool{} // a sitemap can be huge: linear, not a scan of on per entry
 	for _, u := range urls {
-		if a.onSite(u.Loc) && strings.TrimSuffix(u.Loc, "/") != strings.TrimSuffix(a.res.Home, "/") && !slices.Contains(on, u.Loc) {
+		if a.onSite(u.Loc) && strings.TrimSuffix(u.Loc, "/") != strings.TrimSuffix(a.res.Home, "/") && !seen[u.Loc] {
+			seen[u.Loc] = true
 			on = append(on, u.Loc)
 		}
 	}

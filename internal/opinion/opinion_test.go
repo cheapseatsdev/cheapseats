@@ -15,6 +15,27 @@ import (
 	"github.com/cheapseatsdev/cheapseats/internal/sets"
 )
 
+// The quote in the string's own case, when it's there word for word; lowercasing a rune can
+// change its size (İ), which must not slice past the string's end or into the middle of a rune.
+func TestVerbatim(t *testing.T) {
+	for _, c := range []struct {
+		quote string
+		texts []string
+		want  string
+	}{
+		{"cheap  seats IS cheap", []string{"Pricing is unclear", "Cheap Seats is cheap"}, "Cheap Seats is cheap"},
+		{"unclear İ", []string{"Pricing is unclear i"}, "unclear İ"},       // İ lowercases to i: a byte past the end
+		{"unclear i", []string{"Pricing is unclear İ"}, "unclear i"},       // the string shrank: the quote as given
+		{"İstanbul", []string{"İstanbul İstanbul"}, "İstanbul"},            // sizes balance by chance: still the quote
+		{"not here", []string{"Pricing is unclear", "Too new"}, "Too new"}, // the shortest string
+		{"", []string{"Pricing is unclear"}, "Pricing is unclear"},
+	} {
+		if got := verbatim(c.quote, c.texts); got != c.want {
+			t.Errorf("verbatim(%q, %q) = %q, want %q", c.quote, c.texts, got, c.want)
+		}
+	}
+}
+
 func TestSentiment(t *testing.T) {
 	g := func(v grade.Verdict, tone grade.Tone, praise, objections []string) *grade.Grade {
 		return &grade.Grade{Verdict: v, Tone: tone, Praise: praise, Objections: objections}
