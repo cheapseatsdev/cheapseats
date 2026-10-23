@@ -214,7 +214,7 @@ func (fd FrontDoor) steps(running, never, stale, fresh []doorSet) []nextStep {
 		add("", nil, "Runs can't start: %s. Fix the environment (cheapseats check on the command line says what's missing); the reads below still work.", why)
 	}
 	for _, r := range head(running, 2) {
-		add("get_run", map[string]any{"run": r.LastRun.ID}, "%s is running: its rates fill in as answers are graded. Poll every few minutes, not faster.", r.Name)
+		add("get_run", map[string]any{"run": r.LastRun.ID}, "%s is running: its rates fill in as answers are graded. wait_for_run blocks until it finishes; otherwise poll every few minutes, not faster.", r.Name)
 	}
 	// Sets due a run, never-run ones first, at most dueSteps of them.
 	if rd.CanRun {

@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/cheapseatsdev/cheapseats/internal/analysis"
 	"github.com/cheapseatsdev/cheapseats/internal/app"
@@ -60,7 +61,7 @@ func (s *Server) mcpHandler() http.Handler {
 			}
 			return st, nil
 		})
-	addTool(srv, "start_run", "Start a run over a prompt set. Costs money: every prompt is answered by each configured assistant and graded. Call it with dry_run=true first: that returns the plan (answers per answerer and track, answerers skipped, estimated cost from recent runs, today's remaining budget, and whether it would be refused) and starts nothing. Without dry_run it returns the run id; poll get_run.",
+	addTool(srv, "start_run", "Start a run over a prompt set. Costs money: every prompt is answered by each configured assistant and graded. Call it with dry_run=true first: that returns the plan (answers per answerer and track, answerers skipped, estimated cost from recent runs, today's remaining budget, and whether it would be refused) and starts nothing. Without dry_run it returns the run id; wait_for_run blocks until it finishes, or poll get_run.",
 		func(ctx context.Context, a struct {
 			Set    string `json:"set" jsonschema:"prompt set id, from list_prompt_sets"`
 			DryRun bool   `json:"dry_run,omitempty" jsonschema:"plan the run and estimate its cost without starting it"`
@@ -98,6 +99,13 @@ func (s *Server) mcpHandler() http.Handler {
 				out = append(out, row{x.ID, x.Name, x.SetID, x.Status, x.CreatedAt, sum.Overall, sum.BrandRank()})
 			}
 			return out, nil
+		})
+	addTool(srv, "wait_for_run", "Wait for a run to finish, then return its status, headline rates and rank (the list_runs row). Finished means every answer is graded and the fix list is built, so get_run is complete. Blocks up to timeout_seconds (default 90, at most 600; keep it under your client's own tool timeout) and otherwise returns with timed_out=true and the run's progress so far (stage, answers done, errors, time left): call it again to keep waiting. A run that is queued with nothing running it (left from a restart) says so in note. Free.",
+		func(ctx context.Context, a struct {
+			Run            string `json:"run" jsonschema:"run id, from list_runs or start_run"`
+			TimeoutSeconds int    `json:"timeout_seconds,omitempty" jsonschema:"how long to wait before returning timed_out (default 90, max 600)"`
+		}) (any, error) {
+			return s.waitForRun(ctx, a.Run, a.TimeoutSeconds)
 		})
 	addTool(srv, "get_run", "One run: rates per answerer and track (and without branded prompts), share of voice with positions, head to head, objections (wordings Jev judged the same count as one, with a wordings count), sources by kind and host, cited pages by type (listicle, comparison, review, docs, forum...), an outreach list of hosts cited without the brand (and, when [exa] has run the prospects pass, prospects: pages like the cited listicles that no answer cited, with whom each names), the brand's pages found but not cited, the fix list, net sentiment with top praise and objections, the run's themes, the facts answers got wrong about the brand (when brand.facts are checked), one line per prompt, and, when [exa] is configured, the neutral retrieval baseline per host (prompts a neutral index ranks it for against prompts the assistants found it for, read as content, query or both), and, when [typesafe] has read the run, second_opinion: how many grades Jev agreed with, disagreed with or was unsure about, the agreement rate, and up to 10 disagreements. Use get_result for a full answer.",
 		func(ctx context.Context, a runArg) (any, error) {
@@ -479,6 +487,97 @@ func loopback(hostport string) bool {
 }
 
 // addTool registers a tool whose input schema comes from In's json and jsonschema tags.
+// RunWait is what wait_for_run returns: the run's state when it finished or when the wait ran
+// out. Rates and Rank are set only once it has finished; Progress only while it hasn't.
+type RunWait struct {
+	ID            string        `json:"id"`
+	SetID         string        `json:"set_id"`
+	Name          string        `json:"name"`
+	Status        string        `json:"status"`
+	Finished      bool          `json:"finished"`
+	TimedOut      bool          `json:"timed_out"`
+	WaitedSeconds int           `json:"waited_seconds"`
+	Error         string        `json:"error,omitempty"`
+	Note          string        `json:"note,omitempty"`
+	Progress      *app.Progress `json:"progress,omitempty"`
+	Rates         *report.Rates `json:"rates,omitempty"`
+	Rank          int           `json:"rank,omitempty"`
+}
+
+// waitPoll is how often wait_for_run looks again; a test shortens it.
+var waitPoll = 2 * time.Second
+
+// waitForRun blocks until the run is finished (its status is terminal, this process is no longer
+// running it, and no fix list is being built for it) or timeout seconds pass, whichever is
+// first, and returns where it stands. The client going away ends the wait.
+func (s *Server) waitForRun(ctx context.Context, id string, timeout int) (*RunWait, error) {
+	if timeout <= 0 {
+		timeout = 90
+	}
+	if timeout > 600 {
+		timeout = 600
+	}
+	if _, err := s.App.Runs.Get(ctx, id); err != nil {
+		return nil, fmt.Errorf("no run %q", id)
+	}
+	start := time.Now()
+	deadline := start.Add(time.Duration(timeout) * time.Second)
+	for {
+		r, err := s.App.Runs.Get(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		out := &RunWait{ID: r.ID, SetID: r.SetID, Name: r.Name, Status: r.Status, WaitedSeconds: int(time.Since(start).Seconds())}
+		if r.Error != nil {
+			out.Error = *r.Error
+		}
+		inFlight := r.Status == "queued" || r.Status == "running" || s.App.Runs.IsActive(id)
+		if !inFlight {
+			if p := s.App.RunProgress(ctx, id); p != nil {
+				inFlight = true
+				out.Progress = p
+			}
+		}
+		if !inFlight {
+			out.Finished = true
+			res, _ := s.App.Runs.Results(ctx, id)
+			sum := s.App.Summary(r, res)
+			rates := sum.Overall
+			out.Rates, out.Rank = &rates, sum.BrandRank()
+			return out, nil
+		}
+		if out.Progress == nil {
+			out.Progress = s.App.RunProgress(ctx, id)
+		}
+		if r.Status == "queued" && !s.App.Runs.IsActive(id) {
+			out.Note = "queued, and nothing is running it: a run left from a restart; retry it from the web UI"
+		}
+		if left := time.Until(deadline); left <= 0 {
+			out.TimedOut = true
+			return out, nil
+		} else if left < waitPoll {
+			if err := sleepCtx(ctx, left); err != nil {
+				return nil, err
+			}
+			continue
+		}
+		if err := sleepCtx(ctx, waitPoll); err != nil {
+			return nil, err
+		}
+	}
+}
+
+func sleepCtx(ctx context.Context, d time.Duration) error {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-t.C:
+		return nil
+	}
+}
+
 func addTool[In any](srv *mcp.Server, name, desc string, h func(context.Context, In) (any, error)) {
 	mcp.AddTool(srv, &mcp.Tool{Name: name, Description: desc}, wrap(h))
 }

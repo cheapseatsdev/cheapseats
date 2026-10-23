@@ -217,7 +217,9 @@ cheapseats version                        version and database schema
 
 - JSON API under `/api/` (status, sets, runs, fixes, quick wins, fix attempts, rankings, citations, searches, prompt review, search probe, site audit, citation check, crawlers, competitor suggestions):
   [reference](https://cheapseats.dev/docs/reference/).
-- MCP server at `/api/mcp` (Streamable HTTP). `get_run` includes net sentiment, themes, page
+- MCP server at `/api/mcp` (Streamable HTTP). `start_run` starts a run (`dry_run` first for the
+  plan and cost) and `wait_for_run` blocks until it has finished, answers graded and fix list
+  built, returning its rates, or returns its progress when the wait runs out. `get_run` includes net sentiment, themes, page
   types and, with `[typesafe]`, Jev's second opinion on the grades (agreed, disagreed, unsure and
   the disagreements); `get_result` the grade's evidence quote and Jev's verdict and sentence beside
   it; `get_citation_stability` has a set's run-to-run
