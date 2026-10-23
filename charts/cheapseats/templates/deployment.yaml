@@ -42,12 +42,21 @@ spec:
           envFrom:
             - secretRef:
                 name: {{ .Values.existingSecret }}
+            {{- with .Values.extraEnvFrom }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           env:
             - name: CHEAPSEATS_DATA_DIR
               value: /data
             {{- range $k, $v := .Values.env }}
+            {{- if or (hasSuffix "_API_KEY" $k) (hasSuffix "_TOKEN" $k) (hasSuffix "_TOKENS" $k) }}
+            {{- fail (printf "env.%s looks like a secret: put it in a Secret (existingSecret or extraEnv with secretKeyRef), not in values" $k) }}
+            {{- end }}
             - name: {{ $k }}
               value: {{ $v | quote }}
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
             {{- end }}
           # /healthz needs no token. Startup migrates the database first, so give it time.
           startupProbe:

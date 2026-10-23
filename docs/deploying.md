@@ -27,7 +27,7 @@ Mounting a checkout at `/config` instead of building an image works too, as in t
   `/data`; never run two against the same data. The Helm chart runs one replica and replaces it
   rather than rolling.
 - **Secrets in the environment:** `CHEAPSEATS_TOKENS` (Cheap Seats refuses to listen beyond localhost
-  without it), `ANTHROPIC_API_KEY` (grading), `OPENAI_API_KEY` for OpenAI answerers. Deployed
+  without it), `ANTHROPIC_API_KEY` (grading), `OPENAI_API_KEY` for OpenAI answerers, and `TYPESAFE_API_KEY` or `EXA_API_KEY` only with `[typesafe]` or `[exa]` in the config (or their `CHEAPSEATS_*_BASE_URL` proxies; see [Optional providers](optional-providers.md)). Deployed
   answerers use the APIs: the image has no Claude Code or Codex CLI, and `cheapseats check` fails on a
   config that needs one.
 - **Time to stop.** On SIGTERM Cheap Seats marks runs in progress as interrupted, and resumes them on

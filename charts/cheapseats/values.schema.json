@@ -5,61 +5,181 @@
   "type": "object",
   "additionalProperties": false,
   "properties": {
-    "global": { "type": "object" },
-    "nameOverride": { "type": "string" },
+    "global": {
+      "type": "object"
+    },
+    "nameOverride": {
+      "type": "string"
+    },
     "image": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "repository": { "type": "string" },
-        "tag": { "type": "string" },
-        "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] }
+        "repository": {
+          "type": "string"
+        },
+        "tag": {
+          "type": "string"
+        },
+        "pullPolicy": {
+          "type": "string",
+          "enum": [
+            "Always",
+            "IfNotPresent",
+            "Never"
+          ]
+        }
       }
     },
     "imagePullSecrets": {
       "type": "array",
-      "items": { "type": "object", "required": ["name"], "properties": { "name": { "type": "string" } } }
+      "items": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        }
+      }
     },
-    "existingSecret": { "type": "string" },
+    "existingSecret": {
+      "type": "string"
+    },
     "env": {
       "type": "object",
-      "additionalProperties": { "type": ["string", "number", "boolean"] }
+      "additionalProperties": {
+        "type": [
+          "string",
+          "number",
+          "boolean"
+        ]
+      }
     },
     "persistence": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "size": { "type": "string" },
-        "storageClass": { "type": "string" },
-        "existingClaim": { "type": "string" }
+        "size": {
+          "type": "string"
+        },
+        "storageClass": {
+          "type": "string"
+        },
+        "existingClaim": {
+          "type": "string"
+        }
       }
     },
     "service": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "type": { "type": "string", "enum": ["ClusterIP", "NodePort", "LoadBalancer"] },
-        "port": { "type": "integer", "minimum": 1, "maximum": 65535 }
+        "type": {
+          "type": "string",
+          "enum": [
+            "ClusterIP",
+            "NodePort",
+            "LoadBalancer"
+          ]
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        }
       }
     },
     "ingress": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "enabled": { "type": "boolean" },
-        "className": { "type": "string" },
-        "annotations": { "type": "object", "additionalProperties": { "type": "string" } },
-        "host": { "type": "string" },
-        "tls": { "type": "array", "items": { "type": "object" } }
+        "enabled": {
+          "type": "boolean"
+        },
+        "className": {
+          "type": "string"
+        },
+        "annotations": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "host": {
+          "type": "string"
+        },
+        "tls": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
       }
     },
-    "resources": { "type": "object" },
-    "terminationGracePeriodSeconds": { "type": "integer", "minimum": 0 },
-    "extraVolumes": { "type": "array", "items": { "type": "object" } },
-    "extraVolumeMounts": { "type": "array", "items": { "type": "object" } },
-    "nodeSelector": { "type": "object", "additionalProperties": { "type": "string" } },
-    "tolerations": { "type": "array", "items": { "type": "object" } },
-    "affinity": { "type": "object" },
-    "podAnnotations": { "type": "object", "additionalProperties": { "type": "string" } }
+    "resources": {
+      "type": "object"
+    },
+    "terminationGracePeriodSeconds": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "extraVolumes": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "extraVolumeMounts": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "nodeSelector": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "tolerations": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "affinity": {
+      "type": "object"
+    },
+    "podAnnotations": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "extraEnv": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "EnvVar entries passed through: single keys from Secrets via valueFrom.secretKeyRef."
+    },
+    "extraEnvFrom": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      },
+      "description": "EnvFromSource entries passed through: whole Secrets or ConfigMaps."
+    }
   }
 }

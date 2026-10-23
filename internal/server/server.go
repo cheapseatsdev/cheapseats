@@ -557,6 +557,8 @@ type RunData struct {
 	Fixes     []analysis.Fix
 	FixError  *string
 	Answerers []string
+	// The coverage check's pages per prompt (index), when [exa] has checked this run.
+	Coverage map[int]*app.CoverageRow `json:"coverage,omitempty"`
 	// The work submitted for this run's fixes, and for earlier fixes for the same pages, and when
 	// the fix list was built (FixAttempts.Status).
 	Attempts app.FixAttempts `json:"-"`
@@ -622,6 +624,7 @@ func (s *Server) runData(ctx context.Context, id string) (*RunData, error) {
 	d.Insights, d.FixesAt = insights.String, fixesAt.String
 	d.Progress = s.App.RunProgress(ctx, id)
 	d.Opinion = s.App.Runs.Opinion(ctx, id, res)
+	d.Coverage = s.App.Coverage(ctx, id, res)
 	for _, a := range r.Snapshot.Answerers {
 		d.Answerers = append(d.Answerers, a.ID)
 	}

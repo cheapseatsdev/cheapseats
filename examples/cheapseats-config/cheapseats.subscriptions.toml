@@ -175,6 +175,19 @@ every_days = 1
 every_days = 7
 max_samples = 1
 
+# Optional providers (docs/optional-providers.md); absent means off. [typesafe]: after each run,
+# TypeSafe's Jev decides whether product names the grader wrote differently are one product, and
+# the share-of-voice board folds them. [exa]: after each run, one Exa search per prompt over the
+# brand's sites says which of your own pages answer it. Each needs its key (TYPESAFE_API_KEY,
+# EXA_API_KEY) or a key-adding proxy (CHEAPSEATS_TYPESAFE_BASE_URL, CHEAPSEATS_EXA_BASE_URL), and
+# its [pricing] entry below.
+# [typesafe]
+# model = "jev-1.14.0"
+# min_confidence = 0.8
+#
+# [exa]
+# results = 3
+
 [owners]
 # Who picks up each kind of fix. Unlisted gaps go to `default`. Leave blank until you name owners.
 default = ""
@@ -210,3 +223,12 @@ input = 2.0
 output = 10.0
 cache_read = 0.10
 search_per_1k = 10.0
+
+# The optional providers (https://docs.typesafe.ai/models, https://exa.ai/pricing, 2026-10-23).
+# Jev bills input only; an Exa search is priced per search, and Exa's own estimate is used when
+# it returns one.
+[pricing."jev-1.14.0"]
+input = 0.042
+
+[pricing.exa-search]
+search_per_1k = 4.0

@@ -28,6 +28,9 @@ type Readiness struct {
 	Analyst   Usable   `json:"analyst"`
 	// A run can start: at least one answerer and the grader are usable.
 	CanRun bool `json:"can_run"`
+	// The optional providers the config turns on ([typesafe], [exa]), and whether each can be
+	// called here: a key, or a key-adding proxy.
+	Optional []Usable `json:"optional,omitempty"`
 }
 
 func (a *App) Readiness() Readiness {
@@ -43,6 +46,12 @@ func (a *App) Readiness() Readiness {
 		r.Answerers = append(r.Answerers, u)
 	}
 	r.CanRun = some && r.Grader.Usable
+	if a.Cfg.TypeSafe != nil {
+		r.Optional = append(r.Optional, use("typesafe", config.TypeSafeProvider))
+	}
+	if a.Cfg.Exa != nil {
+		r.Optional = append(r.Optional, use("exa", config.ExaProvider))
+	}
 	return r
 }
 

@@ -11,12 +11,29 @@ imagePullSecrets: []   # e.g. [{name: ghcr}] for a private registry
 # Deployment, Service and data volume keep their names: changing them would start on an empty disk.
 nameOverride: ""
 
-# A Secret holding the environment: CHEAPSEATS_TOKENS (required: Cheap Seats listens beyond localhost
-# here), ANTHROPIC_API_KEY (required: grading), and OPENAI_API_KEY if an answerer uses it.
-# Create it yourself; the chart never takes keys as values.
+# Secrets never go in values: the chart fails on a value that looks like one. They reach the pod
+# from Secrets you create, in one of two ways.
+#
+# 1. existingSecret (required): a Secret whose keys are environment variables, loaded whole:
+#    CHEAPSEATS_TOKENS (required: Cheap Seats listens beyond localhost here), ANTHROPIC_API_KEY
+#    (required: grading), OPENAI_API_KEY if an answerer uses it, and the optional providers'
+#    TYPESAFE_API_KEY and EXA_API_KEY if the config has [typesafe] or [exa].
+#      kubectl create secret generic cheapseats --from-literal=CHEAPSEATS_TOKENS=... --from-literal=ANTHROPIC_API_KEY=...
 existingSecret: ""
+# 2. Or pick single keys out of any Secrets (or ConfigMaps) with ordinary EnvVar and EnvFromSource
+#    entries, passed through as written:
+#      extraEnv:
+#        - name: TYPESAFE_API_KEY
+#          valueFrom: {secretKeyRef: {name: provider-keys, key: typesafe}}
+#      extraEnvFrom:
+#        - secretRef: {name: more-keys}
+extraEnv: []
+extraEnvFrom: []
 
-# Extra environment, e.g. CHEAPSEATS_CONFIG_REV when the config image doesn't set it.
+# Plain environment, for values that are not secrets: CHEAPSEATS_CONFIG_REV when the config image
+# doesn't set it, or the key-adding proxies that make a key unnecessary (exe.dev integrations):
+# CHEAPSEATS_ANTHROPIC_BASE_URL, CHEAPSEATS_TYPESAFE_BASE_URL, CHEAPSEATS_EXA_BASE_URL.
+# A name ending in _API_KEY, _TOKEN or _TOKENS here fails the install: put it in a Secret.
 env: {}
 
 # The database. Cheap Seats is one always-on instance on one volume: the chart runs a single replica

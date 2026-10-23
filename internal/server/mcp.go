@@ -513,7 +513,10 @@ func runDigest(d *RunData) any {
 		TopPicks    []report.Count `json:"top_picks"`
 		FirstParty  bool           `json:"first_party_page_surfaced"`
 		Branded     bool           `json:"branded,omitempty"` // names the brand: left out of unbranded
-		Results     []string       `json:"results"`           // "id answerer/track: verdict"
+		// The brand's own pages a neutral index (Exa) finds for the prompt, each "url (status)",
+		// present only when the run was coverage-checked; empty means none found.
+		OwnPages []string `json:"own_pages,omitempty"`
+		Results  []string `json:"results"` // "id answerer/track: verdict"
 	}
 	sum := d.Summary
 	prompts := []prompt{}
@@ -524,6 +527,12 @@ func runDigest(d *RunData) any {
 			row.Intent = "info"
 		} else {
 			row.Recommended = fmt.Sprintf("%d/%d", p.Rates.Recommended.Hits, p.Rates.Recommended.N)
+		}
+		if c, ok := d.Coverage[p.Idx]; ok {
+			row.OwnPages = []string{}
+			for _, pg := range c.Pages {
+				row.OwnPages = append(row.OwnPages, pg.URL+" ("+pg.Status+")")
+			}
 		}
 		for _, r := range d.Results {
 			if r.PromptIdx != p.Idx {
