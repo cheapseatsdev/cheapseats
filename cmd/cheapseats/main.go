@@ -81,9 +81,6 @@ func main() {
 		level = slog.LevelDebug
 	}
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level})))
-	if old := env.Old(); len(old) > 0 {
-		slog.Warn("Popcorn is now Cheap Seats: rename these to CHEAPSEATS_ (the old names still work for now)", "vars", strings.Join(old, ","))
-	}
 	if len(os.Args) < 2 {
 		fmt.Print(usage)
 		os.Exit(2)

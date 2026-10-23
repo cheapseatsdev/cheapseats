@@ -8,9 +8,9 @@ import (
 	_ "embed"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
-	"github.com/cheapseatsdev/cheapseats/internal/env"
 	_ "modernc.org/sqlite"
 )
 
@@ -70,9 +70,8 @@ func open(dataDir string, n int) (*DB, error) {
 	}
 	// _txlock=immediate: every transaction here reads and then writes, and a deferred one that read
 	// before another committed can't take the write lock (SQLITE_BUSY, which busy_timeout doesn't
-	// wait out). Taking it at BEGIN makes concurrent writers queue on busy_timeout instead. A data
-	// directory from before the rename keeps its popcorn.db.
-	path := env.File(dataDir, "cheapseats.db", "popcorn.db")
+	// wait out). Taking it at BEGIN makes concurrent writers queue on busy_timeout instead.
+	path := filepath.Join(dataDir, "cheapseats.db")
 	dsn := "file:" + path + "?_pragma=journal_mode(WAL)&_pragma=busy_timeout(10000)&_pragma=foreign_keys(1)&_txlock=immediate"
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {

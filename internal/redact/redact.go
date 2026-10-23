@@ -11,7 +11,7 @@ import (
 )
 
 func Values(extra ...string) []string {
-	for _, k := range []string{"ANTHROPIC_API_KEY", "OPENAI_API_KEY", "CHEAPSEATS_TOKENS", "POPCORN_TOKENS"} {
+	for _, k := range []string{"ANTHROPIC_API_KEY", "OPENAI_API_KEY", "CHEAPSEATS_TOKENS"} {
 		for _, v := range strings.Split(os.Getenv(k), ",") {
 			extra = append(extra, v)
 		}

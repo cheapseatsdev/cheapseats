@@ -255,15 +255,3 @@ func TestAuditSite(t *testing.T) {
 		t.Errorf("%v", res.Findings)
 	}
 }
-
-// A robots.txt written for Popcorn-Audit, before the rename, still applies.
-func TestRobotsHonorsTheOldToken(t *testing.T) {
-	old := ParseRobots("User-agent: Popcorn-Audit\nDisallow: /private\n")
-	if allowsUs(old, "/private/x") || !allowsUs(old, "/public") {
-		t.Error("ignored a rule for Popcorn-Audit")
-	}
-	both := ParseRobots("User-agent: Popcorn-Audit\nDisallow: /\n\nUser-agent: CheapSeats-Audit\nAllow: /\n")
-	if !allowsUs(both, "/x") {
-		t.Error("a rule for CheapSeats-Audit should win over the old token's")
-	}
-}

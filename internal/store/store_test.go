@@ -2,8 +2,6 @@ package store
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"sync"
 	"testing"
 )
@@ -60,36 +58,6 @@ func TestConcurrentReadThenWriteTransactions(t *testing.T) {
 	var n int
 	if err := db.QueryRow(`SELECT n FROM counter`).Scan(&n); err != nil || n != workers*rounds {
 		t.Fatalf("counter = %d, want %d (%v): increments were lost", n, workers*rounds, err)
-	}
-}
-
-// A data directory from before the rename keeps its popcorn.db; a new one gets cheapseats.db.
-func TestOpenKeepsTheOldDatabase(t *testing.T) {
-	dir := t.TempDir()
-	db, err := Open(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.Exec(`PRAGMA application_id = 42`); err != nil {
-		t.Fatal(err)
-	}
-	db.Close()
-	for _, f := range []string{"cheapseats.db", "cheapseats.db-wal", "cheapseats.db-shm"} {
-		if _, err := os.Stat(filepath.Join(dir, f)); err == nil {
-			os.Rename(filepath.Join(dir, f), filepath.Join(dir, "popcorn"+f[len("cheapseats"):]))
-		}
-	}
-	db, err = Open(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	var id int
-	if err := db.QueryRow(`PRAGMA application_id`).Scan(&id); err != nil || id != 42 {
-		t.Errorf("opened a different database: %d %v", id, err)
-	}
-	if _, err := os.Stat(filepath.Join(dir, "cheapseats.db")); err == nil {
-		t.Error("made a new cheapseats.db beside popcorn.db")
 	}
 }
 

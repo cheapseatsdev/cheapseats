@@ -37,27 +37,6 @@ Mounting a checkout at `/config` instead of building an image works too, as in t
   ([sharing](sharing.md)). Set `CHEAPSEATS_PUBLIC_URL` to the address people reach Cheap Seats at, so the
   links point there; a proxy that signs people in must let `/share/` through for them to work.
 
-## Upgrading from Popcorn
-
-Cheap Seats was called Popcorn until v0.3.0. An existing deployment upgrades without changes, and
-can rename at its own pace:
-
-- **Environment.** Every `POPCORN_*` variable still works, with a warning at startup naming the
-  ones to rename to `CHEAPSEATS_*`. Where both are set, `CHEAPSEATS_*` wins.
-- **Files.** A config repo's `popcorn.toml` and a data directory's `popcorn.db` are used where
-  `cheapseats.toml` and `cheapseats.db` don't exist. Rename them only with Cheap Seats stopped.
-- **Image and chart.** They move to `ghcr.io/cheapseatsdev/cheapseats` and
-  `oci://ghcr.io/cheapseatsdev/charts/cheapseats`. The old ones stay pullable at the versions
-  they have. Change your config image's `FROM` line.
-- **Helm.** Upgrade a release installed from the popcorn chart with `--set nameOverride=popcorn`
-  (or `nameOverride: popcorn` in its values). Without it the chart's resources get new names: the
-  upgrade fails on the Deployment's selector, and a new volume claim would start on an empty disk.
-- **exe.dev.** `deploy/exe-dev.sh` moves `~/popcorn` to `~/cheapseats` on its first run, with the
-  service stopped, and copies the database to `backups/pre-rename.db` first.
-- **Sign-ins, audits, MCP.** Browsers signed in stay signed in. A robots.txt rule for
-  `Popcorn-Audit` still applies to the site audit, which now sends `CheapSeats-Audit`. An MCP
-  client keeps working at the same URL; its server is now named `cheapseats-<brand>`.
-
 ## Backups
 
 `cheapseats backup <file>` takes a consistent copy of the live database (SQLite's `VACUUM INTO`); copying

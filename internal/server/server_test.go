@@ -334,16 +334,14 @@ func TestDashboardShowsProgress(t *testing.T) {
 
 func TestTokens(t *testing.T) {
 	t.Setenv("CHEAPSEATS_TOKENS", "a,b")
-	s := &Server{tokens: []string{"a", "b"}, cookie: "cheapseats_token_x", oldCookie: "popcorn_token_x"}
+	s := &Server{tokens: []string{"a", "b"}, cookie: "cheapseats_token_x"}
 	h := s.auth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) }))
 	for _, c := range []struct {
 		path, auth string
 		code       int
 	}{{"/api/runs", "", 401}, {"/api/runs", "Bearer b", 200}, {"/api/runs", "Bearer c", 401}, {"/", "", 303}, {"/login", "", 200},
 		// Another deployment's cookie on the same host doesn't count, this one's does.
-		{"/", "cookie cheapseats_token_other=a", 303}, {"/", "cookie cheapseats_token_x=a", 200},
-		// A sign-in from before the rename still counts.
-		{"/", "cookie popcorn_token_x=a", 200}, {"/", "cookie popcorn_token_x=c", 303}} {
+		{"/", "cookie cheapseats_token_other=a", 303}, {"/", "cookie cheapseats_token_x=a", 200}} {
 		rec := httptest.NewRecorder()
 		req := httptest.NewRequest("GET", c.path, nil)
 		if v, ok := strings.CutPrefix(c.auth, "cookie "); ok {
@@ -355,11 +353,6 @@ func TestTokens(t *testing.T) {
 		h.ServeHTTP(rec, req)
 		if rec.Code != c.code {
 			t.Errorf("%s %q: %d", c.path, c.auth, rec.Code)
-		}
-		if c.auth == "cookie popcorn_token_x=a" {
-			if got := strings.Join(rec.Header().Values("Set-Cookie"), "; "); !strings.Contains(got, "cheapseats_token_x=a") || !strings.Contains(got, "popcorn_token_x=;") {
-				t.Errorf("the old cookie isn't carried over: %s", got)
-			}
 		}
 	}
 }

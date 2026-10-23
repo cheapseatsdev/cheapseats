@@ -173,20 +173,6 @@ func TestThemesAndSampling(t *testing.T) {
 	}
 }
 
-// A config repo from before the rename has popcorn.toml, and CHEAPSEATS_CONFIG (or the image's
-// default) names cheapseats.toml.
-func TestLoadFindsTheOldConfigName(t *testing.T) {
-	dir := t.TempDir()
-	b, err := os.ReadFile("../../examples/cheapseats-config/cheapseats.toml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	os.WriteFile(filepath.Join(dir, "popcorn.toml"), b, 0o644)
-	if _, err := Load(filepath.Join(dir, "cheapseats.toml")); err != nil {
-		t.Fatal(err)
-	}
-}
-
 func TestOptionalProviders(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "cheapseats.toml")
 	os.WriteFile(p, []byte("[brand]\nname = \"Acme\"\n"), 0o644)
