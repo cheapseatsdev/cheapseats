@@ -109,7 +109,8 @@ type Options struct {
 	Pages int
 	Now   func() time.Time
 	// Sites on a platform the brand doesn't control (its GitHub, a forum): their pages are
-	// fetched, and crawler access checked, but their markup isn't the brand's to fix.
+	// fetched and crawler access recorded, but the host's robots.txt, firewall and markup aren't
+	// the brand's to fix, so they raise no findings.
 	Hosted map[string]bool
 }
 
@@ -164,6 +165,9 @@ type siteAudit struct {
 }
 
 func (a *siteAudit) add(sev Severity, check, u, msg, fix string) {
+	if a.o.Hosted[a.site] && !strings.HasPrefix(check, "page.") && check != "site.invalid" {
+		return // the host's robots.txt, firewall, llms.txt and sitemap: not the brand's to fix (bot access is still recorded in Bots)
+	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.findings = append(a.findings, Finding{Severity: sev, Site: a.site, URL: u, Check: check, Message: msg, Fix: fix})

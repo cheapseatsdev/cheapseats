@@ -229,9 +229,29 @@ func TestAuditSite(t *testing.T) {
 	for _, f := range res.Findings {
 		checks[f.Check] = true
 	}
-	// A path on a host: robots.txt applies to the path; llms.txt and the sitemap are the host's.
-	// On a platform the brand doesn't control, its markup isn't checked.
-	if !checks["robots.blocks-ai-search"] || checks["llms.missing"] || checks["sitemap.missing"] || !checks["site.invalid"] || checks["page.jsonld-missing"] {
+	// On a platform the brand doesn't control, the host's robots.txt isn't the brand's to fix:
+	// the block is recorded against the bot, not raised as a finding. Nor are the host's
+	// llms.txt, sitemap or markup checked.
+	var blocked []string
+	for _, b := range s.Bots {
+		if !b.Allowed {
+			blocked = append(blocked, b.Bot)
+		}
+	}
+	if len(blocked) != 1 || blocked[0] != "Claude-SearchBot" {
+		t.Errorf("blocked %v, want Claude-SearchBot", blocked)
+	}
+	if checks["robots.blocks-ai-search"] || checks["llms.missing"] || checks["sitemap.missing"] || !checks["site.invalid"] || checks["page.jsonld-missing"] {
+		t.Errorf("%v", res.Findings)
+	}
+	// A path on a host the brand does control: robots.txt applies to the path and is reported;
+	// llms.txt and the sitemap are the host's and aren't checked.
+	res = Run(context.Background(), []string{srv.URL + "/team"}, Options{})
+	checks = map[string]bool{}
+	for _, f := range res.Findings {
+		checks[f.Check] = true
+	}
+	if !checks["robots.blocks-ai-search"] || checks["llms.missing"] || checks["sitemap.missing"] {
 		t.Errorf("%v", res.Findings)
 	}
 }
