@@ -47,6 +47,7 @@ model = "g"
 [[competitors]]
 name = "Profound"
 aliases = ["tryprofound"]
+domains = ["tryprofound.com"]
 
 [typesafe]
 model = "jev-1.14.0"
