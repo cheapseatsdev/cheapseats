@@ -1,9 +1,8 @@
 <h1><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/logo-dark.svg"><img src="docs/images/logo-light.svg" alt="Cheap Seats" width="360"></picture></h1>
 
-Cheap Seats (formerly Popcorn) is an open-source (MIT) AI visibility tracker I wrote to make my own
-product better. It asks your buyers' questions of AI assistants, grades whether they recommend you,
-and builds a ranked list of fixes, running on the Claude subscription you already have (ChatGPT
-optional).
+Cheap Seats is an open-source (MIT) AI visibility tracker I wrote to make my own product better. It
+asks your buyers' questions of AI assistants, grades whether they recommend you, and builds a ranked
+list of fixes, running on the Claude subscription you already have (ChatGPT optional).
 
 It draws on a lot of inspiration, [Gauge](https://withgauge.com) first among them, along with
 Profound and Peec AI. It's free, and always will be: no hosted tier, no upsell. I hope you find it
@@ -30,10 +29,6 @@ are plain text in your own repo, so they come with you. Site and docs: [cheapsea
 - **Docs and comparisons.** [cheapseats.dev/docs](https://cheapseats.dev/docs/), how it compares
   with the paid trackers at [cheapseats.dev/compare](https://cheapseats.dev/compare/), and what it
   costs to run at [cost and budget](https://cheapseats.dev/docs/cost-and-budget/).
-
-Cheap Seats was called Popcorn until October 2026, renamed so it isn't confused with an unrelated
-paid product. Upgrading from Popcorn needs no changes: see
-[Upgrading from Popcorn](docs/deploying.md#upgrading-from-popcorn).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/dashboard-dark.webp">
