@@ -1,14 +1,22 @@
 {{define "title"}}Search probe · {{end}}{{define "body"}}
 <h1>Search probe</h1>
-<p class="sub">Run one query through the web search tool the answerers use{{with .Model}} (<span class="mono">{{.}}</span>){{end}}, and see the result exactly as the model receives it: the links in order, before it writes anything. Each probe costs a few cents.</p>
+<p class="sub">Run one query through the web search tool the answerers use{{with .Model}} (<span class="mono">{{.}}</span>){{end}}, and see the result exactly as the model receives it: the links in order, before it writes anything. Each probe costs a few cents.{{if .Exa}} Exa, a neutral index, is the second engine: run both to see whether a result is the assistant's or the web's.{{end}}</p>
 <form method="post" action="/search">
 <label>Query <input name="query" required class="full" value="{{with .Form}}{{index . "query" | first}}{{end}}" placeholder="a question a buyer would type"></label>
 <label>Domains (optional, comma-separated) <input name="domains" class="full" value="{{with .Form}}{{index . "domains" | first}}{{end}}" placeholder="{{domains}}"></label>
 <label>Use the domains to <select name="mode"><option value="allow">only search these</option><option value="block" {{with .Form}}{{if eq (index . "mode" | first) "block"}}selected{{end}}{{end}}>leave these out</option></select></label>
+{{if .Exa}}{{$engine := ""}}{{with .Form}}{{$engine = index . "engine" | first}}{{end}}<label>Engine <select name="engine"><option value="claude">Claude's web search</option><option value="exa" {{if eq $engine "exa"}}selected{{end}}>Exa</option><option value="both" {{if eq $engine "both"}}selected{{end}}>both, compared</option></select></label>{{end}}
 <button>{{icon "search"}}Search</button></form>
 {{with .Error}}<p class="err">{{.}}</p>{{end}}
-{{with .Result}}{{if .RanAt}}<h2>{{len .Links}} results for “{{.Query}}”</h2>
-<p class="muted">{{.Model}} · {{money .CostUSD}} · {{.DurationMS}} ms{{with .Error}} · <span class="err">{{.}}</span>{{end}}</p>
-<ol>{{range .Links}}<li><a href="{{.URL}}">{{if .Title}}{{.Title}}{{else}}{{.URL}}{{end}}</a>{{if isfirst .URL}} <span class="chip">first-party</span>{{end}}<div class="muted mono">{{.URL}}</div></li>{{end}}</ol>
-<details><summary class="muted">What the model passed to the tool, and the raw result</summary><pre>{{json .ToolInput}}</pre><pre>{{printf "%s" .Output}}</pre></details>{{end}}{{end}}
+{{with .Result}}{{if .RanAt}}<h2>{{len .Links}} results for “{{.Query}}”</h2>{{template "probe-result" .}}{{end}}{{end}}
+{{with .Compare}}{{if .Claude.RanAt}}<h2>Claude and Exa for “{{.Query}}”</h2>
+<p class="muted">{{len .Overlap}} in both · {{len .OnlyClaude}} only Claude · {{len .OnlyExa}} only Exa · {{money .CostUSD}}</p>
+<h3>In both</h3>{{if .Overlap}}<ul>{{range .Overlap}}<li><a href="{{.}}" class="mono">{{.}}</a>{{if isfirst .}} <span class="chip">first-party</span>{{end}}</li>{{end}}</ul>{{else}}<p class="muted">No page in common.</p>{{end}}
+<h3>Only Claude</h3>{{if .OnlyClaude}}<ul>{{range .OnlyClaude}}<li><a href="{{.}}" class="mono">{{.}}</a>{{if isfirst .}} <span class="chip">first-party</span>{{end}}</li>{{end}}</ul>{{else}}<p class="muted">None.</p>{{end}}
+<h3>Only Exa</h3>{{if .OnlyExa}}<ul>{{range .OnlyExa}}<li><a href="{{.}}" class="mono">{{.}}</a>{{if isfirst .}} <span class="chip">first-party</span>{{end}}</li>{{end}}</ul>{{else}}<p class="muted">None.</p>{{end}}
+<h3>Claude: {{len .Claude.Links}} results</h3>{{template "probe-result" .Claude}}
+<h3>Exa: {{len .Exa.Links}} results</h3>{{template "probe-result" .Exa}}{{end}}{{end}}
 {{end}}
+{{define "probe-result"}}<p class="muted">{{.Model}} · {{money .CostUSD}} · {{.DurationMS}} ms{{with .Error}} · <span class="err">{{.}}</span>{{end}}</p>
+<ol>{{range .Links}}<li><a href="{{.URL}}">{{if .Title}}{{.Title}}{{else}}{{.URL}}{{end}}</a>{{if isfirst .URL}} <span class="chip">first-party</span>{{end}}<div class="muted mono">{{.URL}}</div></li>{{end}}</ol>
+<details><summary class="muted">What was passed to the engine, and the raw result</summary><pre>{{json .ToolInput}}</pre><pre>{{printf "%s" .Output}}</pre></details>{{end}}

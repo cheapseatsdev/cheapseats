@@ -1296,18 +1296,21 @@ func (s *Server) apiRankings(w http.ResponseWriter, r *http.Request) {
 
 // --- search probe and citations ---
 
-func (s *Server) probe(ctx context.Context, in probe.Input) (probe.Result, error) {
+// probe runs the input's engine: a probe.Result for claude (the default) and exa, a
+// probe.Compare for both. The Exa client is the app's, so the call is budgeted like the passes.
+func (s *Server) probe(ctx context.Context, in probe.Input) (any, error) {
 	ctx = llm.WithOperation(llm.WithAccounting(ctx, s.App.Runs.Budget), "search-probe")
-	return probe.Run(ctx, s.App.Cfg, in)
+	in.Exa = s.App.Exa()
+	return probe.Probe(ctx, s.App.Cfg, in)
 }
 
 func (s *Server) searchPage(w http.ResponseWriter, r *http.Request) {
 	model, _ := probe.Model(s.App.Cfg)
-	s.render(w, "search", map[string]any{"Model": model})
+	s.render(w, "search", map[string]any{"Model": model, "Exa": s.App.Cfg.Exa != nil})
 }
 
 func (s *Server) searchForm(w http.ResponseWriter, r *http.Request) {
-	in := probe.Input{Query: r.FormValue("query")}
+	in := probe.Input{Query: r.FormValue("query"), Engine: r.FormValue("engine")}
 	if d := probe.Domains(r.FormValue("domains")); len(d) > 0 {
 		if r.FormValue("mode") == "block" {
 			in.BlockedDomains = d
@@ -1315,8 +1318,14 @@ func (s *Server) searchForm(w http.ResponseWriter, r *http.Request) {
 			in.AllowedDomains = d
 		}
 	}
-	res, err := s.probe(r.Context(), in)
-	data := map[string]any{"Form": r.Form, "Result": res}
+	out, err := s.probe(r.Context(), in)
+	data := map[string]any{"Form": r.Form, "Exa": s.App.Cfg.Exa != nil}
+	switch v := out.(type) {
+	case probe.Result:
+		data["Result"] = v
+	case probe.Compare:
+		data["Compare"] = v
+	}
 	if err != nil {
 		data["Error"] = err.Error()
 	}
@@ -1327,15 +1336,15 @@ func (s *Server) searchForm(w http.ResponseWriter, r *http.Request) {
 func (s *Server) apiSearchProbe(w http.ResponseWriter, r *http.Request) {
 	var in probe.Input
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16384)).Decode(&in); err != nil {
-		httpErr(w, errors.New(`body must be {"query": "...", "allowed_domains"?: [...], "blocked_domains"?: [...]}`), 400)
+		httpErr(w, errors.New(`body must be {"query": "...", "allowed_domains"?: [...], "blocked_domains"?: [...], "engine"?: "claude"|"exa"|"both"}`), 400)
 		return
 	}
-	res, err := s.probe(r.Context(), in)
+	out, err := s.probe(r.Context(), in)
 	if err != nil {
 		httpErr(w, err, 400)
 		return
 	}
-	writeJSON(w, res)
+	writeJSON(w, out)
 }
 
 func (s *Server) apiCitations(w http.ResponseWriter, r *http.Request) {

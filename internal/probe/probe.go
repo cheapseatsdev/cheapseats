@@ -12,6 +12,7 @@ import (
 
 	"github.com/cheapseatsdev/cheapseats/internal/answer"
 	"github.com/cheapseatsdev/cheapseats/internal/config"
+	"github.com/cheapseatsdev/cheapseats/internal/exa"
 	"github.com/cheapseatsdev/cheapseats/internal/llm"
 )
 
@@ -21,6 +22,11 @@ type Input struct {
 	AllowedDomains []string `json:"allowed_domains,omitempty"`
 	// Never return results from these domains.
 	BlockedDomains []string `json:"blocked_domains,omitempty"`
+	// Which engine: claude (the default: the answerers' web search tool), exa (Exa's neutral
+	// index, when [exa] is configured), or both, which runs the two and compares their URLs.
+	Engine string `json:"engine,omitempty" jsonschema:"claude (default), exa, or both; exa and both need [exa] in the config"`
+	// Exa is the client for engine exa and both; the caller sets it (the probe never builds one).
+	Exa *exa.Client `json:"-"`
 }
 
 type Result struct {
@@ -59,6 +65,15 @@ func Run(ctx context.Context, cfg *config.Config, in Input) (Result, error) {
 	}
 	if len(in.AllowedDomains) > 0 && len(in.BlockedDomains) > 0 {
 		return Result{}, errors.New("use allowed domains or blocked domains, not both")
+	}
+	switch in.Engine {
+	case "", EngineClaude:
+	case EngineExa:
+		return runExa(ctx, cfg, in, q)
+	case EngineBoth:
+		return Result{}, errors.New("engine both returns two results: use Both or Probe")
+	default:
+		return Result{}, fmt.Errorf("unknown engine %q: claude, exa or both", in.Engine)
 	}
 	model, err := Model(cfg)
 	if err != nil {
