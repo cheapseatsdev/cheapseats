@@ -175,6 +175,8 @@ cheapseats check-citations <run-id>       which cited pages name you, and which 
 cheapseats probe [-engine exa|claude|both] [-domains a,b] "<query>"
                                        one query through the answerers' web search tool, Exa's
                                        neutral index ([exa] in the config), or both compared
+
+cheapseats baseline <run-id>              each prompt as a plain web search, against the answers ([exa])
 cheapseats crawl import <logfile>...      AI crawler fetches and AI referrals from access logs
 cheapseats crawl report [-days 30]        those counts per page, beside how often runs cite it
 cheapseats themes <run-id> [-rebuild]     net sentiment and the run's themes

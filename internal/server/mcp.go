@@ -99,7 +99,7 @@ func (s *Server) mcpHandler() http.Handler {
 			}
 			return out, nil
 		})
-	addTool(srv, "get_run", "One run: rates per answerer and track (and without branded prompts), share of voice with positions, head to head, objections, sources by kind and host, cited pages by type (listicle, comparison, review, docs, forum...), an outreach list of hosts cited without the brand, the brand's pages found but not cited, the fix list, net sentiment with top praise and objections, the run's themes, and one line per prompt. Use get_result for a full answer.",
+	addTool(srv, "get_run", "One run: rates per answerer and track (and without branded prompts), share of voice with positions, head to head, objections, sources by kind and host, cited pages by type (listicle, comparison, review, docs, forum...), an outreach list of hosts cited without the brand, the brand's pages found but not cited, the fix list, net sentiment with top praise and objections, the run's themes, one line per prompt, and, when [exa] is configured, the neutral retrieval baseline per host (prompts a neutral index ranks it for against prompts the assistants found it for, read as content, query or both). Use get_result for a full answer.",
 		func(ctx context.Context, a runArg) (any, error) {
 			d, err := s.runData(ctx, a.Run)
 			if err != nil {
@@ -559,6 +559,10 @@ func runDigest(d *RunData) any {
 		f.ClaudePrompt = ""
 		fixes = append(fixes, f)
 	}
+	var neutral []app.BaselineHost
+	if d.Baseline != nil {
+		neutral = head(d.Baseline.Hosts, 10)
+	}
 	// The snapshot is everything that shaped the run, which /api/runs/{id} has in full.
 	r := *d.Run
 	r.Snapshot = run.Snapshot{}
@@ -583,8 +587,12 @@ func runDigest(d *RunData) any {
 		Insights       string              `json:"insights"`
 		Opinion        opinion.Report      `json:"opinion"`
 		Prompts        []prompt            `json:"prompts"`
+		// The neutral retrieval baseline's host table, present only when [exa] searched the run's
+		// prompts: per host, the prompts a neutral index ranks it for against the prompts the
+		// assistants found it for, and the reading (content, query, both).
+		Neutral []app.BaselineHost `json:"neutral_retrieval,omitempty"`
 	}{&r, sum.Overall, sum.Slices, sum.Unbranded, sum.BrandedPrompts, sum.BrandRank(), voice, head(sum.HeadToHead, 10), head(sum.Objections, 10),
-		sum.Classes, sum.PageTypes, head(sum.Hosts, 10), head(sum.Outreach, 10), uncited, pages, fixes, d.Insights, d.Opinion, prompts}
+		sum.Classes, sum.PageTypes, head(sum.Hosts, 10), head(sum.Outreach, 10), uncited, pages, fixes, d.Insights, d.Opinion, prompts, neutral}
 }
 
 // auditDigest is audit_sites' answer: each site in a line or two, and the findings without info

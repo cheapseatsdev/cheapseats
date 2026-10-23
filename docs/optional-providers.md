@@ -317,6 +317,39 @@ model = "jev-1.14.0"
 # ugc = ["forum.example.org"]
 ```
 
+### The neutral retrieval baseline (Exa)
+
+When a competitor dominates a run, the run alone can't say why: the web may agree with the
+assistants (their pages answer the question better, a content problem), or the assistants' own
+queries may be finding them where a neutral search wouldn't (a query problem). The two call for
+different work. After each run, with `[exa]` configured, every prompt is searched once on Exa with
+no domain filter, and the top `baseline_results` pages (default 10) are stored per run and prompt
+in `retrieval_baseline`, the shape of `coverage`. Nothing is searched again for a prompt already
+stored, so `cheapseats baseline <run-id>` on a finished run costs only the prompts not yet done.
+
+The run page reads the table back against the run's answers. Under each prompt, beside the
+coverage line, the neutral top pages carry two chips: whose the page is (ours, a competitor by
+name, or its source class) and the status coverage uses, `cited`, `retrieved` (a search returned
+it, no answer cited it) or `unseen`. Above the pages, a "Neutral retrieval" table has one row per
+host over the prompts searched, with a competitor's configured domains as one row and the brand's
+sites as one: `neutral` is the number of prompts a neutral index ranks the host for, `assistants`
+the number of prompts any answer retrieved or cited it for, and the reading is `content` when
+neutral is at least two and at least the assistants' count, `query` when the assistants found it
+for two or more prompts and a neutral search never ranked it, and `both` otherwise. A host one
+answer retrieved once, and the index never ranked, isn't a row. `GET /api/runs/{id}` carries all
+of it as `baseline`; MCP `get_run` carries the top ten rows as `neutral_retrieval`.
+
+```toml
+[exa]
+# baseline = true
+# baseline_results = 10
+
+[pricing.exa-search]
+search_per_1k = 4
+```
+
+One search per prompt: fifteen prompts is six cents a run, the same as the coverage check.
+
 ## Next, in order
 
 Each item below fits the six rules. They are ranked by how visible the gain is on our own data.
@@ -345,9 +378,6 @@ why-not-top, objections as text and the fix list stay on a generative model.
 1. Outreach discovery beyond what the answers cited: find-similar from the pages that shaped
    answers, or a search for the category's roundups, scored by Jev for "in our category" and
    "names us". Turns the outreach list from reactive to prospecting.
-2. A neutral retrieval baseline: each prompt as a plain search, compared with what the
-   assistants searched and read. A competitor topping neutral retrieval is a content problem; one
-   that only shows in the assistants' searches is a query problem.
 
 The strongest pairing is Exa finding candidate pages and Jev deciding whether each is a roundup
 in the category that names the brand, with code ranking the result: the citation-check pattern
