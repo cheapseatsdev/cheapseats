@@ -449,6 +449,11 @@ func TestAssetsAreVersioned(t *testing.T) {
 	if !strings.Contains(rec.Body.String(), `href="/static/cheapseats.css?v=`+assetHashes["cheapseats.css"]+`"`) || assetHashes["cheapseats.css"] == "" {
 		t.Fatalf("stylesheet not versioned:\n%s", limit(rec.Body.String()))
 	}
+	// The brand tokens come first, so the stylesheet's var() references resolve on first paint.
+	tokens := strings.Index(rec.Body.String(), `href="/static/tokens.css?v=`+assetHashes["tokens.css"]+`"`)
+	if tokens < 0 || assetHashes["tokens.css"] == "" || tokens > strings.Index(rec.Body.String(), `href="/static/cheapseats.css?v=`) {
+		t.Fatalf("tokens.css missing, unversioned or after cheapseats.css:\n%s", limit(rec.Body.String()))
+	}
 	if !strings.Contains(rec.Body.String(), `<link rel="icon" type="image/svg+xml" href="/static/favicon.svg?v=`) {
 		t.Error("no favicon")
 	}

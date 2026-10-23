@@ -1,0 +1,36 @@
+/* GENERATED: synced from cheapseats-site brand/web/tokens.css at 43d4fe9; edit there, run deploy/sync-brand.sh. */
+/* Cheap Seats design tokens: the one source of truth for the brand's colors, type, radii and content
+   width. cheapseats.dev builds this file into its stylesheet and serves it at
+   https://cheapseats.dev/brand/tokens.css; the app copies it with deploy/sync-brand.sh into
+   internal/server/static/tokens.css. Edit it here, in cheapseats-site brand/web/tokens.css, then
+   run the sync; a test in the app fails when its copy is stale or uses a token this file lacks.
+
+   Warm ivory / warm charcoal, cinema red for primary actions and the icon, gold for the occasional
+   highlight. Status colors are separate from the brand colors. Every text pairing is at least
+   4.5:1 on bg, surface and chip (muted, primary, gold-text, success, warning and error on their
+   backgrounds); control borders and the gold-strong in-flight fill are at least 3:1 on chip;
+   series is the one data hue, validated on both surfaces.
+
+   Light by default; dark when the OS asks for it, until a toggle picks one by setting
+   data-theme="light" or data-theme="dark" on <html>. */
+:root{color-scheme:light;
+  --cs-bg:#FAF8F5;--cs-surface:#FFFFFF;--cs-border:#E5DFD7;--cs-text:#252321;--cs-muted:#6E6862;
+  --cs-primary:#C73532;--cs-primary-hover:#A92B28;--cs-on-primary:#FFFFFF;
+  --cs-gold:#F2B544;--cs-gold-strong:#A87500;--cs-gold-bg:#FFF0CB;--cs-gold-text:#765000;
+  --cs-chip:#F2EEE8;--cs-control:#8C847B;--cs-series:#2a78d6;
+  --cs-success:#2D7A3E;--cs-success-bg:#E3F2E5;--cs-warning:#8F5B00;--cs-warning-bg:#FCEBD0;--cs-error:#B3261E;--cs-error-bg:#FCE4E1}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark;
+  --cs-bg:#1B1917;--cs-surface:#24211E;--cs-border:#3B3631;--cs-text:#F5F1EB;--cs-muted:#ADA59C;
+  --cs-primary:#EF7770;--cs-primary-hover:#F38D87;--cs-on-primary:#1B1917;
+  --cs-gold:#F2B544;--cs-gold-strong:#F2B544;--cs-gold-bg:#3B2C14;--cs-gold-text:#F2B544;
+  --cs-chip:#302C28;--cs-control:#7D756C;--cs-series:#3987e5;
+  --cs-success:#7BC98A;--cs-success-bg:#1F3A25;--cs-warning:#F0A35E;--cs-warning-bg:#45301A;--cs-error:#FF9189;--cs-error-bg:#4A2220}}
+:root[data-theme="dark"]{color-scheme:dark;
+  --cs-bg:#1B1917;--cs-surface:#24211E;--cs-border:#3B3631;--cs-text:#F5F1EB;--cs-muted:#ADA59C;
+  --cs-primary:#EF7770;--cs-primary-hover:#F38D87;--cs-on-primary:#1B1917;
+  --cs-gold:#F2B544;--cs-gold-strong:#F2B544;--cs-gold-bg:#3B2C14;--cs-gold-text:#F2B544;
+  --cs-chip:#302C28;--cs-control:#7D756C;--cs-series:#3987e5;
+  --cs-success:#7BC98A;--cs-success-bg:#1F3A25;--cs-warning:#F0A35E;--cs-warning-bg:#45301A;--cs-error:#FF9189;--cs-error-bg:#4A2220}
+/* Type stacks (system fonts, no web fonts), the app's content width and corner radii. */
+:root{--cs-sans:-apple-system,BlinkMacSystemFont,"Inter",system-ui,sans-serif;--cs-mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+  --cs-content:1180px;--cs-radius:10px;--cs-control-radius:8px}

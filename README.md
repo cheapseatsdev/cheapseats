@@ -310,4 +310,7 @@ Tests use fake providers and never make a paid call. Data outlives releases, so:
   `cheapseats regrade` brings older runs onto a new method without asking again ([how](docs/regrading.md)).
 - Unknown config keys are errors; format changes ship with `migrate-config`.
 
+Colors, type and radii are the brand's `--cs-*` tokens, kept in the
+[cheapseats-site](https://github.com/cheapseatsdev/cheapseats-site) repo at `brand/web/tokens.css` and
+copied here by `deploy/sync-brand.sh` (a test fails when the copy is stale).
 Icons: [Lucide](https://lucide.dev) (ISC). License: [MIT](LICENSE).
