@@ -107,10 +107,17 @@ type Model struct {
 	// Grader only: after a run is graded, one more call groups its objections, praise and
 	// reasons for losing into a few themes. Unset means on.
 	Themes *bool `toml:"themes"`
+	// Grader only: after a run, each answer naming the brand is checked against brand.facts for
+	// claims that contradict one (docs/misstatements.md). Unset means on when facts are listed.
+	CheckFacts *bool `toml:"check_facts"`
 }
 
 // ThemesOn reports whether runs end with the theme pass ([grader] themes, on unless false).
 func (c *Config) ThemesOn() bool { return c.Grader.Themes == nil || *c.Grader.Themes }
+
+// CheckFactsOn reports whether runs end with the fact check: facts are listed under [brand] and
+// [grader] check_facts isn't false.
+func (c *Config) CheckFactsOn() bool { return len(c.Brand.Facts) > 0 && on(c.Grader.CheckFacts) }
 
 // Sampling is adaptive sampling: before a run, extra answers go to the cells (prompt, answerer,
 // track) whose recent named rate is least certain. Off unless adaptive is true.
@@ -447,6 +454,9 @@ func Load(path string) (*Config, error) {
 	if c.Analyst.Themes != nil {
 		return nil, fmt.Errorf("%s: themes belongs in [grader], not [analyst]", path)
 	}
+	if c.Analyst.CheckFacts != nil {
+		return nil, fmt.Errorf("%s: check_facts belongs in [grader], not [analyst]", path)
+	}
 	if c.Sampling.MaxExtra < 0 || c.Sampling.MaxExtra > 1000 {
 		return nil, fmt.Errorf("%s: [sampling] max_extra must be 0..1000", path)
 	}
@@ -489,6 +499,9 @@ const (
 	// Optional providers, not answerers: Missing and KeyVar know them too.
 	TypeSafeProvider = "typesafe"
 	ExaProvider      = "exa"
+	// GraderProvider stands for whatever [grader] is called through, for a pass that runs on the
+	// grader model (app.Pass). Not a provider of its own: resolve it with Grader.Via() first.
+	GraderProvider = "grader"
 )
 
 // Subscription reports whether a provider answers through a local CLI's subscription rather

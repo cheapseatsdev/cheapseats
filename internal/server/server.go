@@ -629,6 +629,8 @@ type RunData struct {
 	// when [typesafe] has read this run (docs/optional-providers.md).
 	Opinions      map[int64]*app.Opinion `json:"-"`
 	SecondOpinion *app.Agreement         `json:"second_opinion,omitempty"`
+	// The fact check: the facts answers naming the brand contradicted, when the run was checked.
+	Misstatements *app.FactReport `json:"misstatements,omitempty"`
 	// The work submitted for this run's fixes, and for earlier fixes for the same pages, and when
 	// the fix list was built (FixAttempts.Status).
 	Attempts app.FixAttempts `json:"-"`
@@ -680,6 +682,7 @@ type GridRow struct {
 	N      int // 1-based, as fixes cite it
 	Prompt string
 	Cells  [][]string // per column, each sample's grade key (gradeKey), or its status if it has none
+	Wrong  int        // answers that contradict a listed fact (the fact check)
 }
 
 func (s *Server) runData(ctx context.Context, id string) (*RunData, error) {
@@ -703,6 +706,7 @@ func (s *Server) runData(ctx context.Context, id string) (*RunData, error) {
 	d.Prospects = s.App.Prospects(ctx, id, res)
 	d.Opinions = s.App.Opinions(ctx, id, res)
 	d.SecondOpinion = app.Agree(d.Opinions, res)
+	d.Misstatements = s.App.Misstatements(ctx, id, res)
 	for _, a := range r.Snapshot.Answerers {
 		d.Answerers = append(d.Answerers, a.ID)
 	}
@@ -728,6 +732,9 @@ func (s *Server) runData(ctx context.Context, id string) (*RunData, error) {
 	for _, p := range d.Summary.Prompts {
 		row[p.Idx] = len(d.Grid.Rows)
 		d.Grid.Rows = append(d.Grid.Rows, GridRow{N: p.Idx + 1, Prompt: p.Prompt, Cells: make([][]string, len(d.Grid.Cols))})
+		if d.Misstatements != nil {
+			d.Grid.Rows[len(d.Grid.Rows)-1].Wrong = d.Misstatements.ByPrompt[p.Idx]
+		}
 	}
 	for _, x := range res {
 		i, ok1 := row[x.PromptIdx]

@@ -26,7 +26,8 @@ type Pass struct {
 	// Order sorts the passes after a run; those under 100 run before the fix list is built, so
 	// it sees their results, and those at 100 or over run after it.
 	Order int
-	// Provider is config.TypeSafeProvider or config.ExaProvider.
+	// Provider is config.TypeSafeProvider or config.ExaProvider, or config.GraderProvider for a
+	// pass on the grader model, which is callable whenever runs are.
 	Provider string
 	// On reports whether the config switches the pass on.
 	On func(*config.Config) bool
@@ -92,7 +93,7 @@ func (a *App) runPasses(ctx context.Context, id string, before bool) {
 		if (p.Order < 100) != before || !p.On(a.Cfg) {
 			continue
 		}
-		if m := config.Missing(p.Provider); m != "" {
+		if m := config.Missing(a.provider(p)); m != "" {
 			slog.Info("pass skipped", "pass", p.Name, "run", id, "reason", m)
 			continue
 		}
@@ -100,6 +101,15 @@ func (a *App) runPasses(ctx context.Context, id string, before bool) {
 			slog.Error(p.Name, "run", id, "err", err)
 		}
 	}
+}
+
+// provider is what a pass is called through: its own provider, or the grader's for a pass on
+// the grader model (config.GraderProvider is a stand-in, not something Missing knows).
+func (a *App) provider(p Pass) string {
+	if p.Provider == config.GraderProvider {
+		return a.Cfg.Grader.Via()
+	}
+	return p.Provider
 }
 
 // RunPass runs one pass on demand, as the CLI does, and returns its count. The pass runs even

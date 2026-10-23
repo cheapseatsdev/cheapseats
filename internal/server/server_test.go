@@ -67,6 +67,7 @@ func TestPagesRenderWithData(t *testing.T) {
 		"/":                                 "Write a credential-gateway guide",
 		"/runs/" + r.ID:                     "<h2>Why Cheap Seats lost</h2>",
 		"/runs/" + r.ID + "?opinion":        "&#43;100</b><small>net sentiment</small>",
+		"/runs/" + r.ID + "?facts":          "None: no checked answer contradicts a listed fact", // the fact check ran after the run; the fake grader lists nothing
 		"/rankings":                         "#1",
 		"/quick-wins":                       "keys-off-the-box",
 		"/api/runs/" + r.ID:                 `"verdict": "mentioned"`,

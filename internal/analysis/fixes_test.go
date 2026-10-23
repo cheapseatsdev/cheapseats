@@ -112,3 +112,16 @@ func TestTriageSendsAFixToItsSitesOwner(t *testing.T) {
 		}
 	}
 }
+
+func TestMisstatementsReachTheAnalyst(t *testing.T) {
+	if misstatementsText(context.Background(), "X") != "" {
+		t.Error("nothing to say with no fact check")
+	}
+	ctx := WithMisstatements(context.Background(), []string{`Fact 2 ("It is self-hosted.") is contradicted by 2 answers, on prompts 1, 4.`})
+	got := misstatementsText(ctx, "X")
+	for _, want := range []string{"Answers that named X contradicted these public facts", `- Fact 2 ("It is self-hosted.") is contradicted by 2 answers, on prompts 1, 4.`, "no answer to prompts N, M contradicts fact X"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in:\n%s", want, got)
+		}
+	}
+}
