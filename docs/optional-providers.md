@@ -181,6 +181,33 @@ search_per_1k = 4
 Cost per run of the command: (competitors + 1) × $0.004 for Exa, so a brand with five
 competitors spends 2.4 cents, plus a fraction of a cent of Jev for the new hosts.
 
+### A second engine for the search probe (Exa)
+
+The search probe (`/search`, `POST /api/search-probe`, MCP `search_probe`) runs one query through
+the web search tool the answerers use and shows the links as the model receives them. One engine
+can't say whether a result is the assistant's or the web's. With `[exa]` configured, the probe
+takes an engine: `claude` (the default, as before), `exa`, which runs the same query on Exa's
+neutral index with the same allowed or blocked domains and returns the links in Exa's order under
+the model name `exa-search`, or `both`, which runs the two at once and returns each result with
+`overlap`, `only_claude` and `only_exa`: the URLs by `report.NormalizeURL`, so a trailing slash or
+a fragment doesn't make a different page. The page gets an engine selector, shown only when `[exa]`
+is present; the API and MCP take `engine`; `cheapseats probe [-engine exa|claude|both] [-domains
+a,b] [-exclude a,b] "<query>"` does the same from the shell. Without `[exa]`, the page is as it
+was and `engine: exa` is the error `no [exa] in the config`.
+
+It is the one use of Exa that runs on demand from a page rather than after a run, because the
+probe always has: someone asks a question and pays for the answer, and nothing is stored. It has
+no switch; it is available when `[exa]` is configured and `exa-search` is priced. An Exa probe asks
+for ten results, what Claude's tool returns at most, so the two sides of a comparison are the same
+size, and costs under half a cent; `both` costs that plus the Claude probe's few cents.
+
+```toml
+[exa]
+
+[pricing.exa-search]
+search_per_1k = 4
+```
+
 ## Next, in order
 
 Each item below fits the six rules. They are ranked by how visible the gain is on our own data.
@@ -217,7 +244,6 @@ why-not-top, objections as text and the fix list stay on a generative model.
    that only shows in the assistants' searches is a query problem.
 3. Contents as a fetch fallback for the site audit and citation check when a page is empty
    without JavaScript.
-4. A second engine for the search probe.
 
 The strongest pairing is Exa finding candidate pages and Jev deciding whether each is a roundup
 in the category that names the brand, with code ranking the result: the citation-check pattern

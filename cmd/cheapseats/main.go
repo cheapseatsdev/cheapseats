@@ -61,6 +61,9 @@ const usage = `cheapseats: how AI assistants answer your buyers' questions.
                                          configured ones, as TOML to paste ([exa]; writes nothing)
   cheapseats audit [site...]                what AI crawlers can read on the brand's sites (free)
   cheapseats check-citations <run-id>       which pages the run cited name the brand, and which rivals
+  cheapseats probe [-engine exa|claude|both] [-domains a,b] "<query>"
+                                         one query through the answerers' web search tool, Exa's
+                                         neutral index ([exa] in the config), or both compared
   cheapseats crawl import <logfile>...      count AI crawler fetches and AI referrals from access logs
   cheapseats crawl report [-days 30]        imported counts per page, beside how the latest runs cite it
 
@@ -410,6 +413,8 @@ func dispatch(ctx context.Context, cmd string, args []string) error {
 		return auditCmd(ctx, args)
 	case "check-citations":
 		return checkCitationsCmd(ctx, args)
+	case "probe":
+		return probeCmd(ctx, args)
 	case "crawl":
 		return crawlCmd(ctx, args)
 	}

@@ -189,7 +189,7 @@ func (s *Server) mcpHandler() http.Handler {
 			c, err := s.App.Citations(ctx, app.CitationQuery{URLContains: a.URLContains, LastDays: a.LastDays, SetID: a.Set})
 			return c, err
 		})
-	addTool(srv, "search_probe", "Run one query through the web search tool the answerers use and return the result exactly as the model sees it. Costs a few cents.",
+	addTool(srv, "search_probe", "Run one query through the web search tool the answerers use and return the result exactly as the model sees it. Costs a few cents. With [exa] configured, engine exa runs it on Exa's neutral index instead (links, exa-search as the model, under a cent), and engine both runs the two and adds overlap, only_claude and only_exa: the URLs they share and the ones only one returned, so a result reads as the assistant's or the web's.",
 		func(ctx context.Context, a probe.Input) (any, error) {
 			res, err := s.probe(ctx, a)
 			return res, err
