@@ -208,12 +208,34 @@ func TestOptionalProviders(t *testing.T) {
 	if !c.FoldNamesOn() || !c.CoverageOn() || c.TypeSafeModel() != "jev-1.14.0" || c.FoldConfidence() != 0.9 || c.CoverageResults() != 5 {
 		t.Errorf("present tables mean on, with their settings: %+v %+v", c.TypeSafe, c.Exa)
 	}
+	if !c.ClusterPhrasesOn() || !c.SecondOpinionsOn() || !c.PromptReviewOn() || !c.FixMatchesOn() || !c.PageTypesOn() ||
+		!c.ProspectsOn() || !c.BaselineOn() || !c.ContentsFallbackOn() || c.MinConfidence() != 0.9 {
+		t.Error("every pass is on with its table present")
+	}
+	if c.ProspectSeeds() != 10 || c.ProspectResults() != 5 || c.BaselineResults() != 10 || c.DiscoverResults() != 10 {
+		t.Error("count defaults")
+	}
 	off := false
 	c.TypeSafe.FoldNames, c.Exa.Coverage = &off, &off
-	if c.FoldNamesOn() || c.CoverageOn() {
+	c.TypeSafe.ClusterPhrases, c.TypeSafe.SecondOpinions, c.TypeSafe.PromptReview, c.TypeSafe.FixMatches, c.TypeSafe.PageTypes = &off, &off, &off, &off, &off
+	c.Exa.Prospects, c.Exa.Baseline, c.Exa.ContentsFallback = &off, &off, &off
+	if c.FoldNamesOn() || c.CoverageOn() || c.ClusterPhrasesOn() || c.SecondOpinionsOn() || c.PromptReviewOn() || c.FixMatchesOn() ||
+		c.PageTypesOn() || c.ProspectsOn() || c.BaselineOn() || c.ContentsFallbackOn() {
 		t.Error("false turns each off")
 	}
-	for _, bad := range []string{"[typesafe]\nmin_confidence = 1.5\n", "[exa]\nresults = 11\n", "[typesafe]\nfold = true\n"} {
+	c.Exa.ProspectSeeds, c.Exa.BaselineResults = 3, 4
+	if c.ProspectSeeds() != 3 || c.BaselineResults() != 4 {
+		t.Error("counts read through")
+	}
+	if c.Cost("exa-contents", Usage{Pages: 2}) != 0 {
+		t.Error("unpriced pages cost nothing")
+	}
+	c.Pricing = map[string]Pricing{"exa-contents": {PagePer1K: 1}}
+	if got := c.Cost("exa-contents", Usage{Pages: 2}); got != 0.002 {
+		t.Errorf("two pages at $1 per 1,000: %f", got)
+	}
+	for _, bad := range []string{"[typesafe]\nmin_confidence = 1.5\n", "[exa]\nresults = 11\n", "[typesafe]\nfold = true\n",
+		"[exa]\nprospect_seeds = 51\n", "[exa]\nbaseline_results = 26\n", "[pricing.exa-contents]\npage_per_1k = -1\n"} {
 		os.WriteFile(p, []byte("[brand]\nname = \"Acme\"\n"+bad), 0o644)
 		if _, err := Load(p); err == nil {
 			t.Errorf("%q should fail", bad)

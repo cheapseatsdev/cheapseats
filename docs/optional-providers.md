@@ -52,6 +52,18 @@ Every use of either provider follows the same rules, and anything added later sh
    (`jev`, `manual`) and with what confidence. The confidence a decision needs to take effect is
    read from the config each time, so tightening it never asks anything again.
 
+## How a pass is wired
+
+Each use of a provider is a `Pass` (`internal/app/passes.go`), registered from `init()` in its
+own file: a name for the ledger, a CLI command that runs it on one finished run, an order, the
+provider it needs, the config switch that turns it on, and the function that does the work and
+returns how many items it decided. After a run, `App` runs every pass the config switches on, in
+order: those under 100 before the fix list is built, so the list sees their results, and the rest
+after. A pass whose provider isn't callable is skipped with a log line. The tables all passes
+write live in `internal/store/011_judgments.sql`; `typesafe.Chosen` is the probability to gate
+on; `exa.Client` has `Search`, `FindSimilar` and `Contents`, the last priced per page under
+`[pricing.exa-contents] page_per_1k`.
+
 ## Shipped
 
 ### Folding product names (Jev)
