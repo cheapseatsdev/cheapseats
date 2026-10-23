@@ -41,15 +41,18 @@ which signs people in by email. Because it's a whole VM, its answerers can be th
    `CHEAPSEATS_EXA_BASE_URL=https://exa.int.exe.xyz` instead of `TYPESAFE_API_KEY` and
    `EXA_API_KEY`. See [Optional providers](optional-providers.md).
 
-3. **Log the CLIs in**, if your answerers use them. The subscription is whoever logs in.
+3. **Deploy** (below), with `SEED_DB=path/to/cheapseats.db` the first time to start from an existing
+   database. The deploy also makes a `cheapseats-cli` user for the `claude` and `codex` CLIs to run
+   as: each carries a shell the model can use, and this keeps the VM's env file, database and
+   logins out of a prompt-injected answer's reach.
+
+4. **Log the CLIs in** as that user, if your answerers use them. The subscription is whoever logs
+   in. (Logins made before the CLI user existed move over on the first deploy.)
 
    ```bash
-   ssh -t <vm>.exe.xyz claude                        # /login, then /exit
-   ssh -t <vm>.exe.xyz codex login --device-auth
+   ssh -t <vm>.exe.xyz sudo -H -u cheapseats-cli claude                      # /login, then /exit
+   ssh -t <vm>.exe.xyz sudo -H -u cheapseats-cli codex login --device-auth
    ```
-
-4. **Deploy** (below), with `SEED_DB=path/to/cheapseats.db` the first time to start from an existing
-   database.
 
 5. **Backups and alerts:** a nightly copy of the database (the newest 14 kept, in
    `~/cheapseats/backups`), and an hourly check that emails when a run ends partial, failed or out of

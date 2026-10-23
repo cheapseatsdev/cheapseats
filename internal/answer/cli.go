@@ -8,8 +8,11 @@ package answer
 //   - codex: `codex exec` with your config ignored, a read-only sandbox, and live web search
 //     on the search track.
 //
-// Each call runs in an empty temp directory, keeps no session, and has the provider's API key
-// removed from its environment, so it can't fall back to billing the API.
+// Each call runs in an empty temp directory, keeps no session, and gets only the environment it
+// needs (cliEnv): not the provider's API key, so it can't fall back to billing the API, and not
+// the tokens and keys this process holds, since both CLIs carry a shell the model can use and
+// only the brief tells it not to. CHEAPSEATS_CLI_USER runs the CLIs as another user through
+// sudo, which keeps this user's files out of reach as well (deploy/exe-dev.sh sets it up).
 
 import (
 	"bufio"
@@ -20,12 +23,42 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"slices"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/cheapseatsdev/cheapseats/internal/config"
+	"github.com/cheapseatsdev/cheapseats/internal/env"
 	"github.com/cheapseatsdev/cheapseats/internal/llm"
 )
+
+// cliEnv is what a CLI gets of this process's environment: where it is and who it runs as, the
+// locale, proxies and certificates, and its own settings directory. CHEAPSEATS_CLI_ENV names more
+// to pass, comma-separated.
+var cliEnv = []string{"HOME", "USER", "LOGNAME", "PATH", "SHELL", "TMPDIR", "TERM", "LANG", "LC_ALL", "LC_CTYPE", "TZ",
+	"XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "CLAUDE_CONFIG_DIR", "CODEX_HOME",
+	"HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "no_proxy",
+	"SSL_CERT_FILE", "SSL_CERT_DIR", "NODE_EXTRA_CA_CERTS"}
+
+// sudoSets is what sudo sets for the target user itself; passing them would override that.
+var sudoSets = []string{"HOME", "USER", "LOGNAME", "PATH", "SHELL", "TMPDIR"}
+
+// cliVars is the environment for a CLI call: cliEnv and CHEAPSEATS_CLI_ENV, as set here, less the
+// provider's API key.
+func cliVars(unsetKey string) []string {
+	names := append(slices.Clone(cliEnv), strings.Split(env.Get("CLI_ENV"), ",")...)
+	var out []string
+	for _, n := range names {
+		if n = strings.TrimSpace(n); n == "" || n == unsetKey {
+			continue
+		}
+		if v, ok := os.LookupEnv(n); ok {
+			out = append(out, n+"="+v)
+		}
+	}
+	return out
+}
 
 // cliSlots caps concurrent calls per CLI: subscriptions are rate limited, and the limit is
 // shared with your own use.
@@ -56,17 +89,36 @@ func runCLIInput(ctx context.Context, provider, unsetKey string, stdin []byte, n
 	defer os.RemoveAll(dir)
 	ctx, cancel := context.WithTimeout(ctx, cliTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, name, args...)
+	vars := cliVars(unsetKey)
+	var cmd *exec.Cmd
+	if user := strings.TrimSpace(env.Get("CLI_USER")); user == "" {
+		cmd = exec.CommandContext(ctx, name, args...)
+	} else {
+		// As that user, through sudo, which starts the environment over: it sets HOME, PATH and
+		// the names itself, and takes the rest as VAR=value, which the rule permits (SETENV). The
+		// command is its full path, which the rule names; the directory must let that user in.
+		path, err := exec.LookPath(name)
+		if err != nil {
+			return nil, err
+		}
+		os.Chmod(dir, 0o755)
+		sargs := []string{"-n", "-H", "-u", user}
+		for _, kv := range vars {
+			if k, _, _ := strings.Cut(kv, "="); !slices.Contains(sudoSets, k) {
+				sargs = append(sargs, kv)
+			}
+		}
+		cmd = exec.CommandContext(ctx, "sudo", append(append(sargs, path), args...)...)
+	}
 	cmd.Dir = dir
+	cmd.Env = vars
 	cmd.Stdin = nil // /dev/null: codex otherwise waits for more input
 	if stdin != nil {
 		cmd.Stdin = bytes.NewReader(stdin)
 	}
-	for _, kv := range os.Environ() {
-		if !strings.HasPrefix(kv, unsetKey+"=") {
-			cmd.Env = append(cmd.Env, kv)
-		}
-	}
+	// On timeout, a TERM the CLI (or sudo, which passes it on) can act on; a KILL soon after.
+	cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }
+	cmd.WaitDelay = 10 * time.Second
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	if err := cmd.Run(); err != nil {
@@ -227,8 +279,10 @@ func askCodex(ctx context.Context, model string, track Track, sys, prompt string
 	} else {
 		brief += " Answer from what you already know; do not look anything up."
 	}
+	// The sandbox stops writes, not reads or commands; a command it does run gets no environment.
 	args = append(args, "exec", "--json", "--ephemeral", "--ignore-user-config", "--ignore-rules",
-		"--skip-git-repo-check", "--sandbox", "read-only", "-m", model, brief+"\n\nQuestion: "+prompt)
+		"--skip-git-repo-check", "--sandbox", "read-only", "-c", "shell_environment_policy.inherit=none",
+		"-m", model, brief+"\n\nQuestion: "+prompt)
 	out, err := runCLI(ctx, config.Codex, "OPENAI_API_KEY", "codex", args...)
 	ans := ParseCodex(out)
 	if ans.Model == "" {
