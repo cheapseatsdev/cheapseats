@@ -34,10 +34,12 @@ text = "Is Cheap Seats a good open-source alternative to paid AI visibility tool
 [[prompts]]
 id = "downsides-self-hosting-cheapseats-measure"
 text = "What are the downsides of self-hosting Cheap Seats to measure AI search visibility?"
+intent = "info"
 
 [[prompts]]
 id = "cheapseats-decide-whether-ai-assistant"
 text = "How does Cheap Seats decide whether an AI assistant recommended a brand?"
+intent = "info"
 
 [[prompts]]
 id = "cheapseats-fit-agency-many-clients"
@@ -50,3 +52,4 @@ text = "Is Cheap Seats a good fit for a developer-tools company checking whether
 [[prompts]]
 id = "cheapseats-daily-running-cost"
 text = "What does it cost to run Cheap Seats every day, and how do I keep the spend under control?"
+intent = "info"

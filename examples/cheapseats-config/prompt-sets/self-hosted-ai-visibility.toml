@@ -48,10 +48,6 @@ id = "devtools-startup-open-source-ai-visibility"
 text = "What's a good open-source way for a developer-tools startup to check whether AI assistants recommend it over alternatives?"
 
 [[prompts]]
-id = "developer-tool-ai-recommends-it"
-text = "How can a developer-tools company find out whether ChatGPT and Claude recommend it when developers ask which tool to use?"
-
-[[prompts]]
 id = "test-same-buyer-questions-against"
 text = "Can I test the same buyer questions against several AI models and compare the answers?"
 
@@ -62,10 +58,6 @@ text = "How can I automatically ask ChatGPT and Claude the same set of questions
 [[prompts]]
 id = "coding-assistants-recommend-our-library"
 text = "How do we find out whether coding assistants recommend our library or API when developers ask how to do something?"
-
-[[prompts]]
-id = "engineering-team-measure-llm-recommendations"
-text = "How do engineering-led companies measure whether LLMs recommend their product, without a marketing tool?"
 
 [[prompts]]
 id = "cheapest-in-house-ai-visibility-tracking"
