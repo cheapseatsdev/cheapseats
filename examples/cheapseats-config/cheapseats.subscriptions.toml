@@ -185,8 +185,8 @@ max_samples = 1
 # model = "jev-1.14.0"
 # min_confidence = 0.7   # Jev's probability that two names are one product
 #
-# [exa]
-# results = 3
+# [exa]              # Exa's free plan (2026-10): $10 of credits a month, about 2,500 searches; weekly
+# results = 3        # runs over a few hundred prompts stay inside it. Keys: dashboard.exa.ai
 
 [owners]
 # Who picks up each kind of fix. Unlisted gaps go to `default`. Leave blank until you name owners.

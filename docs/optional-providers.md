@@ -13,6 +13,20 @@ called, and switching one off later leaves every page as it was.
   opposed to what an assistant found. A search is about $4 per thousand; page contents cost extra
   and aren't fetched.
 
+## Getting a key
+
+- **Exa**: sign up at [dashboard.exa.ai](https://dashboard.exa.ai) and make a key under API keys.
+  As of October 2026 the free plan gives $10 of credits every month, plus a $10 onboarding bonus,
+  with no payment method. At $4 per thousand searches that is 2,500 searches a month; the coverage
+  check uses one search per prompt per run, so five sets of 15 to 20 prompts run weekly is about
+  350 searches a month, well inside the free plan. Most people will never pay for this.
+- **TypeSafe**: make a key in the [console](https://console.typesafe.ai/keys). Input tokens are
+  $0.042 per million and a run's whole folding pass is a few thousand tokens, so a month of runs
+  is cents.
+
+On exe.dev, add each as an integration instead and point `CHEAPSEATS_TYPESAFE_BASE_URL` and
+`CHEAPSEATS_EXA_BASE_URL` at it; the VM then holds no key.
+
 ## The shape that keeps them optional
 
 Every use of either provider follows the same rules, and anything added later should too.
@@ -76,9 +90,11 @@ input = 0.042
 ```
 
 What the first live calls taught us: given only two bare names, Jev said 0.47 for "Scrunch" and
-"Scrunch AI", a shrug. With the category and a sentence of context per name it said 0.77. Give
-it state, not just strings; and expect a probability in the 0.7s, not a 0.95, for a match a person
-would call obvious. The first production pass decided 28 names in four requests for half a cent:
+"Scrunch AI", a shrug. With the category and a sentence of context per name it said 0.77. Given
+the instruction that spacing, punctuation, a domain suffix, a company prefix or an "AI" suffix
+don't make a different product, it said 0.88 for "Otterly AI" and "Otterly.AI", 0.85 for
+"Microsoft Copilot" and "Copilot", 0.78 for "AI Mode" and "Google AI Mode", where the vaguer
+wording had given 0.53, 0.67 and 0.58. Give it state, and say what counts; it reads literally. The first production pass decided 28 names in four requests for half a cent:
 25 were products of their own, three matched (Scrunch to Scrunch AI, Microsoft Copilot to Copilot,
 AI Mode to Google AI Mode).
 

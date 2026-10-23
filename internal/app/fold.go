@@ -262,7 +262,7 @@ func (a *App) FoldNames(ctx context.Context, id string) (int, error) {
 			namesState = append(namesState, map[string]any{"name": display[q.variant], "context": context[q.variant], "candidates": cands})
 			questions[fmt.Sprintf("q%d", j)] = typesafe.Question{
 				Type:         "choice",
-				Instructions: fmt.Sprintf("`names[%d].name` is a product named in an AI assistant's answer about `category`; `names[%d].context` is the sentence that named it. Which of `names[%d].candidates`, if any, is the same product under another name, abbreviation or spelling? Judge by the names and their contexts; a product with a similar name but a different purpose is a different product.", j, j, j),
+				Instructions: fmt.Sprintf("`names[%d].name` is a product named in an AI assistant's answer about `category`; `names[%d].context` is the sentence that named it. Which of `names[%d].candidates`, if any, is the same product under another name? Treat a name that differs only in spacing, punctuation, capitalisation, a domain suffix like .ai or .com, a company prefix, or a suffix like AI as the same product. A product with a similar name but a different maker or purpose is a different product.", j, j, j),
 				Criteria:     criteria,
 			}
 		}
