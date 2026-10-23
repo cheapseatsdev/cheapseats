@@ -24,6 +24,30 @@ const (
 // PageTypeOrder is the order the run page lists page types in.
 var PageTypeOrder = []string{Listicle, Comparison, ReviewPage, Docs, Forum, Repo, Article, Product, OtherPage}
 
+// knownPageType reports whether t is one of PageTypeOrder.
+func knownPageType(t string) bool {
+	for _, x := range PageTypeOrder {
+		if x == t {
+			return true
+		}
+	}
+	return false
+}
+
+// PageTypeDefinitions say what each type is, in the words of the constants' comments: the
+// criteria Jev is given for a page the rules below call other (the page-types pass).
+var PageTypeDefinitions = map[string]string{
+	Listicle:   "a list or roundup of several products or tools: best X, top 10, alternatives to X, tools for Y",
+	Comparison: "a comparison of two or more named products: X vs Y, compare, an alternative to X",
+	ReviewPage: "a review of one product, or a review site's page about one product",
+	Docs:       "documentation, a manual, an API or package reference",
+	Forum:      "a thread, question, issue or discussion whose content users wrote",
+	Repo:       "a code repository's front page",
+	Article:    "a blog post, news story or dated article on one subject",
+	Product:    "a vendor's own page about its product: home, pricing, features, solutions",
+	OtherPage:  "none of the others, or not enough information to tell",
+}
+
 var (
 	reviewHosts = []string{"g2.com", "capterra.com", "trustradius.com", "getapp.com", "softwareadvice.com",
 		"trustpilot.com", "peerspot.com", "gartner.com/reviews", "producthunt.com/products"}

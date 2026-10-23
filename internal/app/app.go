@@ -29,9 +29,11 @@ import (
 type App struct {
 	analyses sync.Map
 	aliases  aliasCache
-	Cfg      *config.Config
-	DB       *store.DB
-	Runs     *run.Engine
+	// Page types and host classes Jev decided (classify.go).
+	judgments judgmentCache
+	Cfg       *config.Config
+	DB        *store.DB
+	Runs      *run.Engine
 	// The prompt sets, read once with the config: a deploy is one consistent version of both.
 	sets []sets.Set
 }
@@ -288,7 +290,9 @@ func (a *App) RunBrand(r *run.Run) config.Brand {
 // Summary is a run's report over results (all of its results, or a slice of them).
 func (a *App) Summary(r *run.Run, results []run.Result) report.Summary {
 	r.Intents(results)
-	return report.BuildWith(a.RunBrand(r), results, report.Options{Competitors: a.RunCompetitors(r), Sources: a.Cfg.Sources, Aliases: a.Aliases()})
+	// Sources and PageTypes are the config's [sources] with Jev's host classes merged under them,
+	// and Jev's page types (classify.go); with no decisions stored they are the config as it is.
+	return report.BuildWith(a.RunBrand(r), results, report.Options{Competitors: a.RunCompetitors(r), Sources: a.SourceClasses(), Aliases: a.Aliases(), PageTypes: a.PageTypes()})
 }
 
 // RunCompetitors are the competitors a run's report sorts products and sources by: the ones the

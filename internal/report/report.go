@@ -122,7 +122,9 @@ type Page struct {
 	Class          string `json:"class"`
 	CompetitorSite string `json:"competitor,omitempty"`
 	// What kind of page it is (PageType): listicle, comparison, review, docs and so on.
-	Type     string `json:"page_type"`
+	Type string `json:"page_type"`
+	// Who typed it when the rules said other: "jev" for a stored judgment (Options.PageTypes).
+	TypedBy  string `json:"typed_by,omitempty"`
 	Cited    int    `json:"cited"`    // answers that linked it
 	Surfaced int    `json:"surfaced"` // answers whose searches returned it
 	// Answers whose searches returned it and that linked it.
@@ -285,6 +287,10 @@ type Options struct {
 	// grader wrote it, to the name it is displayed as. The brand's own names fold through the
 	// brand's aliases, not here.
 	Aliases map[string]string
+	// Page types Jev decided (the page-types pass): a normalized URL to a type in PageTypeOrder.
+	// Used only where the rules say other; the rules win where they know the page. Hosts Jev
+	// classed are merged into Sources by the caller, under the config's own entries.
+	PageTypes map[string]string
 }
 
 // fold returns the board key and display name for a product the grader named, through Aliases.
@@ -523,6 +529,9 @@ func BuildWith(brand config.Brand, results []run.Result, opt Options) Summary {
 				var hk string
 				p.Class, p.CompetitorSite, hk = cls.classify(u)
 				p.Type = PageType(u, titles[u])
+				if t, ok := opt.PageTypes[u]; ok && p.Type == OtherPage && knownPageType(t) {
+					p.Type, p.TypedBy = t, "jev"
+				}
 				pages[u] = p
 				pageHost[u] = hk
 				classes[p.Class].Pages++
