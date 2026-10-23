@@ -133,6 +133,11 @@ name = "Ahrefs Brand Radar"
 aliases = ["Ahrefs"]
 domains = ["ahrefs.com"]
 
+[[competitors]]
+name = "Frase"
+aliases = ["frase.io", "Frase.io"]
+domains = ["frase.io"]
+
 # How the run page sorts the hosts answers draw on: own (the brand's sites), competitor (their
 # domains), ugc, review, reference, institutional or editorial, from a built-in list. Put a host in
 # another class here; it wins over the list.
