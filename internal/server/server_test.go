@@ -189,6 +189,37 @@ func TestPagesRenderWithData(t *testing.T) {
 	if _, isErr := call("get_prompt_set", map[string]any{"set": "no-such-set"}); !isErr {
 		t.Error("an unknown set should be a tool error")
 	}
+
+	// Objections Jev clustered (phrase_clusters, written by the cluster-phrases pass) count as
+	// one row on the run page, marked with how many wordings, and in the API; no page calls Jev.
+	if res, _ := a.Runs.Results(ctx, r.ID); len(res) > 0 {
+		g := *res[0].Grade
+		g.Objections = []string{"still in private beta"}
+		gj, _ := json.Marshal(g)
+		if _, err := db.Exec(`UPDATE results SET grade=? WHERE id=?`, string(gj), res[0].ID); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.Exec(`INSERT INTO phrase_clusters(kind, phrase, cluster, display, confidence, source, decided_at) VALUES ('objection','still in private beta','private beta','private beta',0.9,'jev','2026-10-23T00:00:00Z')`); err != nil {
+			t.Fatal(err)
+		}
+		// Read through a fresh process: the clustering map, like the alias map, is cached per
+		// process and rebuilt when the pass writes.
+		s2, err := New(newApp(t, cfg, db))
+		if err != nil {
+			t.Fatal(err)
+		}
+		h2 := s2.Handler()
+		rec = httptest.NewRecorder()
+		h2.ServeHTTP(rec, httptest.NewRequest("GET", "/runs/"+r.ID, nil))
+		if body := rec.Body.String(); !strings.Contains(body, `<td>private beta <span class="muted small" title="wordings Jev judged to say the same thing">(2 wordings)</span></td>`) || strings.Contains(body, "<td>still in private beta") {
+			t.Errorf("run page should fold the wordings: %s", limit(body[strings.Index(body, `id="objections"`):]))
+		}
+		rec = httptest.NewRecorder()
+		h2.ServeHTTP(rec, httptest.NewRequest("GET", "/api/runs/"+r.ID, nil))
+		if body := rec.Body.String(); !strings.Contains(body, `"wordings": 2`) || strings.Contains(body, `"text": "still in private beta"`) {
+			t.Errorf("api should carry wordings and count the sentiment through the clusters: %s", limit(body))
+		}
+	}
 }
 func TestFixListNeedsAFinishedRun(t *testing.T) {
 	t.Setenv("CHEAPSEATS_TOKENS", "")

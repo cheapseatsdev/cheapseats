@@ -61,6 +61,26 @@ func TestSentiment(t *testing.T) {
 	if s := Summarize([]*grade.Grade{g(grade.Absent, "", nil, nil)}); s.Net != nil || s.NetText() != "n/a" {
 		t.Fatalf("nothing to go on is n/a, not zero: %+v", s)
 	}
+	// Wordings mapped onto one (app.PhraseClusters) count as one, under the mapped wording.
+	clustered := []*grade.Grade{
+		g(grade.Mentioned, "", []string{"Easy setup"}, []string{"Coverage unverified"}),
+		g(grade.Mentioned, "", []string{"easy setup", "setup is easy and quick"}, []string{"coverage of two assistants unverified"}), // one answer, counted once
+		g(grade.Mentioned, "", []string{"Setup is easy and quick", "cheap"}, []string{"no free tier"}),
+	}
+	s = SummarizeWith(clustered, Options{
+		Praise:     map[string]string{"setup is easy and quick": "Easy setup"},
+		Objections: map[string]string{"coverage of two assistants unverified": "Coverage unverified"},
+	})
+	if len(s.Praise) != 2 || s.Praise[0] != (Count{"Easy setup", 3}) || len(s.Objections) != 2 || s.Objections[0] != (Count{"Coverage unverified", 2}) {
+		t.Fatalf("%+v %+v", s.Praise, s.Objections)
+	}
+	// A wording mapped to its own first wording counts under that wording.
+	if s := SummarizeWith(clustered[2:], Options{Praise: map[string]string{"cheap": "Cheap"}}); len(s.Praise) != 2 || s.Praise[1] != (Count{"Cheap", 1}) {
+		t.Fatalf("%+v", s.Praise)
+	}
+	if s := Summarize(clustered); len(s.Praise) != 3 || len(s.Objections) != 3 {
+		t.Fatalf("without the maps, as before: %+v %+v", s.Praise, s.Objections)
+	}
 	b, _ := json.Marshal(Summarize(nil))
 	if !strings.Contains(string(b), `"net":null`) || !strings.Contains(string(b), `"praise":[]`) {
 		t.Fatal(string(b))

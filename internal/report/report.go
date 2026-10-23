@@ -96,6 +96,9 @@ type HeadToHead struct {
 type Objection struct {
 	Text    string `json:"objection"`
 	Answers int    `json:"answers"`
+	// How many distinct wordings count under this one, through Options.Objections; 1 when none
+	// was folded in.
+	Wordings int `json:"wordings"`
 	// The first prompt (0-based) it was raised for, and its text, as an example.
 	Prompt     int    `json:"example_prompt_idx"`
 	PromptText string `json:"example_prompt"`
@@ -291,6 +294,20 @@ type Options struct {
 	// Used only where the rules say other; the rules win where they know the page. Hosts Jev
 	// classed are merged into Sources by the caller, under the config's own entries.
 	PageTypes map[string]string
+	// Objections to count as one: a folded objection as the grader wrote it, to the wording of
+	// the objection it counts under (app.PhraseClusters). Absent, each wording counts on its own.
+	Objections map[string]string
+}
+
+// objection returns the counting key for an objection the grader wrote, through Objections.
+func (o Options) objection(text string) string {
+	k := NormalizeObjection(text)
+	if c, ok := o.Objections[k]; ok && c != "" {
+		if ck := NormalizeObjection(c); ck != "" {
+			return ck
+		}
+	}
+	return k
 }
 
 // fold returns the board key and display name for a product the grader named, through Aliases.
@@ -348,6 +365,7 @@ func BuildWith(brand config.Brand, results []run.Result, opt Options) Summary {
 	positions := map[string]*posAcc{}
 	var recs []answerRec
 	objections := map[string]*Objection{}
+	wordings := map[string]map[string]bool{} // counting key -> the folded wordings counted under it
 	brandKey := strings.ToLower(brand.Name)
 	cls := NewClassifier(brand, opt.Competitors, opt.Sources)
 	pages := map[string]*Page{}
@@ -494,8 +512,16 @@ func BuildWith(brand config.Brand, results []run.Result, opt Options) Summary {
 		if named {
 			seen := map[string]bool{}
 			for _, o := range g.Objections {
-				k := NormalizeObjection(o)
-				if k == "" || seen[k] {
+				w := NormalizeObjection(o)
+				if w == "" {
+					continue
+				}
+				k := opt.objection(o)
+				if wordings[k] == nil {
+					wordings[k] = map[string]bool{}
+				}
+				wordings[k][w] = true
+				if seen[k] {
 					continue
 				}
 				seen[k] = true
@@ -660,7 +686,8 @@ func BuildWith(brand config.Brand, results []run.Result, opt Options) Summary {
 		return s.Voice[i].Name < s.Voice[j].Name
 	})
 	s.HeadToHead = headToHeads(s.Voice, recs, brandKey)
-	for _, o := range objections {
+	for k, o := range objections {
+		o.Wordings = len(wordings[k])
 		s.Objections = append(s.Objections, *o)
 	}
 	sort.Slice(s.Objections, func(i, j int) bool {

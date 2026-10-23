@@ -474,7 +474,7 @@ func printThemes(a *app.App, id string, t opinion.Themes) error {
 	for _, x := range res {
 		grades = append(grades, x.Grade)
 	}
-	s := opinion.Summarize(grades)
+	s := opinion.SummarizeWith(grades, a.PhraseOptions())
 	fmt.Printf("%s\n\nNet sentiment %s over %d answers naming %s with a tone:", r.Name, s.NetText(), s.Toned, a.Cfg.Brand.Name)
 	for _, c := range s.Tones {
 		fmt.Printf(" %s %d", c.Tone, c.N)

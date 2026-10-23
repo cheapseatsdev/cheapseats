@@ -128,6 +128,27 @@ func TestObjections(t *testing.T) {
 	}
 }
 
+func TestObjectionsCountThroughClusters(t *testing.T) {
+	brand := config.Brand{Name: "Acme"}
+	res := []run.Result{
+		graded(0, "p0", grade.Grade{Verdict: grade.Mentioned, Objections: []string{"Coverage unverified"}}, nil),
+		graded(1, "p1", grade.Grade{Verdict: grade.Mentioned, Objections: []string{"coverage unverified", "Coverage of two assistants unverified"}}, nil), // one answer, counted once
+		graded(2, "p2", grade.Grade{Verdict: grade.Mentioned, Objections: []string{"coverage of two assistants unverified", "no free tier"}}, nil),
+	}
+	clusters := map[string]string{"coverage of two assistants unverified": "Coverage unverified"}
+	s := BuildWith(brand, res, Options{Objections: clusters})
+	if len(s.Objections) != 2 || s.Objections[0].Text != "coverage unverified" || s.Objections[0].Answers != 3 || s.Objections[0].Wordings != 2 {
+		t.Fatalf("%+v", s.Objections)
+	}
+	if o := s.Objections[1]; o.Text != "no free tier" || o.Answers != 1 || o.Wordings != 1 {
+		t.Fatalf("%+v", o)
+	}
+	// Without the map, each wording is a row with one wording, as before.
+	if s := Build(brand, res); len(s.Objections) != 3 || s.Objections[0].Wordings != 1 {
+		t.Fatalf("%+v", s.Objections)
+	}
+}
+
 func TestBranded(t *testing.T) {
 	brand := config.Brand{Name: "Acme", Aliases: []string{"acme.io", "AC"}}
 	for text, want := range map[string]bool{

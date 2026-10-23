@@ -114,6 +114,45 @@ name per request (Otterly AI: 0.59 batched, 0.88 alone). The first production pa
 25 were products of their own, three matched (Scrunch to Scrunch AI, Microsoft Copilot to Copilot,
 AI Mode to Google AI Mode).
 
+### Clustering objections and praise (Jev)
+
+The grader writes each answer's objections and praise as free text, and the run page's
+objections table and the sentiment's top praise and objections count them by the folded string,
+so "coverage unverified" and "coverage of ChatGPT and Claude unverified" are two rows, and the
+same complaint can't be followed from one run to the next. Jev decides which wordings say the
+same thing.
+
+After each run, every objection and praise wording in the run's grades that hasn't been decided
+before is taken most-answers-first (shorter first at a tie), so the established wording becomes
+the cluster and the later ones are asked about it. A wording that shares a meaningful word with
+no existing cluster is its own cluster, no question asked. The rest are each put to Jev once: a
+Choice over the clusters they plausibly match (up to eight, biggest first), with a `none` option,
+given the category from `brand.about`, the kind, the grader's sentence about the answer that
+raised it, and an example sentence per candidate. The instruction says what counts: two
+objections are the same when a reader deciding whether to act on it would treat them the same
+way; a narrower wording of the same point is the same; a different feature, or a different point
+about the same feature, is different. One wording per request, for the reason the fold pass
+found.
+
+Decisions land in `phrase_clusters` with Jev's probability for the cluster it chose, and the
+cluster's wording as it was first written. `App.PhraseClusters` reads them back at
+`typesafe.min_confidence`, `report.Options.Objections` counts the run page's objections through
+them, and `opinion.SummarizeWith` the sentiment's praise and objections. An objection row that
+gathered more than one wording says so, "(3 wordings)", and `GET /api/runs/{id}` and MCP `get_run`
+carry `wordings` on each objection. `cheapseats cluster <run-id>` runs the pass on a finished run
+and prints each wording with its cluster and probability. A run's pass is a request per new
+wording, a few dozen at most, and under a cent.
+
+```toml
+[typesafe]
+model = "jev-1.14.0"
+# cluster_phrases = true
+# min_confidence = 0.7   # Jev's probability that two wordings say the same thing
+
+[pricing."jev-1.14.0"]
+input = 0.042
+```
+
 ### The coverage check (Exa)
 
 A miss has two very different causes: no page of yours answers the question, or one does and
@@ -391,9 +430,6 @@ Each item below fits the six rules. They are ranked by how visible the gain is o
 
 **Jev, judgments over data the run already has**
 
-1. Cluster objections, praise and themes. Counting is by case-folded string, so "coverage
-   unverified" and "coverage of ChatGPT and Claude unverified" are two objections. A Choice per
-   new phrase over the run's existing clusters, with a none-of-these option.
 2. A second opinion on verdicts. The verdict as a Choice with the brand and aliases in state,
    stored beside the grader's, with disagreements and low confidence as a regrade queue. Also
    makes grader drift measurable.

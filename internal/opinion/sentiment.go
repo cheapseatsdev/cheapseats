@@ -43,11 +43,22 @@ type Count struct {
 // top is how many praise and objection strings Sentiment keeps.
 const top = 5
 
+// Options is what a summary counts through beyond the grades: wordings to count as one. Each map
+// is a folded phrase as the grader wrote it, to the wording it counts under, as first written
+// (app.PhraseClusters). Absent, each wording counts on its own.
+type Options struct {
+	Praise     map[string]string
+	Objections map[string]string
+}
+
 // Summarize counts tone, praise and objections over graded answers; a nil grade is skipped.
-func Summarize(grades []*grade.Grade) Sentiment {
+func Summarize(grades []*grade.Grade) Sentiment { return SummarizeWith(grades, Options{}) }
+
+// SummarizeWith is Summarize counting praise and objections through opt.
+func SummarizeWith(grades []*grade.Grade, opt Options) Sentiment {
 	s := Sentiment{Tones: []ToneCount{}}
 	per := map[grade.Tone]int{}
-	var praise, objections counter
+	praise, objections := counter{as: opt.Praise}, counter{as: opt.Objections}
 	for _, g := range grades {
 		if g == nil || g.Verdict == grade.Absent || g.Verdict == "" {
 			continue
@@ -87,8 +98,10 @@ func (s Sentiment) NetText() string {
 	return fmt.Sprint(n)
 }
 
-// counter counts strings by their folded form, once per answer, keeping the first wording.
+// counter counts strings by their folded form, once per answer, keeping the first wording. With
+// as set, a folded string counts under the wording it maps to.
 type counter struct {
+	as    map[string]string
 	n     map[string]int
 	text  map[string]string
 	order []string
@@ -101,12 +114,19 @@ func (c *counter) add(items []string) {
 	seen := map[string]bool{}
 	for _, it := range items {
 		k := fold(it)
-		if k == "" || seen[k] {
+		if k == "" {
+			continue
+		}
+		text := strings.Join(strings.Fields(it), " ")
+		if as, ok := c.as[k]; ok && as != "" && fold(as) != "" {
+			k, text = fold(as), strings.Join(strings.Fields(as), " ")
+		}
+		if seen[k] {
 			continue
 		}
 		seen[k] = true
 		if _, ok := c.n[k]; !ok {
-			c.text[k] = strings.Join(strings.Fields(it), " ")
+			c.text[k] = text
 			c.order = append(c.order, k)
 		}
 		c.n[k]++

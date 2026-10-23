@@ -154,10 +154,11 @@ is unset.
 - Prompt sets: one file per category of buyer question; every prompt has a permanent id
   ([format](examples/cheapseats-config/prompt-sets/README.md))
 - `[typesafe]`, `[exa]`: optional. After each run, TypeSafe's Jev folds product names the grader
-  wrote differently onto one row of the share-of-voice board, an Exa search per prompt over
-  your sites says which of your own pages answer it, and Exa's find-similar from the cited
-  listicles turns up outreach prospects the answers never cited. Each needs its key or a
-  key-adding proxy; absent means off. See [docs/optional-providers.md](docs/optional-providers.md).
+  wrote differently onto one row of the share-of-voice board and counts objections and praise
+  worded differently as one, an Exa search per prompt over your sites says which of your own
+  pages answer it, and Exa's find-similar from the cited listicles turns up outreach prospects
+  the answers never cited. Each needs its key or a key-adding proxy; absent means off. See
+  [docs/optional-providers.md](docs/optional-providers.md).
 
 Check a change with `cheapseats check`, and see what it does to trends with `cheapseats plan`.
 
@@ -186,6 +187,7 @@ cheapseats themes <run-id> [-rebuild]     net sentiment and the run's themes
 cheapseats match-fixes <run-id>           which sets' fixes ask for the same page, by Jev ([typesafe])
 
 cheapseats classify <run-id>              type pages and class hosts the rules can't ([typesafe])
+cheapseats cluster <run-id>               put the run's new objection and praise wordings to Jev ([typesafe])
 cheapseats suggest-prompts <set-id> [-n 10]  new buyer questions as TOML to paste (one analyst call)
 cheapseats regrade <set-id|run-id> [-since 28d] [-dry-run=false]
                                        grade stored answers again with today's grader, brand and
