@@ -23,7 +23,7 @@ import (
 // (docs/grading.md). TestGolden grades them all with the real grader, so it runs only when asked.
 
 var (
-	goldenThreshold = flag.Float64("golden.threshold", 0.90, "TestGolden fails when verdict, top_pick or other_product agree with the labels on a smaller share of records")
+	goldenThreshold = flag.Float64("golden.threshold", 0.95, "TestGolden fails when verdict, top_pick or other_product agree with the labels on a smaller share of records")
 	goldenOnly      = flag.String("golden.set", "", "TestGolden grades only this set's records")
 )
 

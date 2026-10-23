@@ -134,11 +134,14 @@ the labels on, a verdict confusion table (rows are labels, columns the grader), 
 that disagreed with both sides' evidence and the grader's reasoning.
 
 It **fails** when `verdict`, `top_pick` or `other_product` agrees on fewer than
-`-golden.threshold` of the records (default 0.90). `tone` is reported, not gated: it's the most
+`-golden.threshold` of the records (default 0.95). `tone` is reported, not gated: it's the most
 subjective field. The threshold is below 1.0 because the grader is a language model and doesn't
-grade the same answer the same way every time; the default is provisional until a pilot run
-against human labels sets it (run the test twice on the same labels: the agreement between the
-two runs is the noise floor, and the threshold belongs a little under it). Each record is graded
+grade the same answer the same way every time. The default comes from the first pilots on
+2026-10-23: under the old rubric the grader agreed with its own earlier verdicts on 90.0% of 80
+records, every miss an echoed-name answer; with the echoed-name rule, 98.8% on verdict, 100% on
+top pick, 98.8% on other product (one record each way), 96.2% on tone. Re-check it the same way
+after a method change (run the test twice on the same labels: the agreement between the two runs
+is the noise floor, and the threshold belongs a little under it). Each record is graded
 once per run; grading them several times would cost more and only sharpen a number the threshold
 already allows for.
 
