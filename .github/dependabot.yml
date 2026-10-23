@@ -1,0 +1,24 @@
+# Dependabot keeps the Go modules and the GitHub Actions current, one grouped pull request per
+# ecosystem a week, so updates arrive as one reviewable change rather than a dozen.
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      go:
+        patterns: ["*"]
+    commit-message:
+      prefix: "deps"
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: "ci"
