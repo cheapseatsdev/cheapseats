@@ -350,6 +350,41 @@ search_per_1k = 4
 
 One search per prompt: fifteen prompts is six cents a run, the same as the coverage check.
 
+### Outreach prospects (Exa, and Jev when configured)
+
+The outreach list is the hosts the answers already cited without the brand: reactive. After each
+run, with `[exa]` configured, the `prospect_seeds` (default 10) most-cited third-party listicles
+and comparisons in the run's report each go to Exa's find-similar, which returns
+`prospect_results` (default 5) pages like it from other domains, never the brand's or a
+competitor's. Pages any answer in the run cited, retrieved or fetched are dropped, as are
+duplicates across seeds, and the rest are stored per run in `prospects`: pages that shape
+answers like these, that the run didn't know about. With `[typesafe]` configured, each page is
+put to Jev once, a yes/no over the URL, title and category, "a roundup, comparison or list of
+products in the category", and the probability is stored as `in_category`; without it the
+column is NULL and the page is listed anyway, since Exa finding it similar to a page that
+shaped answers is the floor. Each page is then read through the citation checker (plain HTTP,
+robots-respecting, once a day per page) for whether it names the brand or a competitor.
+
+The run page lists them under the outreach table as "Prospects": the page, the seed it is
+similar to, whom it names, an `outreach` chip when it names competitors and not the brand, and
+Jev's in-category probability; a page Jev judged is listed only at or above
+`typesafe.min_confidence`, read each time. The order is: names competitors but not the brand,
+then Jev's probability, then how many answers cited the seed. `GET /api/runs/{id}` carries them
+as `prospects`, MCP `get_run` as `prospects` (the top 10: url, names, why), and `cheapseats
+prospect <run-id>` runs the pass on a finished run and prints the list. A seed already searched
+for a run is skipped, so re-running it costs nothing.
+
+```toml
+[exa]
+# prospects = true
+# prospect_seeds = 10     # cited listicles and comparisons to start from
+# prospect_results = 5    # similar pages to keep from each
+```
+
+Cost per run: one find-similar per seed, so ten seeds is ten searches, four cents at the list
+price, plus Jev at a few hundred input tokens per page, which doesn't register. The page reads
+are free.
+
 ## Next, in order
 
 Each item below fits the six rules. They are ranked by how visible the gain is on our own data.
@@ -375,10 +410,7 @@ why-not-top, objections as text and the fix list stay on a generative model.
 
 **Exa, web evidence the run doesn't have**
 
-1. Outreach discovery beyond what the answers cited: find-similar from the pages that shaped
-   answers, or a search for the category's roundups, scored by Jev for "in our category" and
-   "names us". Turns the outreach list from reactive to prospecting.
 
-The strongest pairing is Exa finding candidate pages and Jev deciding whether each is a roundup
-in the category that names the brand, with code ranking the result: the citation-check pattern
-applied to outreach.
+The strongest pairing is Exa finding candidate pages and Jev deciding what each is, with code
+ranking the result: the citation-check pattern applied to outreach, which is what the prospects
+pass does.
