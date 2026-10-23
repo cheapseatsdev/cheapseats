@@ -111,7 +111,7 @@ func TestAttemptsStayMeasurableAcrossAMethodChange(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	at, err := a.MarkFix(ctx, "r-1", 1, "https://github.com/acme/site/pull/1", Accepted, "", "test")
+	at, err := a.MarkFix(ctx, "r-1", 1, "https://github.com/acme/site/pull/1", string(Accepted), "", "test")
 	if err != nil || at.Outcome.Status() != OutcomePending {
 		t.Fatalf("marked: %+v %v", at.Outcome, err)
 	}
@@ -156,7 +156,7 @@ func TestAttemptsStayMeasurableAcrossAMethodChange(t *testing.T) {
 	// Another set's attempt, whose set has since run only with answers asked differently: nothing
 	// to re-grade, and it says so.
 	comparGradedRun(t, db, comparRun{"t-1", day(12), "t", grade.System, ask, "Use Other.", "absent", fixes})
-	if _, err := a.MarkFix(ctx, "t-1", 1, "https://github.com/acme/site/pull/2", Accepted, "", "test"); err != nil {
+	if _, err := a.MarkFix(ctx, "t-1", 1, "https://github.com/acme/site/pull/2", string(Accepted), "", "test"); err != nil {
 		t.Fatal(err)
 	}
 	db.Exec(`UPDATE fix_attempts SET created_at=? WHERE run_id='t-1'`, day(11)+"T12:00:00Z")
