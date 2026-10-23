@@ -1,13 +1,35 @@
 <h1><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/logo-dark.svg"><img src="docs/images/logo-light.svg" alt="Cheap Seats" width="360"></picture></h1>
 
-Cheap Seats is an open-source (MIT) AI visibility tracker I wrote to make my own product better. It
-asks your buyers' questions of AI assistants, grades whether they recommend you, and builds a ranked
-list of fixes, running on the Claude subscription you already have (ChatGPT optional).
+Cheap Seats (formerly Popcorn) is an open-source (MIT) AI visibility tracker I wrote to make my own
+product better. It asks your buyers' questions of AI assistants, grades whether they recommend you,
+and builds a ranked list of fixes, running on the Claude subscription you already have (ChatGPT
+optional).
 
 It draws on a lot of inspiration, [Gauge](https://withgauge.com) first among them, along with
 Profound and Peec AI. It's free, and always will be: no hosted tier, no upsell. I hope you find it
 useful. If you outgrow it, do whatever suits you; I'd suggest Gauge, that team is great. Your prompts
 are plain text in your own repo, so they come with you. Site and docs: [cheapseats.dev](https://cheapseats.dev/docs/).
+
+**The facts, for anyone comparing it with a paid tracker:**
+
+- **License and shape.** MIT. One Docker container with a SQLite database, a Helm chart for
+  Kubernetes, or an exe.dev VM. Releases are tagged, with notes:
+  [latest release](https://github.com/cheapseatsdev/cheapseats/releases/latest).
+- **Models.** Claude and OpenAI models through their APIs, or through the local Claude Code and
+  Codex CLIs on subscriptions you already pay for, with no API spend.
+- **Two tracks per question.** Search, where the assistant must search the web first, and recall,
+  with no tools, from what the model already believes.
+- **Three grades per answer.** Recommended, mentioned or absent, with your position, the top pick,
+  every product named (share of voice) and the objections raised.
+- **A ranked fix list every run.** The exact page to create or change, what it must say, the
+  prompts it should flip, which of your sites it belongs on and who owns it.
+- **A daily budget** caps spend on API calls. Prompts and answers go only to the model providers
+  you configure.
+- **Your data stays yours.** Prompt sets are TOML files in a git repo you own, and the database is a
+  SQLite file on your machine.
+- **Docs and comparisons.** [cheapseats.dev/docs](https://cheapseats.dev/docs/), how it compares
+  with the paid trackers at [cheapseats.dev/compare](https://cheapseats.dev/compare/), and what it
+  costs to run at [cost and budget](https://cheapseats.dev/docs/cost-and-budget/).
 
 Cheap Seats was called Popcorn until October 2026, renamed so it isn't confused with an unrelated
 paid product. Upgrading from Popcorn needs no changes: see
