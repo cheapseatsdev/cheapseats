@@ -25,7 +25,9 @@ from the sitemap (spread through it), as `Mozilla/5.0 (compatible; CheapSeats-Au
 +https://cheapseats.dev)`, 4 requests at a time, 15 s timeout, 2 MB cap. It reads the raw HTML, as
 a crawler that runs no JavaScript does. A host/path site (`github.com/example`) gets its
 robots.txt rules checked for that path, but no llms.txt or sitemap check, since those belong to the
-host. Sites of kind `code` or `community` don't get their markup checked: it isn't yours to fix.
+host. Sites of kind `code` or `community` (your GitHub, a forum) raise no robots.txt, firewall,
+llms.txt, sitemap or markup findings: none of that is yours to fix. Which crawlers the host blocks
+is still recorded on the site's `blocked` line, so you know it, without a fix you can't apply.
 
 The newest audit of the brand's own sites is kept. If it's less than 30 days old, its errors and
 warnings go to the analyst with the next fix list as more evidence, so a fix can say "this page is
