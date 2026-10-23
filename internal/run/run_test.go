@@ -1,12 +1,14 @@
 package run
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -160,12 +162,34 @@ func TestDesignIgnoresAudience(t *testing.T) {
 func TestShutdownInterruptsAndTheNextStartResumes(t *testing.T) {
 	e, set, _ := setup(t, 0)
 	e.Cfg.Answerers = e.Cfg.Answerers[:1]
+	e.Cfg.Budget.Concurrency = 1
+	ctx := context.Background()
+	r, err := e.Create(ctx, set, "manual")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A provider that answers until the run has one result in, then holds every call until the
+	// test lets go (or the engine hangs up): the shutdown finds the run midway, some answers kept
+	// and the rest not, however slow the machine is.
 	fast := llm.AnthropicURL
-	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		time.Sleep(150 * time.Millisecond)
-		req, _ := http.NewRequest(r.Method, fast+r.URL.Path, r.Body)
-		req.Header = r.Header
-		res, err := http.DefaultClient.Do(req)
+	midway, release := make(chan struct{}), make(chan struct{})
+	var holding sync.Once
+	stuck := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		body, _ := io.ReadAll(req.Body)
+		var done int
+		e.DB.QueryRow(`SELECT COUNT(*) FROM results WHERE run_id=? AND status='done'`, r.ID).Scan(&done)
+		if done > 0 {
+			holding.Do(func() { close(midway) })
+			select {
+			case <-release:
+			case <-req.Context().Done():
+			}
+			w.WriteHeader(502)
+			return
+		}
+		out, _ := http.NewRequest(req.Method, fast, bytes.NewReader(body))
+		out.Header = req.Header
+		res, err := http.DefaultClient.Do(out)
 		if err != nil {
 			w.WriteHeader(502)
 			return
@@ -174,16 +198,15 @@ func TestShutdownInterruptsAndTheNextStartResumes(t *testing.T) {
 		w.Header().Set("content-type", "application/json")
 		io.Copy(w, res.Body)
 	}))
-	defer slow.Close()
-	llm.AnthropicURL = slow.URL
-	e.Cfg.Budget.Concurrency = 1
-	ctx := context.Background()
-	r, err := e.Create(ctx, set, "manual")
-	if err != nil {
-		t.Fatal(err)
-	}
+	defer stuck.Close()
+	defer close(release)
+	llm.AnthropicURL = stuck.URL
 	e.Start(r.ID)
-	time.Sleep(400 * time.Millisecond)
+	select {
+	case <-midway:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the run never finished its first answer")
+	}
 	e.Stop(5 * time.Second)
 	if s := e.Status(ctx, r.ID); s != "queued" {
 		t.Fatalf("after shutdown the run is %q, want queued to resume", s)
