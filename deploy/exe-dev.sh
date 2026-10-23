@@ -108,6 +108,41 @@ if ! remote "test -s '$dir/cheapseats.env'"; then
 fi
 remote "chmod +x '$dir/bin/cheapseats.new' && PATH=/usr/local/bin:\$PATH CHEAPSEATS_CONFIG='$dir/config.new/cheapseats.toml' '$dir/bin/cheapseats.new' check"
 
+say "CLI user"
+# The claude and codex CLIs run as a user of their own: each carries a shell the model can use,
+# and a prompt-injected search answer that used it would otherwise find this user's env file,
+# database and logins. The service runs them through sudo (CHEAPSEATS_CLI_USER); the rule allows
+# just the two commands, with the environment Cheap Seats passes. Logins made as this user before
+# the CLI user existed move over, once.
+cliuser=cheapseats-cli
+remote bash -s "$user" "$cliuser" <<'EOF'
+set -euo pipefail
+user=$1 cliuser=$2
+if ! id "$cliuser" >/dev/null 2>&1; then
+	sudo useradd --system --create-home --home-dir "/home/$cliuser" --shell /usr/sbin/nologin "$cliuser"
+	echo "made the $cliuser user"
+fi
+home=/home/$cliuser
+printf '%s ALL=(%s) NOPASSWD:SETENV: /usr/local/bin/claude, /usr/local/bin/codex\n' "$user" "$cliuser" | sudo tee /etc/sudoers.d/cheapseats >/dev/null
+sudo chmod 440 /etc/sudoers.d/cheapseats
+sudo visudo -cf /etc/sudoers.d/cheapseats >/dev/null
+for f in .claude/.credentials.json .codex/auth.json; do
+	if [ -e "$HOME/$f" ] && ! sudo test -e "$home/$f"; then
+		sudo mkdir -p "$home/${f%/*}"
+		sudo mv "$HOME/$f" "$home/$f"
+		sudo chown -R "$cliuser:$cliuser" "$home/${f%/*}"
+		echo "moved ~/$f to $cliuser"
+	fi
+done
+for f in claude:.claude/.credentials.json codex:.codex/auth.json; do
+	if sudo test -e "$home/${f#*:}"; then
+		echo "${f%%:*}: logged in as $cliuser"
+	else
+		echo "${f%%:*}: not logged in; if an answerer needs it: ssh -t $(hostname) sudo -H -u $cliuser ${f%%:*}"
+	fi
+done
+EOF
+
 say "install"
 unit="[Unit]
 Description=Cheap Seats
@@ -122,6 +157,7 @@ Environment=HOME=$home
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
 Environment=CHEAPSEATS_CONFIG=$dir/config/cheapseats.toml
 Environment=CHEAPSEATS_DATA_DIR=$dir/data
+Environment=CHEAPSEATS_CLI_USER=$cliuser
 ExecStart=$dir/bin/cheapseats serve -addr 0.0.0.0:$port
 Restart=on-failure
 RestartSec=5

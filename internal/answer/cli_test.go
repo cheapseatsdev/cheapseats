@@ -70,13 +70,20 @@ func TestParseCodex(t *testing.T) {
 func TestClaudeCodeRunsIsolatedOnTheSubscription(t *testing.T) {
 	dir := t.TempDir()
 	log := filepath.Join(dir, "log")
-	script := "#!/bin/sh\n{ printf '%s\\n' \"$@\"; echo \"KEY=${ANTHROPIC_API_KEY:-unset}\"; echo \"PWD=$PWD\"; } > " + log + "\n" +
+	script := "#!/bin/sh\n{ printf '%s\\n' \"$@\"; echo \"KEY=${ANTHROPIC_API_KEY:-unset}\"; echo \"PWD=$PWD\"; env | grep -E '^(CHEAPSEATS_TOKENS|OPENAI_API_KEY|OTHER_SECRET|HOME|PATH|CHEAPSEATS_CLI_ENV|KEPT)=' | sed 's/=.*/=present/'; } > " + log + "\n" +
 		"printf '%s\\n' '{\"type\":\"result\",\"result\":\"Use Cheap Seats.\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}'\n"
 	if err := os.WriteFile(filepath.Join(dir, "claude"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", dir+":"+os.Getenv("PATH"))
 	t.Setenv("ANTHROPIC_API_KEY", "api-key-for-grading")
+	// What this process holds stays here: the CLI has a shell, and the model drives it.
+	t.Setenv("CHEAPSEATS_TOKENS", "tok")
+	t.Setenv("OPENAI_API_KEY", "sk-other")
+	t.Setenv("OTHER_SECRET", "x")
+	t.Setenv("KEPT", "y")
+	t.Setenv("CHEAPSEATS_CLI_ENV", " KEPT ,ANTHROPIC_API_KEY") // named: passed; the provider's key: still not
+	t.Setenv("CHEAPSEATS_CLI_USER", "")
 	if !config.Available(config.ClaudeCode) {
 		t.Fatal("claude on the PATH should make claude-code available")
 	}
@@ -86,13 +93,49 @@ func TestClaudeCodeRunsIsolatedOnTheSubscription(t *testing.T) {
 	}
 	got, _ := os.ReadFile(log)
 	args := string(got)
-	for _, want := range []string{"\n--safe-mode\n", "\n--strict-mcp-config\n", "\n--no-session-persistence\n", "\n--tools\n\n", "KEY=unset", "cheapseats-claude-code-"} {
+	for _, want := range []string{"\n--safe-mode\n", "\n--strict-mcp-config\n", "\n--no-session-persistence\n", "\n--tools\n\n", "KEY=unset", "cheapseats-claude-code-", "\nHOME=present\n", "\nPATH=present\n", "\nKEPT=present\n"} {
 		if !strings.Contains(args, want) {
 			t.Errorf("claude call lacks %q:\n%s", want, args)
 		}
 	}
-	if strings.Contains(args, "--allowedTools") {
-		t.Error("recall should allow no tools")
+	for _, leak := range []string{"CHEAPSEATS_TOKENS=", "OPENAI_API_KEY=", "OTHER_SECRET=", "CHEAPSEATS_CLI_ENV=", "--allowedTools"} {
+		if strings.Contains(args, leak) {
+			t.Errorf("claude call has %q (recall allows no tools; the environment is the CLI's own):\n%s", leak, args)
+		}
+	}
+}
+
+// With CHEAPSEATS_CLI_USER, the CLI runs as that user through sudo: non-interactive, with that
+// user's home, the command by its full path, and the CLI's environment as VAR=value arguments.
+func TestCLIRunsAsAnotherUser(t *testing.T) {
+	dir := t.TempDir()
+	log, sudoLog := filepath.Join(dir, "log"), filepath.Join(dir, "sudo")
+	// A fake sudo: records its arguments, then does what the real one would with them.
+	sudo := "#!/bin/sh\nprintf '%s\\n' \"$@\" > " + sudoLog + "\n" +
+		"while [ $# -gt 0 ]; do case $1 in -n|-H) shift ;; -u) shift 2 ;; *=*) export \"$1\"; shift ;; *) break ;; esac; done\n" +
+		"exec \"$@\"\n"
+	claude := "#!/bin/sh\n{ echo \"PWD=$PWD\"; echo \"LANG=${LANG:-unset}\"; stat -f %Lp . 2>/dev/null || stat -c %a .; } > " + log + "\n" +
+		"printf '%s\\n' '{\"type\":\"result\",\"result\":\"Use Cheap Seats.\"}'\n"
+	for name, body := range map[string]string{"sudo": sudo, "claude": claude} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", dir+":"+os.Getenv("PATH"))
+	t.Setenv("CHEAPSEATS_CLI_USER", "cheapseats-cli")
+	t.Setenv("LANG", "C.UTF-8")
+	a, err := Ask(context.Background(), config.Answerer{Provider: config.ClaudeCode, Model: "opus"}, Recall, System(""), "a question")
+	if err != nil || a.Text != "Use Cheap Seats." {
+		t.Fatalf("%+v %v", a, err)
+	}
+	got, _ := os.ReadFile(sudoLog)
+	sargs := string(got)
+	if !strings.HasPrefix(sargs, "-n\n-H\n-u\ncheapseats-cli\n") || !strings.Contains(sargs, "\nLANG=C.UTF-8\n") || !strings.Contains(sargs, "\n"+filepath.Join(dir, "claude")+"\n-p\n") || strings.Contains(sargs, "\nHOME=") {
+		t.Errorf("sudo arguments:\n%s", sargs)
+	}
+	got, _ = os.ReadFile(log)
+	if out := string(got); !strings.Contains(out, "LANG=C.UTF-8") || !strings.HasSuffix(strings.TrimSpace(out), "755") {
+		t.Errorf("the CLI as the other user:\n%s", out)
 	}
 }
 
