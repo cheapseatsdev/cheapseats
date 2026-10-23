@@ -92,3 +92,29 @@ func TestOpenKeepsTheOldDatabase(t *testing.T) {
 		t.Error("made a new cheapseats.db beside popcorn.db")
 	}
 }
+
+// The optional providers' tables arrive with schema 10; a database from before gets them.
+func TestUpgradeAddsProviderTables(t *testing.T) {
+	dir := t.TempDir()
+	old, err := OpenAt(dir, 9)
+	if err != nil {
+		t.Fatal(err)
+	}
+	old.Close()
+	db, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	for _, table := range []string{"name_decisions", "coverage"} {
+		var n int
+		if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?`, table).Scan(&n); err != nil || n != 1 {
+			t.Errorf("table %s after upgrade: %d %v", table, n, err)
+		}
+	}
+	var v int
+	db.QueryRow(`PRAGMA user_version`).Scan(&v)
+	if v != Schema() || v != 10 {
+		t.Errorf("schema %d", v)
+	}
+}

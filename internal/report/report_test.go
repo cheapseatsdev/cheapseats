@@ -121,3 +121,35 @@ func TestBrandVoiceFollowsTheVerdict(t *testing.T) {
 		t.Fatalf("named rate: %+v", s.Overall.Visible)
 	}
 }
+
+// Aliases fold product names the grader wrote differently onto one row, for names and top picks.
+func TestAliasesFoldTheBoard(t *testing.T) {
+	brand := config.Brand{Name: "Acme"}
+	a, b := "Scrunch AI", "Scrunch"
+	res := []run.Result{
+		{Status: "done", Track: answer.Search, Grade: &grade.Grade{Verdict: grade.Absent, Named: []string{"Scrunch AI", "Profound"}, TopPick: &a}},
+		{Status: "done", Track: answer.Recall, Grade: &grade.Grade{Verdict: grade.Absent, Named: []string{"Scrunch", "tryprofound"}, TopPick: &b}},
+	}
+	plain := BuildWith(brand, res, Options{})
+	if len(plain.Voice) != 4 {
+		t.Fatalf("unfolded, four rows: %v", plain.VoiceNames())
+	}
+	folded := BuildWith(brand, res, Options{Aliases: map[string]string{"scrunch": "Scrunch AI", "tryprofound": "Profound"}})
+	if len(folded.Voice) != 2 {
+		t.Fatalf("folded, two rows: %v", folded.VoiceNames())
+	}
+	for _, v := range folded.Voice {
+		switch v.Name {
+		case "Scrunch AI":
+			if v.Answers != 2 || v.TopPick != 2 {
+				t.Errorf("Scrunch AI: %+v", v)
+			}
+		case "Profound":
+			if v.Answers != 2 {
+				t.Errorf("Profound: %+v", v)
+			}
+		default:
+			t.Errorf("unexpected row %q", v.Name)
+		}
+	}
+}

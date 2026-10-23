@@ -28,6 +28,7 @@ import (
 
 type App struct {
 	analyses sync.Map
+	aliases  aliasCache
 	Cfg      *config.Config
 	DB       *store.DB
 	Runs     *run.Engine
@@ -47,6 +48,18 @@ func New(cfg *config.Config, db *store.DB) (*App, error) {
 		slog.Error("backfilling prompt ids", "err", err)
 	}
 	a.Runs.OnFinished = func(ctx context.Context, id string) {
+		// The optional providers first, so the fix list and insights see folded names and the
+		// coverage of each prompt; each is skipped, with a log line, when it isn't usable.
+		if cfg.FoldNamesOn() {
+			if _, err := a.FoldNames(ctx, id); err != nil {
+				slog.Error("fold names", "run", id, "err", err)
+			}
+		}
+		if cfg.CoverageOn() {
+			if _, err := a.CheckCoverage(ctx, id); err != nil {
+				slog.Error("coverage", "run", id, "err", err)
+			}
+		}
 		if err := a.BuildFixes(ctx, id); err != nil {
 			slog.Error("fix list", "run", id, "err", err)
 		}
@@ -280,7 +293,7 @@ func (a *App) RunBrand(r *run.Run) config.Brand {
 // Summary is a run's report over results (all of its results, or a slice of them).
 func (a *App) Summary(r *run.Run, results []run.Result) report.Summary {
 	r.Intents(results)
-	return report.BuildWith(a.RunBrand(r), results, report.Options{Competitors: a.RunCompetitors(r), Sources: a.Cfg.Sources})
+	return report.BuildWith(a.RunBrand(r), results, report.Options{Competitors: a.RunCompetitors(r), Sources: a.Cfg.Sources, Aliases: a.Aliases()})
 }
 
 // RunCompetitors are the competitors a run's report sorts products and sources by: the ones the

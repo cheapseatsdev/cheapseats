@@ -28,6 +28,9 @@ type Config struct {
 	Tiers     Tiers              `toml:"tiers"`
 	Owners    Owners             `toml:"owners"`
 	Pricing   map[string]Pricing `toml:"pricing"`
+	// Optional providers (docs/optional-providers.md): absent means off.
+	TypeSafe *TypeSafe `toml:"typesafe"`
+	Exa      *Exa      `toml:"exa"`
 	// Competitors every prompt set folds names onto, so a list shared by all sets is written
 	// once. A set's own [[competitors]] entry for the same name wins.
 	Competitors []sets.Competitor `toml:"competitors"`
@@ -168,6 +171,69 @@ type Owners struct {
 	ByGap   map[string]string `toml:"by_gap"`
 }
 
+// TypeSafe is the optional [typesafe] table: Jev, TypeSafe's model that returns typed judgments
+// rather than text, for small decisions after a run over data Cheap Seats already has. Calls go
+// to api.typesafe.ai with TYPESAFE_API_KEY, or through a key-adding proxy at
+// CHEAPSEATS_TYPESAFE_BASE_URL. The model needs a [pricing] entry (input per million tokens;
+// output is free). Report pages never call it: its decisions are stored and read back.
+type TypeSafe struct {
+	// The model, a versioned id such as jev-1.14.0 (default jev-latest, an alias that moves).
+	Model string `toml:"model"`
+	// After each run, decide whether product names the grader wrote differently are one product,
+	// and fold them onto one name on the share-of-voice board. Unset means on.
+	FoldNames *bool `toml:"fold_names"`
+	// A fold needs at least this confidence from Jev (0 to 1, default 0.8). Changing it re-reads
+	// the stored decisions; nothing is asked again.
+	MinConfidence float64 `toml:"min_confidence"`
+}
+
+// Exa is the optional [exa] table: Exa's web search, a neutral index Cheap Seats asks after a
+// run which of the brand's own pages answer each prompt. Calls go to api.exa.ai with EXA_API_KEY,
+// or through a key-adding proxy at CHEAPSEATS_EXA_BASE_URL, and are priced and budgeted under
+// [pricing.exa-search] search_per_1k.
+type Exa struct {
+	// After each run, one search per prompt over the brand's sites. Unset means on.
+	Coverage *bool `toml:"coverage"`
+	// Results to keep per prompt (1 to 10, default 3).
+	Results int `toml:"results"`
+}
+
+// FoldNamesOn reports whether runs end with Jev folding product names ([typesafe] present and
+// fold_names not false).
+func (c *Config) FoldNamesOn() bool {
+	return c.TypeSafe != nil && (c.TypeSafe.FoldNames == nil || *c.TypeSafe.FoldNames)
+}
+
+// CoverageOn reports whether runs end with Exa's coverage check ([exa] present and coverage not
+// false).
+func (c *Config) CoverageOn() bool {
+	return c.Exa != nil && (c.Exa.Coverage == nil || *c.Exa.Coverage)
+}
+
+// TypeSafeModel is the configured Jev model, or the default alias.
+func (c *Config) TypeSafeModel() string {
+	if c.TypeSafe != nil && c.TypeSafe.Model != "" {
+		return c.TypeSafe.Model
+	}
+	return "jev-latest"
+}
+
+// FoldConfidence is the confidence a Jev name decision needs to fold two names.
+func (c *Config) FoldConfidence() float64 {
+	if c.TypeSafe != nil && c.TypeSafe.MinConfidence > 0 {
+		return c.TypeSafe.MinConfidence
+	}
+	return 0.8
+}
+
+// CoverageResults is how many of the brand's pages the coverage check keeps per prompt.
+func (c *Config) CoverageResults() int {
+	if c.Exa != nil && c.Exa.Results > 0 {
+		return c.Exa.Results
+	}
+	return 3
+}
+
 // Pricing is USD per million tokens, and per 1,000 searches.
 type Pricing struct {
 	Input       float64 `toml:"input"`
@@ -255,6 +321,12 @@ func Load(path string) (*Config, error) {
 			}
 		}
 	}
+	if t := c.TypeSafe; t != nil && (t.MinConfidence < 0 || t.MinConfidence > 1) {
+		return nil, fmt.Errorf("%s: typesafe.min_confidence must be between 0 and 1", path)
+	}
+	if x := c.Exa; x != nil && (x.Results < 0 || x.Results > 10) {
+		return nil, fmt.Errorf("%s: exa.results must be between 1 and 10", path)
+	}
 	placed := map[string]string{}
 	for class, hosts := range c.Sources {
 		if !slices.Contains(SourceClasses, class) {
@@ -335,6 +407,9 @@ const (
 	OpenAI     = "openai"
 	ClaudeCode = "claude-code"
 	Codex      = "codex"
+	// Optional providers, not answerers: Missing and KeyVar know them too.
+	TypeSafeProvider = "typesafe"
+	ExaProvider      = "exa"
 )
 
 // Subscription reports whether a provider answers through a local CLI's subscription rather
@@ -355,8 +430,19 @@ func Missing(provider string) string {
 		}
 		return ""
 	}
-	if provider != OpenAI && AnthropicBaseURL() != "" {
-		return "" // a proxy that adds the key
+	switch provider {
+	case Anthropic:
+		if AnthropicBaseURL() != "" {
+			return "" // a proxy that adds the key
+		}
+	case TypeSafeProvider:
+		if ProxyBaseURL(TypeSafeBaseURLVar) != "" {
+			return ""
+		}
+	case ExaProvider:
+		if ProxyBaseURL(ExaBaseURLVar) != "" {
+			return ""
+		}
 	}
 	if os.Getenv(KeyVar(provider)) == "" {
 		return KeyVar(provider) + " is not set"
@@ -373,6 +459,18 @@ const AnthropicBaseURLVar = "CHEAPSEATS_ANTHROPIC_BASE_URL"
 // AnthropicBaseURL is AnthropicBaseURLVar without a trailing slash, or "".
 func AnthropicBaseURL() string {
 	return strings.TrimRight(strings.TrimSpace(env.Get("ANTHROPIC_BASE_URL")), "/")
+}
+
+// TypeSafeBaseURLVar and ExaBaseURLVar name key-adding proxies for the optional providers, as
+// AnthropicBaseURLVar does for Anthropic; with one set, the provider's key is optional.
+const (
+	TypeSafeBaseURLVar = "CHEAPSEATS_TYPESAFE_BASE_URL"
+	ExaBaseURLVar      = "CHEAPSEATS_EXA_BASE_URL"
+)
+
+// ProxyBaseURL is the named CHEAPSEATS_*_BASE_URL without a trailing slash, or "".
+func ProxyBaseURL(name string) string {
+	return strings.TrimRight(strings.TrimSpace(env.Get(strings.TrimPrefix(name, "CHEAPSEATS_"))), "/")
 }
 
 // AnswererName is what the UI calls an answerer: its name, or its id if it has none or is no
@@ -392,8 +490,13 @@ func CLI(provider string) string {
 }
 
 func KeyVar(provider string) string {
-	if provider == OpenAI {
+	switch provider {
+	case OpenAI:
 		return "OPENAI_API_KEY"
+	case TypeSafeProvider:
+		return "TYPESAFE_API_KEY"
+	case ExaProvider:
+		return "EXA_API_KEY"
 	}
 	return "ANTHROPIC_API_KEY"
 }

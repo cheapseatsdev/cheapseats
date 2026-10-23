@@ -36,6 +36,11 @@ which signs people in by email. Because it's a whole VM, its answerers can be th
    proxy, which adds the key. The `claude` CLI doesn't read this variable, so `claude-code`
    answerers stay on your subscription.
 
+   The optional providers work the same way: with `[typesafe]` or `[exa]` in the config, add each
+   as an integration and set `CHEAPSEATS_TYPESAFE_BASE_URL=https://typesafe.int.exe.xyz` and
+   `CHEAPSEATS_EXA_BASE_URL=https://exa.int.exe.xyz` instead of `TYPESAFE_API_KEY` and
+   `EXA_API_KEY`. See [Optional providers](optional-providers.md).
+
 3. **Log the CLIs in**, if your answerers use them. The subscription is whoever logs in.
 
    ```bash

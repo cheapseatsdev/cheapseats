@@ -186,3 +186,51 @@ func TestLoadFindsTheOldConfigName(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestOptionalProviders(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "cheapseats.toml")
+	os.WriteFile(p, []byte("[brand]\nname = \"Acme\"\n"), 0o644)
+	c, err := Load(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.FoldNamesOn() || c.CoverageOn() || c.TypeSafe != nil || c.Exa != nil {
+		t.Error("absent tables mean off")
+	}
+	if c.TypeSafeModel() != "jev-latest" || c.FoldConfidence() != 0.8 || c.CoverageResults() != 3 {
+		t.Error("defaults")
+	}
+	os.WriteFile(p, []byte("[brand]\nname = \"Acme\"\n[typesafe]\nmodel = \"jev-1.14.0\"\nmin_confidence = 0.9\n[exa]\nresults = 5\n"), 0o644)
+	c, err = Load(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !c.FoldNamesOn() || !c.CoverageOn() || c.TypeSafeModel() != "jev-1.14.0" || c.FoldConfidence() != 0.9 || c.CoverageResults() != 5 {
+		t.Errorf("present tables mean on, with their settings: %+v %+v", c.TypeSafe, c.Exa)
+	}
+	off := false
+	c.TypeSafe.FoldNames, c.Exa.Coverage = &off, &off
+	if c.FoldNamesOn() || c.CoverageOn() {
+		t.Error("false turns each off")
+	}
+	for _, bad := range []string{"[typesafe]\nmin_confidence = 1.5\n", "[exa]\nresults = 11\n", "[typesafe]\nfold = true\n"} {
+		os.WriteFile(p, []byte("[brand]\nname = \"Acme\"\n"+bad), 0o644)
+		if _, err := Load(p); err == nil {
+			t.Errorf("%q should fail", bad)
+		}
+	}
+	t.Setenv("TYPESAFE_API_KEY", "")
+	t.Setenv("EXA_API_KEY", "")
+	t.Setenv(TypeSafeBaseURLVar, "")
+	t.Setenv(ExaBaseURLVar, "")
+	if Missing(TypeSafeProvider) == "" || Missing(ExaProvider) == "" {
+		t.Error("no key and no proxy is missing")
+	}
+	t.Setenv("EXA_API_KEY", "k")
+	if Missing(ExaProvider) != "" || Missing(TypeSafeProvider) == "" {
+		t.Error("each provider has its own key")
+	}
+	if KeyVar(TypeSafeProvider) != "TYPESAFE_API_KEY" || KeyVar(ExaProvider) != "EXA_API_KEY" {
+		t.Error("key variables")
+	}
+}

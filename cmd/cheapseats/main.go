@@ -190,6 +190,23 @@ func dispatch(ctx context.Context, cmd string, args []string) error {
 				fmt.Printf("note: the %s needs %s (or %s) at runtime\n", name, config.KeyVar(config.Anthropic), config.AnthropicBaseURLVar)
 			}
 		}
+		// The optional providers: configured but not callable here is a note, like a missing key.
+		if cfg.TypeSafe != nil {
+			if m := config.Missing(config.TypeSafeProvider); m != "" {
+				fmt.Printf("note: [typesafe] needs %s (or %s) at runtime; without it, names aren't folded\n", config.KeyVar(config.TypeSafeProvider), config.TypeSafeBaseURLVar)
+			}
+			if p, ok := cfg.Pricing[cfg.TypeSafeModel()]; !ok || p.Input <= 0 {
+				errs = append(errs, fmt.Errorf("[typesafe] model %q has no [pricing.%q] entry with a positive input price", cfg.TypeSafeModel(), cfg.TypeSafeModel()))
+			}
+		}
+		if cfg.Exa != nil {
+			if m := config.Missing(config.ExaProvider); m != "" {
+				fmt.Printf("note: [exa] needs %s (or %s) at runtime; without it, coverage isn't checked\n", config.KeyVar(config.ExaProvider), config.ExaBaseURLVar)
+			}
+			if p, ok := cfg.Pricing["exa-search"]; !ok || p.SearchPer1K <= 0 {
+				errs = append(errs, fmt.Errorf("[exa] needs a [pricing.exa-search] entry with a positive search_per_1k"))
+			}
+		}
 		if err := errors.Join(errs...); err != nil {
 			return err
 		}

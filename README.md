@@ -153,6 +153,10 @@ is unset.
 - `[schedule]`, `[tiers]`: when sets run (weekly is usually enough)
 - Prompt sets: one file per category of buyer question; every prompt has a permanent id
   ([format](examples/cheapseats-config/prompt-sets/README.md))
+- `[typesafe]`, `[exa]`: optional. After each run, TypeSafe's Jev folds product names the grader
+  wrote differently onto one row of the share-of-voice board, and an Exa search per prompt over
+  your sites says which of your own pages answer it. Each needs its key or a key-adding proxy;
+  absent means off. See [docs/optional-providers.md](docs/optional-providers.md).
 
 Check a change with `cheapseats check`, and see what it does to trends with `cheapseats plan`.
 

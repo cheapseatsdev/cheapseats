@@ -281,6 +281,19 @@ func (t Tally) Rates() Rates {
 type Options struct {
 	Competitors []sets.Competitor
 	Sources     map[string][]string
+	// Product names to fold onto another on the share-of-voice board: a lower-cased name as the
+	// grader wrote it, to the name it is displayed as. The brand's own names fold through the
+	// brand's aliases, not here.
+	Aliases map[string]string
+}
+
+// fold returns the board key and display name for a product the grader named, through Aliases.
+func (o Options) fold(name string) (key, display string) {
+	key, display = strings.ToLower(name), name
+	if c, ok := o.Aliases[key]; ok && c != "" {
+		key, display = strings.ToLower(c), c
+	}
+	return key, display
 }
 
 // Branded reports whether a prompt names the brand or one of its aliases, as a whole word.
@@ -418,14 +431,14 @@ func BuildWith(brand config.Brand, results []run.Result, opt Options) Summary {
 		named := g.Verdict != grade.Absent
 		rec := answerRec{brand: named, pos: map[string]int{}}
 		if g.TopPick != nil {
-			rec.top = strings.ToLower(*g.TopPick)
+			rec.top, _ = opt.fold(*g.TopPick)
 			if isBrand(brand, *g.TopPick) {
 				rec.top = brandKey
 			}
 		}
 		display := map[string]string{}
 		for _, n := range g.Named {
-			k := strings.ToLower(n)
+			k, n := opt.fold(n)
 			if isBrand(brand, n) {
 				if !named {
 					continue
@@ -955,4 +968,13 @@ func containsInt(xs []int, x int) bool {
 		}
 	}
 	return false
+}
+
+// VoiceNames lists the board's product names in order, for tests and tools.
+func (s Summary) VoiceNames() []string {
+	out := make([]string, 0, len(s.Voice))
+	for _, v := range s.Voice {
+		out = append(out, v.Name)
+	}
+	return out
 }
