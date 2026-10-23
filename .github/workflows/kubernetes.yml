@@ -1,0 +1,37 @@
+name: kubernetes
+
+# Installs the chart on kind the way a client deploys, and checks it serves, keeps its data
+# across restarts, upgrades, and rolls back a broken config. It takes as long as the whole test
+# job and the files it exercises change rarely, so it runs when they change, nightly against
+# main, and by hand; the Go tests run on every push in ci.yml.
+on:
+  push:
+    branches: [main]
+    paths: &paths
+      - charts/**
+      - deploy/kind-smoke.sh
+      - Dockerfile
+      - go.mod
+      - .github/workflows/kubernetes.yml
+  pull_request:
+    paths: *paths
+  schedule:
+    - cron: "0 9 * * *"   # 01:00 or 02:00 Pacific, every day
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  kubernetes:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: azure/setup-helm@v5
+        with:
+          version: v4.3.0
+      - uses: helm/kind-action@v1
+        with:
+          install_only: true
+      - run: helm lint charts/cheapseats --set image.repository=x --set image.tag=y --set existingSecret=s
+      - run: deploy/kind-smoke.sh
