@@ -231,10 +231,13 @@ cache_read = 0.10
 search_per_1k = 10.0
 
 # The optional providers (https://docs.typesafe.ai/models, https://exa.ai/pricing, 2026-10-23).
-# Jev bills input only; an Exa search is priced per search, and Exa's own estimate is used when
-# it returns one.
+# Jev bills input only; an Exa search is priced per search and a page read through Exa (the
+# [exa] contents_fallback, on by default) per page; Exa's own estimate is used when it returns one.
 [pricing."jev-1.14.0"]
 input = 0.042
 
 [pricing.exa-search]
 search_per_1k = 4.0
+
+[pricing.exa-contents]
+page_per_1k = 1.0
