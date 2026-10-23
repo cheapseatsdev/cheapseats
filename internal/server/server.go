@@ -397,7 +397,11 @@ func logRequests(h http.Handler) http.Handler {
 		start := time.Now()
 		h.ServeHTTP(w, r)
 		if !strings.HasPrefix(r.URL.Path, "/static/") {
-			slog.Debug("http", "method", r.Method, "path", r.URL.Path, "dur", time.Since(start))
+			path := r.URL.Path
+			if strings.HasPrefix(path, "/share/") {
+				path = "/share/[redacted]" // share URLs carry bearer tokens, including invalid ones
+			}
+			slog.Debug("http", "method", r.Method, "path", path, "dur", time.Since(start))
 		}
 	})
 }
