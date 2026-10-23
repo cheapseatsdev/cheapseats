@@ -48,7 +48,8 @@ func (a *App) IsBrandSite(site string) bool {
 }
 
 // Audit checks the sites (the brand's when none are given) and, when they're all the brand's,
-// keeps the result as the latest audit. Free: plain HTTP, no model calls.
+// keeps the result as the latest audit. Plain HTTP, no model calls; with [exa] contents_fallback
+// on, a page that is empty without JavaScript is read through Exa (contents.go).
 func (a *App) Audit(ctx context.Context, sites []string, o audit.Options) (audit.Result, error) {
 	if len(sites) == 0 {
 		sites = a.AuditSites()
@@ -67,6 +68,9 @@ func (a *App) Audit(ctx context.Context, sites []string, o audit.Options) (audit
 				o.Hosted[s.URL] = true
 			}
 		}
+	}
+	if o.Reader == nil {
+		o.Reader = a.ContentsReader()
 	}
 	res := audit.Run(ctx, sites, o)
 	for _, s := range sites {
@@ -138,6 +142,9 @@ func (a *App) CheckCitations(ctx context.Context, runID string, n int, o audit.C
 	defer checking.Delete(key)
 	b := a.RunBrand(r)
 	o.DB = a.DB.DB
+	if o.Reader == nil {
+		o.Reader = a.ContentsReader()
+	}
 	c := audit.CheckCitations(ctx, CitationTargets(a.Summary(r, res), n), append([]string{b.Name}, b.Aliases...), r.Snapshot.Set.Competitors, o)
 	c.RunID = runID
 	return c, audit.SaveCheck(ctx, a.DB.DB, c)

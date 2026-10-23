@@ -38,6 +38,8 @@ type Finding struct {
 	Check    string   `json:"check"`
 	Message  string   `json:"message"`
 	Fix      string   `json:"fix"`
+	// "exa" when the page's text was read through Exa rather than plain HTTP (Options.Reader).
+	Via string `json:"via,omitempty"`
 }
 
 func (f Finding) String() string {
@@ -62,6 +64,9 @@ type Page struct {
 	Status int    `json:"status"`
 	Error  string `json:"error,omitempty"`
 	HTML   bool   `json:"html"`
+	// "exa" when the page's text was read through Exa rather than plain HTTP: TextChars (and the
+	// Title, when the HTML had none) are then what it read; the rest of Doc is what the HTML said.
+	Via string `json:"via,omitempty"`
 	Doc
 }
 
@@ -112,6 +117,9 @@ type Options struct {
 	// fetched and crawler access recorded, but the host's robots.txt, firewall and markup aren't
 	// the brand's to fix, so they raise no findings.
 	Hosted map[string]bool
+	// Reads a page's text another way when plain HTTP got an app shell that is empty without
+	// JavaScript, or a bot challenge; nil reads nothing more, and what plain HTTP got is the result.
+	Reader Reader
 }
 
 // Run audits each site: a host (example.com) or a host and path (github.com/example), with or
@@ -165,12 +173,24 @@ type siteAudit struct {
 }
 
 func (a *siteAudit) add(sev Severity, check, u, msg, fix string) {
-	if a.o.Hosted[a.site] && !strings.HasPrefix(check, "page.") && check != "site.invalid" {
+	a.found(Finding{Severity: sev, Site: a.site, URL: u, Check: check, Message: msg, Fix: fix})
+}
+
+func (a *siteAudit) found(f Finding) {
+	if a.o.Hosted[a.site] && !strings.HasPrefix(f.Check, "page.") && f.Check != "site.invalid" {
 		return // the host's robots.txt, firewall, llms.txt and sitemap: not the brand's to fix (bot access is still recorded in Bots)
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	a.findings = append(a.findings, Finding{Severity: sev, Site: a.site, URL: u, Check: check, Message: msg, Fix: fix})
+	a.findings = append(a.findings, f)
+}
+
+// read is a page's text through Options.Reader, when there is one.
+func (a *siteAudit) read(ctx context.Context, u string) (text, title string, ok bool) {
+	if a.o.Reader == nil {
+		return "", "", false
+	}
+	return a.o.Reader(ctx, u)
 }
 
 // siteURL splits a site into its scheme and host, and its path ("" for the whole host).
@@ -478,7 +498,14 @@ func (a *siteAudit) page(ctx context.Context, u string, f *fetched) Page {
 		return p
 	}
 	if challenge(r) {
-		a.add(Error, "page.challenge", u, "The page served a bot challenge (CAPTCHA or \"checking your browser\") instead of its content.", "Let crawlers and plain HTTP clients through to public pages in your firewall or CDN settings.")
+		fix := "Let crawlers and plain HTTP clients through to public pages in your firewall or CDN settings."
+		if text, title, ok := a.read(ctx, u); ok {
+			p.Via, p.Title, p.TextChars = ViaExa, title, runes(text)
+			a.found(Finding{Severity: Info, Site: a.site, URL: u, Check: "page.challenge", Via: ViaExa, Fix: fix,
+				Message: fmt.Sprintf("The page served a bot challenge (CAPTCHA or \"checking your browser\") to a plain HTTP client; read through Exa it has %d characters of text. A crawler the firewall doesn't let through gets the challenge.", p.TextChars)})
+			return p
+		}
+		a.add(Error, "page.challenge", u, "The page served a bot challenge (CAPTCHA or \"checking your browser\") instead of its content.", fix)
 		return p
 	}
 	ct := r.ContentType()
@@ -523,7 +550,19 @@ func (a *siteAudit) page(ctx context.Context, u string, f *fetched) Page {
 	if !d.OGTitle || !d.OGDesc {
 		a.add(Warning, "page.open-graph", u, "The page is missing og:title or og:description.", "Add <meta property=\"og:title\"> and <meta property=\"og:description\">.")
 	}
-	if d.TextChars < 200 {
+	if d.TextChars < emptyText {
+		if emptyShell(r.Body, d.TextChars) {
+			if text, title, ok := a.read(ctx, u); ok {
+				p.Via, p.TextChars = ViaExa, runes(text)
+				if p.Title == "" {
+					p.Title = title
+				}
+				a.found(Finding{Severity: Info, Site: a.site, URL: u, Check: "page.needs-js", Via: ViaExa,
+					Message: fmt.Sprintf("Without JavaScript the page's HTML has %d characters of text; read through Exa it has %d, so the content is rendered in the browser. Crawlers that run no JavaScript see the empty HTML.", d.TextChars, p.TextChars),
+					Fix:     "Render pages on the server or pre-render them at build time (SSR or SSG), so the HTML carries the content for crawlers that run no JavaScript."})
+				return p
+			}
+		}
 		if d.AppRoot != "" {
 			a.add(Error, "page.needs-js", u, fmt.Sprintf("Without JavaScript the page is an empty app shell (<div id=%q>, %d characters of text). AI crawlers don't run JavaScript, so they see nothing.", d.AppRoot, d.TextChars), "Render pages on the server or pre-render them at build time (SSR or SSG), so the HTML carries the content.")
 		} else {

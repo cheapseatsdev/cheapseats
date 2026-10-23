@@ -307,7 +307,7 @@ func (s *Server) mcpHandler() http.Handler {
 			}
 			return searchDigest(d, a.Limit), nil
 		})
-	addTool(srv, "audit_sites", "Audit the brand's sites for AI crawlers, free (plain HTTP, no model calls): robots.txt and firewall blocks per AI crawler, llms.txt, the sitemap, and each page's title, description, H1, lang, noindex, canonical, JSON-LD, Open Graph and whether it renders without JavaScript. Returns the errors and warnings with a fix for each.",
+	addTool(srv, "audit_sites", "Audit the brand's sites for AI crawlers, with plain HTTP and no model calls (free, unless [exa] contents_fallback is on: then a page that is empty without JavaScript, or behind a bot challenge, is read once a day through Exa's contents API, priced per page under [pricing.exa-contents], and its finding carries via: exa): robots.txt and firewall blocks per AI crawler, llms.txt, the sitemap, and each page's title, description, H1, lang, noindex, canonical, JSON-LD, Open Graph and whether it renders without JavaScript. Returns the errors and warnings with a fix for each.",
 		func(ctx context.Context, a struct {
 			Site   string `json:"site,omitempty" jsonschema:"audit only this one of the brand's sites (as listed in its config); default all of them"`
 			Cached bool   `json:"cached,omitempty" jsonschema:"return the latest kept audit instead of running one"`
@@ -341,7 +341,7 @@ func (s *Server) mcpHandler() http.Handler {
 			}
 			return auditDigest(res, a.Info), nil
 		})
-	addTool(srv, "check_citations", "For a run, fetch the third-party pages its answers cited most (free, plain HTTP; each page at most once a day) and say which name the brand and which competitors. Pages naming competitors but not the brand are outreach targets.",
+	addTool(srv, "check_citations", "For a run, fetch the third-party pages its answers cited most (plain HTTP; each page at most once a day) and say which name the brand and which competitors. Free by default; with [exa] contents_fallback on, a page that is empty without JavaScript, or behind a bot challenge, is read through Exa's contents API instead, priced per page under [pricing.exa-contents], and carries via: exa. Pages naming competitors but not the brand are outreach targets.",
 		func(ctx context.Context, a struct {
 			Run    string `json:"run" jsonschema:"run id, from list_runs"`
 			Limit  int    `json:"limit,omitempty" jsonschema:"how many of the most-cited pages (default 25)"`
