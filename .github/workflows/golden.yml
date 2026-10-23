@@ -1,0 +1,40 @@
+# The grader golden set (docs/grading.md): grades every labeled answer in
+# internal/grade/testdata/golden with the real grader and fails below the agreement threshold.
+# It calls the Anthropic API, so it never runs with ci.yml; run it by hand on a grader change.
+# It needs the repository secret ANTHROPIC_API_KEY; without it the run fails, it doesn't pass.
+name: golden
+
+on:
+  workflow_dispatch:
+    inputs:
+      threshold:
+        description: "Smallest share of records each scored field must agree with the labels on"
+        default: "0.90"
+      set:
+        description: "Only this prompt set's records (empty: all)"
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  golden:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - name: the key is set
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "::error::the repository secret ANTHROPIC_API_KEY is not set; the golden set can't be graded"
+            exit 1
+          fi
+      - name: grade the golden set
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CHEAPSEATS_GOLDEN: "1"
+        run: go test ./internal/grade/... -run Golden -v -golden.threshold="${{ inputs.threshold }}" -golden.set="${{ inputs.set }}"

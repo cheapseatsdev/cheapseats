@@ -67,6 +67,9 @@ const usage = `cheapseats: how AI assistants answer your buyers' questions.
                                          neutral index ([exa] in the config), or both compared
   cheapseats crawl import <logfile>...      count AI crawler fetches and AI referrals from access logs
   cheapseats crawl report [-days 30]        imported counts per page, beside how the latest runs cite it
+  cheapseats golden export <snapshot.db> [-n 80] [-set id] [-o dir]
+                                         sample graded answers from a database snapshot into the
+                                         grader's golden set, for a human to label (docs/grading.md)
 
 Config: CHEAPSEATS_CONFIG, else the example in examples/cheapseats-config; prompt sets beside it,
 data in ./data (CHEAPSEATS_DATA_DIR). Secrets from the environment or .env: ANTHROPIC_API_KEY
@@ -421,6 +424,8 @@ func dispatch(ctx context.Context, cmd string, args []string) error {
 		return probeCmd(ctx, args)
 	case "crawl":
 		return crawlCmd(ctx, args)
+	case "golden":
+		return goldenCmd(ctx, args)
 	}
 	// The optional providers' passes, each on one finished run: cheapseats fold <run-id> and the
 	// rest. The clients budget through a.Runs.Budget themselves.
