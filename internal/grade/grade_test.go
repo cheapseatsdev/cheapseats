@@ -248,20 +248,12 @@ func TestEvidenceIsVerifiedAgainstTheAnswer(t *testing.T) {
 // An answer that names the brand only to say it couldn't find or verify it has still named it. The
 // grader sometimes calls that absent; the grade is mentioned, with the naming sentence as evidence,
 // unless the model says the name meant another product.
-func TestNamingTheBrandToSayItCantBeFoundIsMentioned(t *testing.T) {
+func TestNamingTheBrandOnlyToSayItCantBeFoundStaysAbsent(t *testing.T) {
+	// The echoed-name rule: the model may say absent for an answer whose only use of the name is
+	// to disclaim knowing it, and nothing after the model overrules that. (Before, a post-check
+	// turned every absent-with-the-name-present grade into mentioned.)
 	brand := config.Brand{Name: "Cheap Seats", Aliases: []string{"cheapseats.dev"}, About: "an open-source AI visibility tracker"}
 	answer := "I can give you a solid read on Gauge.\n\n**I don't have reliable information on a product called \"Cheap Seats\" in the AI visibility space.** It may be new. Gauge covers ChatGPT and Claude."
-	if got := namedIn(answer, brand); got != `I don't have reliable information on a product called "Cheap Seats" in the AI visibility space.` {
-		t.Errorf("sentence: %q", got)
-	}
-	for _, text := range []string{"The cheapseatsfoo tool is fine.", "Seats are cheap at the back.", "See cheapseats.devices for more."} {
-		if got := namedIn(text, brand); got != "" {
-			t.Errorf("%q should not name the brand: %q", text, got)
-		}
-	}
-	if got := namedIn("See cheapseats.dev/docs for more.", brand); got == "" {
-		t.Error("an alias followed by a path names the brand")
-	}
 
 	var reply Grade
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -275,10 +267,15 @@ func TestNamingTheBrandToSayItCantBeFoundIsMentioned(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "fake-key")
 	cfg := &config.Config{Brand: brand}
 
-	reply = Grade{Verdict: Absent, Named: []string{"Gauge"}, Reasoning: "The answer says it has no information on Cheap Seats."}
+	reply = Grade{Verdict: Absent, Named: []string{"Gauge"}, Reasoning: "The answer names Cheap Seats only to say it has no information on it."}
 	got, _, err := Answer(context.Background(), cfg, sets.Set{}, "How does Cheap Seats compare with Gauge?", answer)
-	if err != nil || got.Verdict != Mentioned || got.Position != nil || !strings.Contains(got.Evidence, "don't have reliable information") || !strings.Contains(got.Reasoning, "mentioned rather than absent") {
-		t.Fatalf("overrule: %+v %v", got, err)
+	if err != nil || got.Verdict != Absent || got.Position != nil || got.Evidence != "" || got.Tone != "" {
+		t.Fatalf("an echoed name stays absent: %+v %v", got, err)
+	}
+	// When the model does find something said about the brand, mentioned stands, with its evidence.
+	reply = Grade{Verdict: Mentioned, Position: echoedPos(2), Named: []string{"Gauge", "Cheap Seats"}, Tone: "neutral", Evidence: "It may be new."}
+	if got, _, _ := Answer(context.Background(), cfg, sets.Set{}, "How does Cheap Seats compare with Gauge?", answer); got.Verdict != Mentioned || got.Evidence != "It may be new." {
+		t.Errorf("mentioned stands: %+v", got)
 	}
 	// The model saying the name meant another product stands.
 	reply = Grade{Verdict: Absent, OtherProduct: true, Named: []string{"Gauge"}}
@@ -286,8 +283,10 @@ func TestNamingTheBrandToSayItCantBeFoundIsMentioned(t *testing.T) {
 		t.Errorf("other_product should keep it absent: %+v", got)
 	}
 	// And an answer that never names it is absent whatever the model says.
-	reply = Grade{Verdict: Absent}
+	reply = Grade{Verdict: Mentioned, Position: echoedPos(1)}
 	if got, _, _ := Answer(context.Background(), cfg, sets.Set{}, "Is Gauge good?", "Gauge is a credible choice."); got.Verdict != Absent {
 		t.Errorf("unnamed: %+v", got)
 	}
 }
+
+func echoedPos(n int) *int { return &n }

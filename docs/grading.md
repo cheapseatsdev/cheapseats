@@ -10,9 +10,11 @@ changing it, and how a change is measured before it ships.
 For one answer, for the brand on the `Brand:` line and only that brand:
 
 - **verdict**: `recommended` (the brand is the answer's top pick or one of at most three primary
-  recommendations it actively endorses), `mentioned` (named, but as one option among many, in
-  passing, as a comparison point or with reservations) or `absent` (not named, aliases included).
-  The definitions are `grade.Definitions`, word for word what the grader is told.
+  recommendations it actively endorses), `mentioned` (the answer says something about the brand,
+  but only as one option among many, in passing, as a comparison point or with reservations) or
+  `absent` (not named, aliases included, or named only to say the answer can't find, verify or
+  doesn't know it). The definitions are `grade.Definitions`, word for word what the grader is
+  told.
 - **position**: where the brand comes in the order products are first named, or null.
 - **top_pick**: the one product the answer most strongly recommends, or null if it doesn't
   commit. A brand that is the top pick is always `recommended` (`results.top_pick`).
@@ -24,6 +26,15 @@ For one answer, for the brand on the `Brand:` line and only that brand:
   about the brand and why it preferred what it preferred, for themes and the fix list.
 - **evidence**: the one sentence of the answer that most supports the verdict, checked against
   the answer (`grade.Quote`) so it's only ever the answer's own words.
+
+**An echoed name is not visibility.** Questions that name the brand ("Cheap Seats or X for a
+small team?") get answers that repeat the name only to disclaim it: "I couldn't find a product
+called Cheap Seats", "I can't verify its pricing", then advice on how to evaluate it, or
+hypotheticals about what it might offer. The brand is in the question, not in the assistant's
+knowledge, so those answers are `absent`. They become `mentioned` only when the answer states
+something about the brand itself, a feature, a price, a quality or a fit, even hedged. Before
+this rule the grader split such answers between `absent` and `mentioned` from run to run, and
+the head-to-heads set read 84% visible for a brand no assistant knew.
 
 The grader reads the brand (name, aliases, about), the set's competitors, the question and the
 answer's text (`grade.Input`). It never sees the answer's citations or searches. Two rules apply
