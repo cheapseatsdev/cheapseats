@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
   pull_request:
+  # The merge queue tests each entry merged onto the queue ahead of it, under this event; a
+  # workflow without it never reports, and the entry waits forever.
+  merge_group:
 
 permissions:
   contents: read
