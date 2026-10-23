@@ -13,7 +13,9 @@ Nothing runs on a schedule.
   flag, numbers rounded. `get_started` suggests it once a set has four weeks of runs and hasn't
   been reviewed in 30 days. Opening the page, the CLI and the MCP tool count as a review; the JSON
   doesn't.
-- CLI: `cheapseats review <set-id> [-days 30] [-json] [-suggest]`.
+- CLI: `cheapseats review <set-id> [-days 30] [-json] [-suggest] [-jev]`.
+- With `[typesafe]` configured, a "Jev" section (JSON `jev`) lists what Jev makes of the prompts'
+  wording, read from storage: see [Jev's flags](#jevs-flags) below.
 
 The review reads the set's finished runs in the window, and each prompt under the wording it was
 last asked in: walking back from the newest run, it stops at the first run that asked it in other
@@ -51,6 +53,30 @@ cell, noise can't be split and isn't flagged. A product named twice in one answe
 an alias) counts once.
 
 A prompt with no flag and enough data is listed as healthy.
+
+## Jev's flags
+
+The flags above need a month of answers. With `[typesafe]` configured
+([optional providers](optional-providers.md)), the prompts' wording alone is put to Jev, one
+question per request, and the answers are stored in `prompt_judgments` under a hash of what each
+question saw, so a prompt is asked about once per wording and a reworded prompt re-asks only its
+own questions. A flag shows when Jev's probability is at least `typesafe.min_confidence`
+(default 0.7); changing the threshold re-reads the stored answers and asks nothing.
+
+| Flag | Question | Suggestion |
+|---|---|---|
+| **duplicate** | Over each pair of prompts of the same intent that share a meaningful word: one good answer would serve both. | Merge them to save answers: keep one, retire the other. |
+| **off_target** | Per prompt, with the category (the first sentence of `brand.about`) and `brand.audience` in state: the prompt asks about something other than the category. | Add context to the prompt (the category, who is asking), or retire it. |
+| **intent** | Per prompt, a Choice over `selection` (asks the assistant to choose or recommend) and `info` (asks for an explanation or a how-to); flagged when it reads as the other intent from the one it's set to. | Set or drop `intent = "info"`. |
+| **branded** | Per prompt outside `head-to-heads`, with the brand's name, aliases, description and sites in state: the prompt names the brand, a product of its maker or its domain in any spelling ("cheapseats.dev", "cheap-seats"). | Reword it as a buyer who hasn't heard of the brand would ask. |
+
+Who asks: `cheapseats check`, after its own checks, judges every set and prints one
+`suggestion: set <id>: ...` line per flag with the probability; suggestions never fail `check`,
+without a key or proxy it prints one note and continues, and `-no-jev` skips it. After every run
+the `prompt-review` pass judges the run's set, so a new prompt is judged at its first run
+(`cheapseats judge <run-id>` runs it on demand). `cheapseats review -jev` asks before reviewing.
+The page, the JSON, `review_prompts` and `cheapseats review` only read what's stored: opening the
+review never calls Jev, and a deployment without `[typesafe]` has no Jev section.
 
 ## Gaps
 

@@ -463,16 +463,48 @@ Cost per run: one find-similar per seed, so ten seeds is ten searches, four cent
 price, plus Jev at a few hundred input tokens per page, which doesn't register. The page reads
 are free.
 
+### Prompt judgments at check and review time (Jev)
+
+The prompt review finds duplicates and off-target prompts from a month of answers, so a new set
+has none; `intent` is set by hand and often wrong; and the branded check is a whole-word match
+that misses "cheapseats.dev" or "cheap-seats". With `[typesafe]` configured, the prompts' wording
+itself is put to Jev, one question per request, four kinds: whether two prompts of the same intent
+that share a meaningful word would be served by one good answer (`duplicate`); whether a prompt
+asks about something other than the category from `brand.about`, with the audience in state
+(`off_target`); whether a prompt asks for a choice or an explanation (`intent`, a Choice over
+`selection` and `info` with the definitions the config uses); and, outside `head-to-heads`,
+whether a prompt names the brand, a product of its maker or its domain in any spelling
+(`branded`, with the brand's name, aliases, description and sites in state).
+
+Each answer lands in `prompt_judgments` with Jev's probability, under a hash of exactly what the
+question saw: the prompt's text, or the pair's, plus the category and audience for `off_target`
+and the brand facts for `branded`. Rewording one prompt re-asks only its own questions and
+everything else costs nothing, so a `cheapseats check` that changes nothing asks nothing. Three
+questions per prompt plus the plausible pairs: a 20-prompt set is about 70 requests the first
+time, a fraction of a cent, and nothing after.
+
+Where it shows: `cheapseats check`, with `[typesafe]` configured and callable, judges every set
+after the existing checks and prints one `suggestion:` line per flag at `min_confidence`
+(`suggestion: set s: p3 and p7 may ask the same thing (0.86)`, `suggestion: set s: p4 reads as an
+explanation; consider intent = "info" (0.81)`). Suggestions never fail `check`; without a key or
+proxy it prints one note and opens nothing, so CI stays green and fast; `-no-jev` skips it. The
+prompt review (`/sets/{id}/review`, its JSON as `jev`, MCP `review_prompts` and `cheapseats
+review`) has a read-only "Jev" section listing the same flags from the table at today's
+threshold; opening it never asks. The pass also runs after every run on the run's set
+(`cheapseats judge <run-id>` on demand), so a new prompt is judged at its first run, and
+`cheapseats review -jev` asks before reviewing.
+
+```toml
+[typesafe]
+# prompt_review = true
+```
+
 ## Next, in order
 
 Each item below fits the six rules. They are ranked by how visible the gain is on our own data.
 
 **Jev, judgments over data the run already has**
 
-   of answers by overlap of named products. A Score over prompt pairs for "asks the same thing"
-   and a Noul for "about something other than the category", as suggestions in `cheapseats check`.
-3. Intent and branded detection at check time: suggest `intent = "info"`, catch a brand name the
-   whole-word alias match misses.
 
 Not Jev: anything that produces a list or a sentence. The named-products list, reasoning,
 why-not-top, objections as text and the fix list stay on a generative model.

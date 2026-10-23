@@ -119,6 +119,9 @@ type Review struct {
 	// Prompts with enough data and no flag, and prompts without enough data yet.
 	Healthy   []string `json:"healthy"`
 	NotEnough []string `json:"not_enough_data"`
+	// Jev's judgments of the prompts' wording (judge.go), read from prompt_judgments: present
+	// when [typesafe] is configured, and never asked for by a review.
+	Jev *PromptJudgments `json:"jev,omitempty"`
 }
 
 // PromptReview is one prompt's numbers over the runs that asked it as it was last asked.
@@ -281,7 +284,15 @@ func (a *App) Review(ctx context.Context, setID string, days int) (Review, error
 		r.Intents(res)
 		b.add(ReviewRun{*r, res})
 	}
-	return b.finish(), nil
+	rev := b.finish()
+	if a.Cfg.TypeSafe != nil {
+		if j, err := a.PromptJudgments(ctx, s); err == nil {
+			rev.Jev = &j
+		} else {
+			slog.Warn("prompt judgments", "set", s.ID, "err", err)
+		}
+	}
+	return rev, nil
 }
 
 // reviewResults are a run's results with what a review reads: the grade, and of the answer only
