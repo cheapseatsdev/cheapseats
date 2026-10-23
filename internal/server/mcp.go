@@ -241,6 +241,10 @@ func (s *Server) mcpHandler() http.Handler {
 			}
 			return s.App.SuggestPrompts(ctx, a.Set, a.N)
 		})
+	addTool(srv, "suggest_competitors", "Find products worth adding to [[competitors]]: hosts a neutral web index (Exa) finds similar to each configured competitor's home page and the brand's own, cross-referenced with the share-of-voice board (on_board: answers naming it on the latest runs) and, with [typesafe] on, Jev's probability that each is a product in the category (in_category). Returns the top 10 with a reason each and a TOML snippet to paste. Needs [exa]; costs one Exa find-similar per configured competitor plus one for the brand (about $0.004 each) and a fraction of a cent of Jev. Writes nothing to the config: dismiss a host with POST /api/competitors/suggestions/{host}/dismiss.",
+		func(ctx context.Context, _ none) (any, error) {
+			return s.suggestCompetitors(ctx)
+		})
 	addTool(srv, "review_prompts", "Review a prompt set's prompts from the answers they got over the last 30, 60 or 90 days: flat (never varied), noisy (moves more than sampling explains), off target (answered about other products), duplicates, rewritten by the assistants' searches, and branded leaks, each with its numbers and a one-line suggestion, plus gaps (competitors, products and search topics no prompt asks about) with prompts to paste as TOML. Free: computed from stored answers. With suggest=true it also asks the analyst for rewrites, retirements and additions as a diff against the set's file, which costs one analyst model call (nothing on the claude-code provider). Writes nothing.",
 		func(ctx context.Context, a struct {
 			Set     string `json:"set" jsonschema:"prompt set id, from list_prompt_sets"`

@@ -139,6 +139,48 @@ The first production pass searched all 11 prompts of the head-to-heads set for 4
 no cheapseats.dev page for any of them: a neutral index hadn't picked up the new domain at all.
 That is the check doing its job, and the thing to fix is indexing, not writing.
 
+### Competitor discovery (Exa, Jev optional)
+
+Competitors are configured by hand, and the prompt review's gaps only know names the answers
+already used. `cheapseats discover` asks Exa what resembles each configured competitor's home
+page (its first domain) and the brand's first site, with `excludeSourceDomain` and every
+configured domain excluded, `discover_results` (default 10) pages each, and gathers the results
+by host: which home pages led there (`seeds`), a name cleaned from the page title, and the best
+page on the host. Each host is cross-referenced with the share-of-voice board: a host whose name
+matches a product the latest run of any set named, and that isn't configured, carries that count
+as `on_board`. With `[typesafe]` on, each new host is put to Jev once, a yes/no over `{url, title,
+category}`: is this the site of a product or service that competes in the category? The rows land
+in `competitor_suggestions`; running it again refreshes the seeds and board counts, asks Jev about
+no host already judged, drops hosts Exa no longer returns, and keeps every dismissal.
+
+It runs on demand only, never after a run. The suggestions are read in order of seeds, then
+answers on the board, then Jev's probability, with hosts under `typesafe.min_confidence` hidden
+where Jev judged them (and every host listed when it didn't: the floor is "Exa found it similar"),
+and printed as `[[competitors]]` entries to paste, each with its reason as a comment:
+
+```toml
+[[competitors]]
+name = "Acme"
+domains = ["acme.com"]   # similar to 2 competitors' sites, named in 7 answers, in the category at 0.91
+```
+
+`cheapseats discover -json` prints the same as JSON. `GET /api/competitors/suggestions` reads the
+table (`suggestions` and `toml`) and `POST /api/competitors/suggestions/{host}/dismiss` hides a host
+for good; neither calls a provider. MCP `suggest_competitors` runs the discovery and returns the
+top 10 with reasons and the TOML. Nothing edits the config: a suggestion becomes a competitor by
+pull request, like a prompt.
+
+```toml
+[exa]
+# discover_results = 10
+
+[pricing.exa-search]
+search_per_1k = 4
+```
+
+Cost per run of the command: (competitors + 1) × $0.004 for Exa, so a brand with five
+competitors spends 2.4 cents, plus a fraction of a cent of Jev for the new hosts.
+
 ## Next, in order
 
 Each item below fits the six rules. They are ranked by how visible the gain is on our own data.
@@ -173,11 +215,9 @@ why-not-top, objections as text and the fix list stay on a generative model.
 2. A neutral retrieval baseline: each prompt as a plain search, compared with what the
    assistants searched and read. A competitor topping neutral retrieval is a content problem; one
    that only shows in the assistants' searches is a query problem.
-3. Competitor discovery: find-similar from competitors' home pages, as suggestions for
-   `[[competitors]]`, never an automatic edit.
-4. Contents as a fetch fallback for the site audit and citation check when a page is empty
+3. Contents as a fetch fallback for the site audit and citation check when a page is empty
    without JavaScript.
-5. A second engine for the search probe.
+4. A second engine for the search probe.
 
 The strongest pairing is Exa finding candidate pages and Jev deciding whether each is a roundup
 in the category that names the brand, with code ranking the result: the citation-check pattern

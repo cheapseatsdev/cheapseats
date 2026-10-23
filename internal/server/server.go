@@ -323,6 +323,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/runs/{id}/citation-check", s.apiCitationCheck)
 	mux.HandleFunc("POST /api/runs/{id}/citation-check", s.apiRunCitationCheck)
 	mux.HandleFunc("GET /api/crawlers", s.apiCrawlers)
+	// Competitor discovery (discover.go): read the stored suggestions, dismiss one.
+	mux.HandleFunc("GET /api/competitors/suggestions", s.apiCompetitorSuggestions)
+	mux.HandleFunc("POST /api/competitors/suggestions/{host}/dismiss", s.apiDismissSuggestion)
 	mux.Handle("/api/mcp", s.mcpHandler())
 	return s.refuseForeign(s.auth(logRequests(s.refuseChanges(mux))))
 }
