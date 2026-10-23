@@ -159,6 +159,9 @@ type QuickWin struct {
 	Status   string    `json:"status"`
 	Attempts []Attempt `json:"attempts,omitempty"`
 	Earlier  []Attempt `json:"earlier_attempts,omitempty"`
+	// Other sets whose latest fix list asks for the same page (fix_matches, at typesafe.min_confidence):
+	// their cards are folded into this one. Filled by groupQuickWins.
+	AlsoIn []AlsoIn `json:"also_in,omitempty"`
 }
 
 // QuickWins pulls the fix lists from the latest finished run of every set, core sets first, then
@@ -232,7 +235,7 @@ func (a *App) QuickWins(ctx context.Context) ([]QuickWin, error) {
 		}
 		return x.Rank < y.Rank
 	})
-	return out, nil
+	return a.groupQuickWins(ctx, out), nil
 }
 
 // quickWinDays is how far back quick wins pool a prompt's answers to weigh it.
@@ -324,7 +327,7 @@ type QuickWinFilter struct{ Gap, Set, Site, Status, Priority string }
 func (a *App) FilterQuickWins(qw []QuickWin, f QuickWinFilter) []QuickWin {
 	out := []QuickWin{}
 	for _, q := range qw {
-		if f.Gap != "" && string(q.Gap) != f.Gap || f.Set != "" && q.SetID != f.Set ||
+		if f.Gap != "" && string(q.Gap) != f.Gap || f.Set != "" && !q.InSet(f.Set) ||
 			f.Status != "" && q.Status != f.Status || f.Priority != "" && q.Priority != f.Priority {
 			continue
 		}

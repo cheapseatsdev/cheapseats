@@ -178,6 +178,7 @@ cheapseats probe [-engine exa|claude|both] [-domains a,b] "<query>"
 cheapseats crawl import <logfile>...      AI crawler fetches and AI referrals from access logs
 cheapseats crawl report [-days 30]        those counts per page, beside how often runs cite it
 cheapseats themes <run-id> [-rebuild]     net sentiment and the run's themes
+cheapseats match-fixes <run-id>           which sets' fixes ask for the same page, by Jev ([typesafe])
 cheapseats suggest-prompts <set-id> [-n 10]  new buyer questions as TOML to paste (one analyst call)
 cheapseats regrade <set-id|run-id> [-since 28d] [-dry-run=false]
                                        grade stored answers again with today's grader, brand and

@@ -246,6 +246,37 @@ A citation check of 25 pages where three are shells reads three pages, a third o
 day; an audit of a site built as a single-page app reads its home page and up to ten sitemap
 pages, about a cent.
 
+### One card for one page (Jev)
+
+Quick wins list the latest fix list of every set, so three sets that each want a pricing page
+showed three cards. After a run's fix list is built, with `[typesafe]` configured, every pair of
+fixes from different sets' latest lists with the same type on the same site is decided once.
+Targets that are the same page (`TargetKey`: scheme, `www.`, query string and trailing slash
+aside) match by rule at 1.0. Pairs whose target paths or titles share a meaningful word are put
+to Jev as one yes/no question each, with both fixes' title, target, claim and done-when in the
+state and the category from `brand.about`: do they describe work on the same page, so that one
+page would satisfy both? Pairs that share nothing are never asked about. Each decision is keyed
+by a hash of the two fixes' signatures (type, target page, title), so rebuilt lists with the
+same wording ask nothing.
+
+Decisions land in `fix_matches` with the probability of yes and who decided (`rule` or `jev`).
+`QuickWins` reads them at `typesafe.min_confidence`, groups the matched fixes (a chain of pairs
+is one group) and keeps the highest-ranked card, with the others under `also_in`: the set, run
+and rank of each, so `mark_fix` can still target any of them. The quick-wins page, `GET
+/api/quick-wins` and MCP `get_quick_wins` say "also asked for by" with the other sets, and
+filtering by set includes a card that set is also asking for. `cheapseats match-fixes <run-id>`
+runs the pass over every set's latest list and prints the groups with their probabilities, and
+the pairs decided below the threshold.
+
+```toml
+[typesafe]
+# fix_matches = true
+# min_confidence = 0.7   # Jev's probability that two fixes are one page
+```
+
+One request per candidate pair, a few hundred tokens each: five sets of ten fixes leave a few
+dozen pairs after the type, site and shared-word filters, well under a cent per run.
+
 ## Next, in order
 
 Each item below fits the six rules. They are ranked by how visible the gain is on our own data.
@@ -263,10 +294,8 @@ Each item below fits the six rules. They are ranked by how visible the gain is o
    and a Noul for "about something other than the category", as suggestions in `cheapseats check`.
 4. Intent and branded detection at check time: suggest `intent = "info"`, catch a brand name the
    whole-word alias match misses.
-5. Fix de-duplication across sets: a Score for "the same page" over fix pairs, so three sets
-   asking for one cost page show one card.
-6. Page type and source class for hosts the rule lists call "other" or "editorial" by default.
-7. Evidence sentence selection: a Choice over the answer's sentences, as a check on the grader's
+5. Page type and source class for hosts the rule lists call "other" or "editorial" by default.
+6. Evidence sentence selection: a Choice over the answer's sentences, as a check on the grader's
    quoted evidence.
 
 Not Jev: anything that produces a list or a sentence. The named-products list, reasoning,
