@@ -342,7 +342,7 @@ func Build(in Input) Report {
 	var fromAll, keptAll []float64
 
 	for _, r := range in.Results {
-		if r.Track != answer.Search || r.Status != "done" || r.Answer == nil {
+		if r.Track != answer.Search || r.Status != run.ResultDone || r.Answer == nil {
 			continue
 		}
 		pk := r.PromptID

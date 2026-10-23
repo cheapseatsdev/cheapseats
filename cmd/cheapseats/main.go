@@ -321,7 +321,7 @@ func dispatch(ctx context.Context, cmd string, args []string) error {
 		if err != nil {
 			return err
 		}
-		if completed.Status != "done" {
+		if completed.Status != run.Done {
 			return fmt.Errorf("study ended %s; inspect errors and retry unfinished results", completed.Status)
 		}
 		return nil

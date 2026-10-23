@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"fmt"
 	"time"
+
+	"github.com/cheapseatsdev/cheapseats/internal/run"
 )
 
 // Progress is where an in-flight run stands, for the dashboard and the run page.
@@ -52,14 +54,14 @@ type AnswererProgress struct {
 	Counts
 }
 
-func (c *Counts) add(status string, n int) {
+func (c *Counts) add(status run.ResultStatus, n int) {
 	c.Total += n
 	switch status {
-	case "done":
+	case run.ResultDone:
 		c.Done += n
-	case "error":
+	case run.ResultError:
 		c.Errors += n
-	case "running":
+	case run.ResultRunning:
 		c.Running += n
 	default:
 		c.Waiting += n
@@ -78,13 +80,13 @@ func (a *App) Progress(ctx context.Context) ([]Progress, error) {
 	var out []Progress
 	for rows.Next() {
 		var p Progress
-		var status string
+		var status run.Status
 		if err := rows.Scan(&p.RunID, &p.SetID, &p.Name, &p.Trigger, &status, &p.StartedAt); err != nil {
 			rows.Close()
 			return nil, err
 		}
 		p.Stage = "answering"
-		if status == "done" {
+		if status == run.Done {
 			if _, building := a.analyses.Load(p.RunID); !building {
 				continue // finished, and nothing is building its list: not in progress
 			}
@@ -99,7 +101,7 @@ func (a *App) Progress(ctx context.Context) ([]Progress, error) {
 		if err := a.fillProgress(ctx, p, now); err != nil {
 			return nil, err
 		}
-		p.Cancellable = p.Stage == "answering" && (a.Runs.IsActive(p.RunID) || a.Runs.Status(ctx, p.RunID) == "queued")
+		p.Cancellable = p.Stage == "answering" && (a.Runs.IsActive(p.RunID) || a.Runs.Status(ctx, p.RunID) == run.Queued)
 	}
 	return out, nil
 }
@@ -126,7 +128,8 @@ func (a *App) fillProgress(ctx context.Context, p *Progress, now time.Time) erro
 	var order []string
 	var last string
 	for rows.Next() {
-		var answerer, status string
+		var answerer string
+		var status run.ResultStatus
 		var n int
 		var finished sql.NullString
 		if err := rows.Scan(&answerer, &status, &n, &finished); err != nil {

@@ -129,7 +129,7 @@ func FactsHash(facts []string) string {
 // checkable reports whether a result is one the pass reads: graded, naming the brand itself,
 // with an answer to quote.
 func checkable(x run.Result) bool {
-	return x.Status == "done" && x.Grade != nil && x.Grade.Verdict != grade.Absent && !x.Grade.OtherProduct &&
+	return x.Graded() && x.Grade.Verdict != grade.Absent && !x.Grade.OtherProduct &&
 		x.Answer != nil && strings.TrimSpace(x.Answer.Text) != ""
 }
 

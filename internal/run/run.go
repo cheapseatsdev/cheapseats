@@ -25,6 +25,7 @@ import (
 	"github.com/cheapseatsdev/cheapseats/internal/llm"
 	"github.com/cheapseatsdev/cheapseats/internal/opinion"
 	"github.com/cheapseatsdev/cheapseats/internal/sets"
+	"github.com/cheapseatsdev/cheapseats/internal/state"
 	"github.com/cheapseatsdev/cheapseats/internal/store"
 	"github.com/cheapseatsdev/cheapseats/internal/version"
 )
@@ -58,7 +59,7 @@ type Run struct {
 	SetVersion string   `json:"set_version"`
 	Name       string   `json:"name"`
 	Trigger    string   `json:"trigger"`
-	Status     string   `json:"status"`
+	Status     Status   `json:"status"`
 	Snapshot   Snapshot `json:"snapshot"`
 	CreatedAt  string   `json:"created_at"`
 	StartedAt  *string  `json:"started_at"`
@@ -79,7 +80,7 @@ type Result struct {
 	Model      string         `json:"model"`
 	Track      answer.Track   `json:"track"`
 	Sample     int            `json:"sample"`
-	Status     string         `json:"status"`
+	Status     ResultStatus   `json:"status"`
 	Answer     *answer.Answer `json:"answer,omitempty"`
 	Grade      *grade.Grade   `json:"grade,omitempty"`
 	Error      *string        `json:"error,omitempty"`
@@ -152,8 +153,10 @@ func (e *Engine) Create(ctx context.Context, set sets.Set, trigger string) (*Run
 	if m := config.Missing(e.Cfg.Grader.Via()); m != "" {
 		return nil, fmt.Errorf("grading needs the grader's provider (%s): %s", e.Cfg.Grader.Via(), m)
 	}
-	r := &Run{Design: Design(snap), Method: Method(snap), ConfigRev: e.Cfg.Rev, AppVersion: version.String(), ID: NewID("r-"), SetID: set.ID, SetVersion: set.Version, Trigger: trigger, Status: "queued",
+	r := &Run{Design: Design(snap), Method: Method(snap), ConfigRev: e.Cfg.Rev, AppVersion: version.String(), ID: NewID("r-"), SetID: set.ID, SetVersion: set.Version, Trigger: trigger, Status: Queued,
 		Name: fmt.Sprintf("%s %s", set.Name, time.Now().UTC().Format("2006-01-02 15:04")), Snapshot: snap, CreatedAt: store.Now()}
+	RunTransitions.Check("runs", state.Start, r.Status)
+	ResultTransitions.Check("results", state.Start, ResultPending)
 	js, _ := json.Marshal(snap)
 	tx, err := e.DB.BeginTx(ctx, nil)
 	if err != nil {
@@ -176,8 +179,8 @@ func (e *Engine) Create(ctx context.Context, set sets.Set, trigger string) (*Run
 		for _, a := range snap.Answerers {
 			for _, t := range []answer.Track{answer.Search, answer.Recall} {
 				for s := 0; s < e.samples(set, a, t)+snap.Sampling.Extra(p.ID, a.ID, t); s++ {
-					if _, err := tx.ExecContext(ctx, `INSERT INTO results (run_id, prompt_idx, prompt, prompt_id, prompt_sha, answerer, model, track, sample, status) VALUES (?,?,?,?,?,?,?,?,?, 'pending')`,
-						r.ID, i, p.Text, p.ID, p.SHA(), a.ID, a.Model, string(t), s); err != nil {
+					if _, err := tx.ExecContext(ctx, `INSERT INTO results (run_id, prompt_idx, prompt, prompt_id, prompt_sha, answerer, model, track, sample, status) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+						r.ID, i, p.Text, p.ID, p.SHA(), a.ID, a.Model, string(t), s, ResultPending); err != nil {
 						return nil, err
 					}
 				}
@@ -221,12 +224,8 @@ func (e *Engine) Cancel(id string) bool {
 		c()
 		return true
 	}
-	res, err := e.DB.Exec(`UPDATE runs SET status='cancelled', error='cancelled', finished_at=? WHERE id=? AND status='queued'`, store.Now(), id)
-	if err != nil {
-		return false
-	}
-	n, _ := res.RowsAffected()
-	return n > 0
+	moved, err := e.moveRunFrom(context.Background(), id, Queued, Cancelled, `, error=?, finished_at=?`, string(Cancelled), store.Now())
+	return err == nil && moved
 }
 
 // Stop is for shutdown: no new runs start, and every active run is cut off and records itself as
@@ -280,11 +279,11 @@ func (e *Engine) execute(ctx context.Context, id string) error {
 	if !r.Snapshot.Current(e.Cfg) {
 		return fmt.Errorf("run used older answer or grading prompts; start a new run")
 	}
-	if _, err := e.DB.ExecContext(ctx, `UPDATE runs SET status='running', started_at=COALESCE(started_at, ?), error=NULL, finished_at=NULL WHERE id=?`, store.Now(), id); err != nil {
+	if err := e.moveRun(ctx, id, Running, `, started_at=COALESCE(started_at, ?), error=NULL, finished_at=NULL`, store.Now()); err != nil {
 		return stored(err)
 	}
-	// A result left 'running' by a crash is just pending again.
-	if _, err := e.DB.ExecContext(ctx, `UPDATE results SET status='pending' WHERE run_id=? AND status IN ('running','skipped','error')`, id); err != nil {
+	// A result left running by a crash is just pending again.
+	if _, err := e.moveResultsFrom(ctx, id, []ResultStatus{ResultRunning, ResultSkipped, ResultError}, ResultPending); err != nil {
 		return stored(err)
 	}
 
@@ -362,11 +361,11 @@ func (e *Engine) execute(ctx context.Context, id string) error {
 	// error would otherwise leave a scheduled run partial, and without a fix list, until someone
 	// retried it by hand. Answers that were saved but not graded are reused, so this costs little.
 	if stopCtx.Err() == nil {
-		res, err := e.DB.ExecContext(ctx, `UPDATE results SET status='pending' WHERE run_id=? AND status='error'`, id)
+		n, err := e.moveResultsFrom(ctx, id, []ResultStatus{ResultError}, ResultPending)
 		if err != nil {
 			return err
 		}
-		if n, _ := res.RowsAffected(); n > 0 {
+		if n > 0 {
 			slog.Info("retrying failed answers", "run", id, "count", n)
 			if err := pass(); err != nil {
 				return err
@@ -376,7 +375,7 @@ func (e *Engine) execute(ctx context.Context, id string) error {
 
 	// Anything not reached is skipped, so the page says why and Retry picks it up.
 	bg := context.Background()
-	if _, err := e.DB.ExecContext(bg, `UPDATE results SET status='skipped' WHERE run_id=? AND status IN ('pending','running')`, id); err != nil && stopReason == nil {
+	if _, err := e.moveResultsFrom(bg, id, []ResultStatus{ResultPending, ResultRunning}, ResultSkipped); err != nil && stopReason == nil {
 		stopReason = stored(err)
 	}
 	// Extras are a bonus: once every planned answer is in, any extra not done (failed, or cut off by
@@ -395,27 +394,27 @@ func (e *Engine) execute(ctx context.Context, id string) error {
 	if err := e.DB.QueryRow(`SELECT COUNT(*) FROM results WHERE run_id=? AND (status!='done' OR grade IS NULL)`, id).Scan(&unfinished); err != nil && stopReason == nil {
 		stopReason = stored(err)
 	}
-	status, msg := "done", ""
+	status, msg := Done, ""
 	if unfinished > 0 {
-		status = "partial"
+		status = Partial
 		msg = fmt.Sprintf("%d unfinished results; retry to complete", unfinished)
 	}
 	switch {
 	case errors.Is(stopReason, errBudget):
-		status, msg = "budget", fmt.Sprintf("stopped: today's spend reached the $%.0f daily budget; retry tomorrow to finish", e.Cfg.Budget.DailyUSD)
+		status, msg = OverBudget, fmt.Sprintf("stopped: today's spend reached the $%.0f daily budget; retry tomorrow to finish", e.Cfg.Budget.DailyUSD)
 	case stopReason != nil:
-		status, msg = "failed", stopReason.Error()
+		status, msg = Failed, stopReason.Error()
 	case ctx.Err() != nil && e.stopping.Load():
-		status, msg = "queued", interrupted
+		status, msg = Queued, Interrupted
 	case ctx.Err() != nil:
-		status, msg = "cancelled", "cancelled"
+		status, msg = Cancelled, string(Cancelled)
 	}
 	var errArg any
 	if msg != "" {
 		errArg = msg
 	}
-	_, err = e.DB.ExecContext(bg, `UPDATE runs SET status=?, error=?, finished_at=? WHERE id=?`, status, errArg, store.Now(), id)
-	if status == "done" {
+	err = e.moveRun(bg, id, status, `, error=?, finished_at=?`, errArg, store.Now())
+	if status == Done {
 		var models []string
 		rows, qerr := e.DB.Query(`SELECT DISTINCT answerer||':'||model FROM results WHERE run_id=? ORDER BY answerer,model`, id)
 		if qerr != nil {
@@ -468,10 +467,9 @@ func stored(err error) error {
 func (e *Engine) one(ctx context.Context, cfg *config.Config, set sets.Set, a config.Answerer, rid int64, prompt string, track answer.Track) error {
 	bg := context.Background()
 	if m := config.Missing(a.Provider); m != "" {
-		_, err := e.DB.Exec(`UPDATE results SET status='skipped',error=? WHERE id=?`, m, rid)
-		return stored(err)
+		return stored(e.moveResult(bg, rid, ResultSkipped, `,error=?`, m))
 	}
-	if _, err := e.DB.Exec(`UPDATE results SET status='running',started_at=COALESCE(started_at,?),finished_at=NULL,error=NULL WHERE id=?`, store.Now(), rid); err != nil {
+	if err := e.moveResult(bg, rid, ResultRunning, `,started_at=COALESCE(started_at,?),finished_at=NULL,error=NULL`, store.Now()); err != nil {
 		return stored(err)
 	}
 	// An answer saved but not yet graded is reused, so a failed read must not look like "none".
@@ -490,7 +488,7 @@ func (e *Engine) one(ctx context.Context, cfg *config.Config, set sets.Set, a co
 		}
 		js, _ := json.Marshal(ans)
 		if err != nil {
-			if _, werr := e.DB.ExecContext(bg, `UPDATE results SET status='error',error=?,answer=NULL,answer_cost_usd=answer_cost_usd+?,finished_at=? WHERE id=?`, err.Error(), cost, store.Now(), rid); werr != nil {
+			if werr := e.moveResult(bg, rid, ResultError, `,error=?,answer=NULL,answer_cost_usd=answer_cost_usd+?,finished_at=?`, err.Error(), cost, store.Now()); werr != nil {
 				return stored(werr)
 			}
 			return err
@@ -505,14 +503,13 @@ func (e *Engine) one(ctx context.Context, cfg *config.Config, set sets.Set, a co
 	}
 	g, cost, err := grade.Answer(ctx, cfg, set, prompt, ans.Text)
 	if err != nil {
-		if _, werr := e.DB.ExecContext(bg, `UPDATE results SET status='error',error=?,grade_cost_usd=grade_cost_usd+?,finished_at=? WHERE id=?`, "grading: "+err.Error(), cost, store.Now(), rid); werr != nil {
+		if werr := e.moveResult(bg, rid, ResultError, `,error=?,grade_cost_usd=grade_cost_usd+?,finished_at=?`, "grading: "+err.Error(), cost, store.Now()); werr != nil {
 			return stored(werr)
 		}
 		return err
 	}
 	js, _ := json.Marshal(g)
-	_, err = e.DB.ExecContext(bg, `UPDATE results SET status='done',error=NULL,grade=?,verdict=?,top_pick=?,grade_cost_usd=grade_cost_usd+?,finished_at=? WHERE id=?`, string(js), string(g.Verdict), g.IsTopPick(cfg.Brand.Name), cost, store.Now(), rid)
-	return stored(err)
+	return stored(e.moveResult(bg, rid, ResultDone, `,error=NULL,grade=?,verdict=?,top_pick=?,grade_cost_usd=grade_cost_usd+?,finished_at=?`, string(js), string(g.Verdict), g.IsTopPick(cfg.Brand.Name), cost, store.Now()))
 }
 
 // NewSnapshot freezes a run's design with the answerers this environment can call, so a
@@ -667,16 +664,17 @@ func (r *Run) Intents(results []Result) {
 	}
 }
 
-const interrupted = "interrupted by a restart; resuming"
+// Interrupted is the error a run carries while it waits to resume after a restart.
+const Interrupted = "interrupted by a restart; resuming"
 
 // Recover readies the runs a restart interrupted, and returns them oldest first to resume: any
 // still marked running (cut off) or queued (recorded on the way down, or never started). Their
 // answers so far are kept; only what's unfinished runs again.
 func (e *Engine) Recover(ctx context.Context) ([]string, error) {
-	if _, err := e.DB.ExecContext(ctx, `UPDATE results SET status='pending' WHERE status='running'`); err != nil {
+	if _, err := e.moveResultsFrom(ctx, "", []ResultStatus{ResultRunning}, ResultPending); err != nil {
 		return nil, err
 	}
-	if _, err := e.DB.ExecContext(ctx, `UPDATE runs SET status='queued', error=? WHERE status IN ('running','queued')`, interrupted); err != nil {
+	if err := e.moveRunsFrom(ctx, []Status{Running, Queued}, Queued, `, error=?`, Interrupted); err != nil {
 		return nil, err
 	}
 	rows, err := e.DB.QueryContext(ctx, `SELECT id FROM runs WHERE status='queued' ORDER BY created_at`)
@@ -695,12 +693,12 @@ func (e *Engine) Recover(ctx context.Context) ([]string, error) {
 
 // Fail ends a run that can't continue, saying why.
 func (e *Engine) Fail(ctx context.Context, id, why string) {
-	e.DB.ExecContext(ctx, `UPDATE runs SET status='failed', error=?, finished_at=? WHERE id=?`, why, store.Now(), id)
+	e.moveRun(ctx, id, Failed, `, error=?, finished_at=?`, why, store.Now())
 }
 
 // Status is the run's status, or "" if there's no such run.
-func (e *Engine) Status(ctx context.Context, id string) string {
-	var s string
+func (e *Engine) Status(ctx context.Context, id string) Status {
+	var s Status
 	e.DB.QueryRowContext(ctx, `SELECT status FROM runs WHERE id=?`, id).Scan(&s)
 	return s
 }
@@ -718,7 +716,7 @@ func (e *Engine) BuildThemes(ctx context.Context, id string) (opinion.Themes, er
 	}
 	var in []opinion.Answer
 	for _, x := range results {
-		if x.Status == "done" && x.Grade != nil {
+		if x.Graded() {
 			in = append(in, opinion.Answer{ID: x.ID, Grade: x.Grade})
 		}
 	}
@@ -755,7 +753,7 @@ func (e *Engine) Opinion(ctx context.Context, id string, results []Result) opini
 func (e *Engine) OpinionWith(ctx context.Context, id string, results []Result, opt opinion.Options) opinion.Report {
 	var grades []*grade.Grade
 	for _, x := range results {
-		if x.Status == "done" {
+		if x.Status == ResultDone {
 			grades = append(grades, x.Grade)
 		}
 	}

@@ -4,6 +4,8 @@ Everything on a run page is worked out from the answers and grades already store
 called to build it. The same numbers are in the JSON export (`/runs/<id>/export.json`, under
 `Summary`), `cheapseats report <run-id> -json`, and MCP `get_run` (cut to the top rows, without the run's snapshot or the fixes' Claude prompts, which `get_quick_wins` has).
 
+The statuses a run and its results pass through, and every move between them, are drawn in [states.md](states.md).
+
 ## Scores
 
 - **Named**: answers that name the brand, of all answers.

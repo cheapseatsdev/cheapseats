@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/cheapseatsdev/cheapseats/internal/grade"
+	"github.com/cheapseatsdev/cheapseats/internal/run"
 )
 
 // Lucide icons (lucide-static 0.460.0, ISC: icons/LICENSE), copied in rather than loaded from a
@@ -39,9 +40,9 @@ var iconPaths = func() map[string]string {
 func statusIcon(s any) template.HTML {
 	name := map[string]string{
 		"recommended": "circle-check", "mentioned": "circle-dot", "absent": "circle-x",
-		"done": "circle-check", "running": "loader-circle", "queued": "loader-circle",
-		"partial": "circle-dot", "budget": "circle-dot", "failed": "circle-x", "error": "circle-x",
-		"cancelled": "x", "pending": "clock", "skipped": "circle-dashed",
+		string(run.Done): "circle-check", string(run.Running): "loader-circle", string(run.Queued): "loader-circle",
+		string(run.Partial): "circle-dot", string(run.OverBudget): "circle-dot", string(run.Failed): "circle-x", string(run.ResultError): "circle-x",
+		string(run.Cancelled): "x", string(run.ResultPending): "clock", string(run.ResultSkipped): "circle-dashed",
 	}[fmt.Sprint(s)]
 	if name == "" {
 		return ""

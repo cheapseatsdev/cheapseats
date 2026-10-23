@@ -427,8 +427,8 @@ func BuildWith(brand config.Brand, results []run.Result, opt Options) Summary {
 			promptInfo[r.PromptIdx] = true
 		}
 		switch r.Status {
-		case "done":
-		case "error":
+		case run.ResultDone:
+		case run.ResultError:
 			s.Errors++
 			sliceErr[key]++
 			continue

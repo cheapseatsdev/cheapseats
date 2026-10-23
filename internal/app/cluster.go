@@ -185,7 +185,7 @@ func (a *App) clusterKind(ctx context.Context, client *typesafe.Client, id, kind
 	uses := map[string]*phraseUse{}
 	for _, x := range results {
 		g := x.Grade
-		if x.Status != "done" || g == nil || g.Verdict == grade.Absent || g.Verdict == "" {
+		if !x.Graded() || g.Verdict == grade.Absent || g.Verdict == "" {
 			continue
 		}
 		items := g.Objections

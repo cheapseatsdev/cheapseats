@@ -457,7 +457,7 @@ func (b *reviewBuilder) add(rr ReviewRun) {
 		var named Hits
 		planned := map[[2]string]*Hits{}
 		for _, x := range xs {
-			if x.Status != "done" || x.Grade == nil {
+			if !x.Graded() {
 				continue
 			}
 			if x.Track == answer.Search && x.Answer != nil {

@@ -165,7 +165,7 @@ func (e *Engine) PlanRegrade(ctx context.Context, runs []Run, set sets.Set) (Reg
 	_, priced := e.Cfg.Pricing[e.Cfg.Grader.Model]
 	p.Unpriced = !p.Subscription && !priced
 	for _, r := range runs {
-		if r.Status != "done" || e.IsActive(r.ID) {
+		if r.Status != Done || e.IsActive(r.ID) {
 			p.Unfinished++
 			continue
 		}
@@ -216,7 +216,7 @@ func (e *Engine) Regrade(ctx context.Context, runs []Run, set sets.Set) (Regrade
 	}
 	for _, rr := range p.Runs {
 		if ctx.Err() != nil {
-			rep.Stopped = "cancelled"
+			rep.Stopped = string(Cancelled)
 			break
 		}
 		if !p.Subscription && e.Cfg.Budget.DailyUSD > 0 {
@@ -334,13 +334,14 @@ func (e *Engine) regradeRun(ctx context.Context, r Run, set sets.Set) (int, floa
 	defer tx.Rollback()
 	// Another process (cheapseats regrade beside cheapseats serve, a retry) may have changed the run
 	// while it was being graded: write only over the run as it was read, else nothing.
-	var snapJS, method, status string
+	var snapJS, method string
+	var status Status
 	var prior sql.NullString
 	if err := tx.QueryRow(`SELECT snapshot, method, status, regrades FROM runs WHERE id=?`, r.ID).Scan(&snapJS, &method, &status, &prior); err != nil {
 		return 0, cost, stored(err)
 	}
 	var cur Snapshot
-	if status != "done" || method != r.Method || json.Unmarshal([]byte(snapJS), &cur) != nil || GradeInputs(cur) != from {
+	if status != Done || method != r.Method || json.Unmarshal([]byte(snapJS), &cur) != nil || GradeInputs(cur) != from {
 		return 0, cost, fmt.Errorf("%w: run %s changed while it was being re-graded (now %s); nothing written", ErrRegradeConflict, r.ID, status)
 	}
 	var regrades []Regrade

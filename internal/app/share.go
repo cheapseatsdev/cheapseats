@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cheapseatsdev/cheapseats/internal/run"
 	"github.com/cheapseatsdev/cheapseats/internal/store"
 )
 
@@ -58,7 +59,7 @@ func (a *App) CreateShare(ctx context.Context, runID string, days int, includeAn
 	if err != nil {
 		return Share{}, "", fmt.Errorf("no run %q", runID)
 	}
-	if r.Status != "done" {
+	if r.Status != run.Done {
 		return Share{}, "", fmt.Errorf("run %s is %s; only a finished run can be shared", runID, r.Status)
 	}
 	b := make([]byte, 16)
