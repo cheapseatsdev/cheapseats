@@ -23,6 +23,17 @@ const (
 // ClassOrder is the order the run page lists classes in.
 var ClassOrder = []string{Own, Competitor, UGC, Review, Reference, Institutional, Editorial}
 
+// ClassDefinitions say what each third-party class is, in the words of the constants' comments:
+// the criteria Jev is given for a host the lists below would call editorial (the page-types
+// pass). Own and competitor come from the config and are never asked about.
+var ClassDefinitions = map[string]string{
+	UGC:           "a forum, Q&A, video or social site: what users write",
+	Review:        "a software review and comparison site",
+	Reference:     "an encyclopedia, documentation or a package registry",
+	Institutional: "a government, academic or intergovernmental body",
+	Editorial:     "everything else: a publisher, a blog or a vendor",
+}
+
 // Classes are the built-in hosts (or host/path prefixes) of each class; a host covers its
 // subdomains. [sources] in cheapseats.toml adds to them and wins over them.
 var Classes = map[string][]string{

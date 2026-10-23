@@ -277,6 +277,46 @@ the pairs decided below the threshold.
 One request per candidate pair, a few hundred tokens each: five sets of ten fixes leave a few
 dozen pairs after the type, site and shared-word filters, well under a cent per run.
 
+### Page types and source classes for the defaults (Jev)
+
+The run page sorts every page the answers drew on by what it does (`page_type`: listicle,
+comparison, review, docs, forum, repo, article, product) and every host by whose site it is
+(`class`: own, competitor, ugc, review, reference, institutional, editorial). Both come from rule
+lists and URL words, and both have a default for what the lists don't know: `other` for a page,
+`editorial` for a host. On a real run that is where a good share of the citations land, and it
+says nothing about them.
+
+After each run, each page whose rule type is `other` and that has a title is put to Jev once: a
+Choice over every page type, with the definitions from the rule file as the criteria and the URL,
+the title and the category from `brand.about` as the state. Each host whose rule class is
+`editorial`, and that isn't the brand's, a competitor's or placed by `[sources]`, is put to it
+once: a Choice over the five third-party classes, with up to three of its pages' titles and URLs
+in the state. A page the rules already type (`/blog/…`, a docs host) and a page with no title are
+never asked about. Decisions are per page and per host, not per run: once decided, a page or host
+is never asked about again, whatever run cites it, so a run's pass is a few dozen requests and a
+fraction of a cent.
+
+Decisions land in `page_judgments` (`kind` `page_type` keyed by the normalized URL, or
+`source_class` keyed by the host) with Jev's probability for the option it chose. The report reads
+them back at `typesafe.min_confidence`: `report.Options.PageTypes` fills in a type where the rules
+say `other`, and the hosts Jev classed are merged under the config's `[sources]` for the report's
+classifier, so `[sources]` wins over Jev and Jev wins over the built-in default. The run page's
+"Page types" and "Sources" tables, `page_types` and `classes` in `GET /api/runs/{id}` and MCP
+`get_run`, change their counts; a page's type chip is marked "typed by Jev" where it was.
+`cheapseats classify <run-id>` runs the pass on a finished run and prints the run's pages' and
+hosts' decisions with their probabilities. With the table empty, or `[typesafe]` off, every page
+renders exactly as the rules say.
+
+```toml
+[typesafe]
+model = "jev-1.14.0"
+# page_types = true
+# min_confidence = 0.7   # Jev's probability for the type or class it chose
+
+[sources]                # wins over Jev for any host it names
+# ugc = ["forum.example.org"]
+```
+
 ## Next, in order
 
 Each item below fits the six rules. They are ranked by how visible the gain is on our own data.
@@ -294,7 +334,6 @@ Each item below fits the six rules. They are ranked by how visible the gain is o
    and a Noul for "about something other than the category", as suggestions in `cheapseats check`.
 4. Intent and branded detection at check time: suggest `intent = "info"`, catch a brand name the
    whole-word alias match misses.
-5. Page type and source class for hosts the rule lists call "other" or "editorial" by default.
 6. Evidence sentence selection: a Choice over the answer's sentences, as a check on the grader's
    quoted evidence.
 

@@ -86,7 +86,7 @@
 
 <h2 id="pages">Pages referenced</h2>
 <div class="scroll"><table><thead><tr><th>Page</th><th class="num">Cited</th><th class="num">Surfaced</th><th class="num">Share</th><th class="num">Prompts</th></tr></thead>
-<tbody>{{range .Pages}}<tr><td class="mono"><a href="{{.URL}}">{{.URL}}</a>{{if .FirstParty}} <span class="chip">ours · {{.SiteKind}}</span>{{else}} <span class="chip">{{.Class}}</span>{{end}} <span class="chip">{{.Type}}</span></td><td class="num">{{.Cited}}</td><td class="num">{{.Surfaced}}</td><td class="num">{{pct .CitationShare}}</td><td class="num muted">{{len .Prompts}}</td></tr>{{end}}</tbody></table></div>
+<tbody>{{range .Pages}}<tr><td class="mono"><a href="{{.URL}}">{{.URL}}</a>{{if .FirstParty}} <span class="chip">ours · {{.SiteKind}}</span>{{else}} <span class="chip">{{.Class}}</span>{{end}} <span class="chip"{{if .TypedBy}} title="typed by Jev"{{end}}>{{.Type}}</span></td><td class="num">{{.Cited}}</td><td class="num">{{.Surfaced}}</td><td class="num">{{pct .CitationShare}}</td><td class="num muted">{{len .Prompts}}</td></tr>{{end}}</tbody></table></div>
 {{if .PagesMore}}<p class="muted small">Showing the 60 most cited; {{.PagesMore}} more in the JSON export.</p>{{end}}
 
 {{if or (eq .Run.Status "done") .Shares}}<h2 id="share">Share</h2>
