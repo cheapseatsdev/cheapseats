@@ -649,7 +649,7 @@ func (b *reviewBuilder) finish() Review {
 		for _, id := range at.Fix.PromptIDs {
 			tried[id]++
 			switch st {
-			case OutcomePending, OutcomeTooEarly:
+			case OutcomePending, OutcomeTooEarly, OutcomeNeedsRegrade:
 				awaiting[id]++
 			case OutcomeIncomparable:
 			default:
