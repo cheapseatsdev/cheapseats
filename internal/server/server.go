@@ -24,8 +24,10 @@ import (
 	"io/fs"
 	"log/slog"
 	"math"
+	"net"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -56,8 +58,9 @@ type Server struct {
 	// (any, when empty). Only set this when nothing can reach Cheap Seats except through that proxy.
 	authHeader string
 	allowed    []string
-	// Host names a proxy on the same machine serves Cheap Seats as (CHEAPSEATS_HOSTS). MCP refuses a
-	// request that arrives on loopback under any other non-local name (DNS rebinding).
+	// Host names a proxy on the same machine serves Cheap Seats as (CHEAPSEATS_HOSTS). A request that
+	// arrives on loopback under any other non-local name is a DNS-rebinding page's: MCP refuses it,
+	// and so does everything else when there's no sign-in to stop the page (see refuseForeign).
 	hosts []string
 	// The login cookie's name. Cookies ignore the port, so two deployments on one host need
 	// different names or each sign-in signs the other out.
@@ -321,7 +324,57 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/runs/{id}/citation-check", s.apiRunCitationCheck)
 	mux.HandleFunc("GET /api/crawlers", s.apiCrawlers)
 	mux.Handle("/api/mcp", s.mcpHandler())
-	return s.auth(logRequests(s.refuseChanges(mux)))
+	return s.refuseForeign(s.auth(logRequests(s.refuseChanges(mux))))
+}
+
+// refuseForeign refuses what a page on another site can make a browser send here, which the
+// sign-in doesn't stop. A request that reaches loopback under a foreign name is DNS rebinding: a
+// page whose name now resolves to 127.0.0.1, reading a local Cheap Seats that asks for no sign-in
+// (one that does hands the foreign name no cookie or token, and a read-only copy is public anyway).
+// A form or fetch from another origin that changes something is cross-site request forgery: with
+// no sign-in there's no cookie for SameSite to hold back, and behind a signing-in proxy the proxy's
+// own session would sign it in. A proxy on the same machine serves Cheap Seats under the names in
+// CHEAPSEATS_HOSTS; MCP's guard against rebinding is the same one (see mcpHandler).
+func (s *Server) refuseForeign(h http.Handler) http.Handler {
+	open := len(s.tokens) == 0 && s.authHeader == "" && !s.readOnly
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if open && s.rebound(r) {
+			http.Error(w, fmt.Sprintf("Forbidden: invalid Host header %q (add it to CHEAPSEATS_HOSTS if a proxy serves Cheap Seats under it)", r.Host), http.StatusForbidden)
+			return
+		}
+		if r.Method != http.MethodGet && r.Method != http.MethodHead && s.crossSite(r) {
+			http.Error(w, fmt.Sprintf("Forbidden: a request from another site (%s) can't change anything here (add its host to CHEAPSEATS_HOSTS if a proxy serves Cheap Seats under it)", r.Header.Get("Origin")), http.StatusForbidden)
+			return
+		}
+		h.ServeHTTP(w, r)
+	})
+}
+
+// rebound reports whether a request reached loopback under a name that is neither local nor a
+// listed proxy host: a DNS-rebinding page's.
+func (s *Server) rebound(r *http.Request) bool {
+	local, ok := r.Context().Value(http.LocalAddrContextKey).(net.Addr)
+	return ok && loopback(local.String()) && !loopback(r.Host) && !slices.Contains(s.hosts, hostOnly(r.Host))
+}
+
+// crossSite reports whether a browser sent the request from another origin: a page whose host and
+// port aren't the ones the request came to (so another local app's page can't post here either),
+// nor a listed proxy host. A browser names its origin in Origin (and the site relation in
+// Sec-Fetch-Site); other clients send neither.
+func (s *Server) crossSite(r *http.Request) bool {
+	if o := r.Header.Get("Origin"); o != "" {
+		u, err := url.Parse(o)
+		if err != nil || u.Host == "" {
+			return true // "null" (a sandboxed page), or not an origin at all
+		}
+		oh := strings.ToLower(u.Host)
+		return oh != strings.ToLower(requestHost(r)) && oh != strings.ToLower(r.Host) && !slices.Contains(s.hosts, hostOnly(oh))
+	}
+	switch strings.ToLower(r.Header.Get("Sec-Fetch-Site")) {
+	case "", "same-origin", "none":
+		return false
+	}
+	return true
 }
 
 // refuseChanges, on a read-only copy, answers 403 to anything but reading: every form and API call
@@ -1324,13 +1377,13 @@ func (s *Server) exportCSV(w http.ResponseWriter, r *http.Request) {
 				row[8] = strconv.Itoa(*g.Position)
 			}
 			if g.TopPick != nil {
-				row[9] = *g.TopPick
+				row[9] = cell(*g.TopPick)
 			}
-			row[10] = strings.Join(g.Named, "; ")
+			row[10] = cell(strings.Join(g.Named, "; "))
 			if g.WhyNotTop != nil {
-				row[11] = *g.WhyNotTop
+				row[11] = cell(*g.WhyNotTop)
 			}
-			row[12] = strings.Join(g.Objections, "; ")
+			row[12] = cell(strings.Join(g.Objections, "; "))
 		}
 		if a := x.Answer; a != nil {
 			var qs, cs []string
@@ -1340,15 +1393,26 @@ func (s *Server) exportCSV(w http.ResponseWriter, r *http.Request) {
 			for _, c := range a.Citations {
 				cs = append(cs, c.URL)
 			}
-			row[13], row[14], row[16] = strings.Join(qs, "; "), strings.Join(cs, " "), a.Text
+			row[13], row[14], row[16] = cell(strings.Join(qs, "; ")), cell(strings.Join(cs, " ")), cell(a.Text)
 		}
 		// New columns go at the end, so scripts that read the export by position keep working.
 		ev := ""
 		if x.Grade != nil {
-			ev = x.Grade.Evidence
+			ev = cell(x.Grade.Evidence)
 		}
 		row = append(row, x.PromptID, d.Run.ConfigRev, d.Run.AppVersion, strconv.FormatBool(branded[x.PromptIdx]), ev)
 		cw.Write(row)
 	}
 	cw.Flush()
+}
+
+// cell is a model's or a page's words as a spreadsheet cell. Text that starts like a formula
+// (=, +, -, @, or a tab or return) gets a leading apostrophe, which spreadsheets read as "text
+// follows" and hide, so an answer that says "=HYPERLINK(...)" stays words when the export is
+// opened rather than run. The JSON export has the text as it was.
+func cell(s string) string {
+	if s != "" && strings.IndexByte("=+-@\t\r", s[0]) >= 0 {
+		return "'" + s
+	}
+	return s
 }

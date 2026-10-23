@@ -8,7 +8,6 @@ import (
 	"math"
 	"net"
 	"net/http"
-	"slices"
 	"strings"
 
 	"github.com/cheapseatsdev/cheapseats/internal/analysis"
@@ -424,8 +423,7 @@ func (s *Server) mcpHandler() http.Handler {
 	// listed hosts, so a DNS-rebinding page under any other name is still refused.
 	h = withHost(mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return srv }, &mcp.StreamableHTTPOptions{DisableLocalhostProtection: true}))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if local, ok := r.Context().Value(http.LocalAddrContextKey).(net.Addr); ok && loopback(local.String()) &&
-			!loopback(r.Host) && !slices.Contains(s.hosts, hostOnly(r.Host)) {
+		if s.rebound(r) {
 			http.Error(w, fmt.Sprintf("Forbidden: invalid Host header %q (add it to CHEAPSEATS_HOSTS if a proxy serves Cheap Seats under it)", r.Host), http.StatusForbidden)
 			return
 		}

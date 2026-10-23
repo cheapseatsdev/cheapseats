@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -502,7 +503,8 @@ func TestReadOnly(t *testing.T) {
 	cfg := testConfig(t)
 	d, _ := store.Open(t.TempDir())
 	defer d.Close()
-	s, err := New(newApp(t, cfg, d))
+	a := newApp(t, cfg, d)
+	s, err := New(a)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -512,6 +514,7 @@ func TestReadOnly(t *testing.T) {
 		code         int
 	}{
 		{"GET", "/", 200}, {"GET", "/api/runs", 200}, {"GET", "/quick-wins", 200},
+		{"GET", "/sets/ai-search-visibility/review", 200},
 		{"POST", "/sets/fix-ai-recommendations/run", 403}, {"POST", "/api/runs", 403},
 		{"POST", "/audit", 403}, {"DELETE", "/api/shares/x", 403}, {"POST", "/api/mcp", 403},
 		{"GET", "/api/mcp", 403}, {"POST", "/login", 403},
@@ -523,6 +526,128 @@ func TestReadOnly(t *testing.T) {
 		}
 		if c.path == "/" && (!strings.Contains(rec.Body.String(), `class="readonly"`) || !strings.Contains(rec.Body.String(), "read-only copy")) {
 			t.Error("no read-only banner")
+		}
+	}
+	// Reading the review page is a review on the real thing; a visitor to the copy isn't reviewing.
+	if at := a.LastReview(context.Background(), "ai-search-visibility"); at != "" {
+		t.Errorf("a visit to the read-only copy recorded a review at %q", at)
+	}
+	// A read-only copy is public, so a page that rebinds its name to loopback reads nothing new.
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, onLoopback(httptest.NewRequest("GET", "/api/runs", nil), "evil.example"))
+	if rec.Code != 200 {
+		t.Errorf("read-only copy under a foreign name: %d", rec.Code)
+	}
+}
+
+// onLoopback is a request as the server sees it arriving on 127.0.0.1 under the given Host.
+func onLoopback(r *http.Request, host string) *http.Request {
+	r.Host = host
+	return r.WithContext(context.WithValue(r.Context(), http.LocalAddrContextKey, &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 8000}))
+}
+
+// What a page on another site can make a browser send to a local Cheap Seats is refused: a
+// request under the page's own name, rebound to loopback, and a form or fetch from the page's
+// origin that would change (or pay for) something. Neither reaches a provider.
+func TestForeignRequestsRefused(t *testing.T) {
+	calls := 0
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.Write([]byte(`{"content":[{"type":"text","text":"no"}],"usage":{"input_tokens":1,"output_tokens":1}}`))
+	}))
+	defer api.Close()
+	old := llm.AnthropicURL
+	llm.AnthropicURL = api.URL
+	defer func() { llm.AnthropicURL = old }()
+	t.Setenv("ANTHROPIC_API_KEY", "fake")
+	t.Setenv("CHEAPSEATS_TOKENS", "")
+	t.Setenv("CHEAPSEATS_AUTH_HEADER", "")
+	t.Setenv("CHEAPSEATS_HOSTS", "seats.example")
+	d, _ := store.Open(t.TempDir())
+	defer d.Close()
+	s, err := New(newApp(t, testConfig(t), d))
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := s.Handler()
+	// Rebinding: the name the request came in under, on loopback.
+	for host, code := range map[string]int{"evil.example": 403, "evil.example:8000": 403, "localhost:8000": 200, "127.0.0.1:8000": 200, "[::1]:8000": 200, "seats.example": 200, "SEATS.example:443": 200} {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, onLoopback(httptest.NewRequest("GET", "/api/sets", nil), host))
+		if rec.Code != code {
+			t.Errorf("GET /api/sets as %s: %d, want %d", host, rec.Code, code)
+		}
+	}
+	// Not on loopback (a container's address, say): the Host is whatever the proxy sent.
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/api/sets", nil))
+	if rec.Code != 200 {
+		t.Errorf("GET /api/sets off loopback: %d", rec.Code)
+	}
+	// Forgery: a POST from another origin, a sandboxed page (Origin: null), or a browser that
+	// says the site relation without an Origin. The page's own forms, and clients that aren't
+	// browsers (no Origin), get through.
+	for _, c := range []struct {
+		origin, site string
+		code         int
+	}{
+		{"https://evil.example", "", 403}, {"null", "", 403}, {"", "cross-site", 403}, {"", "same-site", 403},
+		{"http://localhost:8000", "", 200}, {"http://LOCALHOST:8000", "", 200}, {"https://seats.example", "cross-site", 200},
+		{"http://localhost:9000", "", 403}, {"http://127.0.0.1:8000", "", 403}, // another local app's page
+		{"", "", 200}, {"", "same-origin", 200}, {"", "none", 200},
+	} {
+		calls = 0
+		req := httptest.NewRequest("POST", "/search", strings.NewReader("query=best+credential+gateway"))
+		req.Host = "localhost:8000"
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		if c.origin != "" {
+			req.Header.Set("Origin", c.origin)
+		}
+		if c.site != "" {
+			req.Header.Set("Sec-Fetch-Site", c.site)
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Code != c.code || (c.code == 403) == (calls > 0) {
+			t.Errorf("POST /search from %q (%s): %d, want %d; %d provider calls", c.origin, c.site, rec.Code, c.code, calls)
+		}
+	}
+	// A GET is a read, whatever its origin.
+	req := httptest.NewRequest("GET", "/api/sets", nil)
+	req.Header.Set("Origin", "https://evil.example")
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Errorf("cross-origin GET: %d", rec.Code)
+	}
+	// Behind a signing-in proxy the proxy's session would sign a forged form in: refused there too.
+	t.Setenv("CHEAPSEATS_AUTH_HEADER", "X-ExeDev-Email")
+	s, _ = New(newApp(t, testConfig(t), d))
+	req = httptest.NewRequest("POST", "/search", strings.NewReader("query=x"))
+	req.Host = "seats.example"
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("X-ExeDev-Email", "alice@acme.com")
+	req.Header.Set("Origin", "https://evil.example")
+	rec = httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	if rec.Code != 403 {
+		t.Errorf("forged form behind the proxy: %d", rec.Code)
+	}
+}
+
+// Text that starts like a formula is marked as text for the spreadsheet; other text is as it was.
+func TestCSVCell(t *testing.T) {
+	for in, want := range map[string]string{
+		"=HYPERLINK(\"https://evil.example\")": "'=HYPERLINK(\"https://evil.example\")",
+		"+1 for Cheap Seats":                   "'+1 for Cheap Seats",
+		"- Cheap Seats\n- Docker":              "'- Cheap Seats\n- Docker",
+		"@acme":                                "'@acme",
+		"\tcmd":                                "'\tcmd",
+		"Cheap Seats is cheap":                 "Cheap Seats is cheap",
+		"":                                     "",
+	} {
+		if got := cell(in); got != want {
+			t.Errorf("cell(%q) = %q, want %q", in, got, want)
 		}
 	}
 }

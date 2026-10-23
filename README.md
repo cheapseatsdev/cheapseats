@@ -217,10 +217,15 @@ cheapseats version                        version and database schema
 
 ## Access
 
-- Unset `CHEAPSEATS_TOKENS`: listens on 127.0.0.1 only, open.
+- Unset `CHEAPSEATS_TOKENS`: listens on 127.0.0.1 only, open. A page on another site can't read it
+  (a request under a name rebound to loopback is refused) or change anything (a form or fetch
+  from another origin is refused).
 - `CHEAPSEATS_TOKENS`: bearer tokens for the API and MCP; the UI asks for one once.
 - `CHEAPSEATS_AUTH_HEADER` (+ `CHEAPSEATS_ALLOWED_EMAILS`): trust a signing-in proxy's email header.
-- `CHEAPSEATS_HOSTS`: host names a proxy on the same machine serves Cheap Seats as; MCP needs them.
+- `CHEAPSEATS_HOSTS`: host names a proxy on the same machine serves Cheap Seats as; MCP needs them,
+  and so does an open (token-less) Cheap Seats behind such a proxy. A proxy that rewrites `Host` to
+  the upstream address (nginx, unless told `proxy_set_header Host $host;`) needs them too, or forms
+  from the page are refused as cross-site.
 - `CHEAPSEATS_PUBLIC_URL`: the address share links use (`https://cheapseats.example.com`). Unset, they
   use the first of `CHEAPSEATS_HOSTS` over https, else the host the request came in on
   (`X-Forwarded-Host` first).

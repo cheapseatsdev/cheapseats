@@ -253,8 +253,11 @@ func verbatim(quote string, texts []string) string {
 	for _, t := range texts {
 		lt, lq := strings.ToLower(t), strings.ToLower(q)
 		if i := strings.Index(lt, lq); q != "" && i >= 0 {
-			if len(lt) == len(t) {
-				return t[i : i+len(q)] // in the string's own case
+			// In the string's own case: the matched bytes, when lowercasing moved none of them. A
+			// rune whose lowercase is another size (İ is two bytes, i one) shifts the offsets, and
+			// at the end of a string the slice would run past it.
+			if j := i + len(q); len(lt) == len(t) && j <= len(t) && strings.ToLower(t[i:j]) == lq {
+				return t[i:j]
 			}
 			return q
 		}
