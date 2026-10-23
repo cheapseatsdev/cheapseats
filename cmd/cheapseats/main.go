@@ -639,24 +639,31 @@ func serve(ctx context.Context, addr string) error {
 	if err != nil {
 		return err
 	}
-	interrupted, err := a.Runs.Recover(ctx)
-	if err != nil {
-		return err
+	// A read-only copy (CHEAPSEATS_READONLY) serves a database another Cheap Seats writes: it
+	// resumes and schedules nothing, and needs no sign-in, since it can't change anything.
+	readOnly := env.Get("READONLY") != ""
+	var interrupted []string
+	if !readOnly {
+		if interrupted, err = a.Runs.Recover(ctx); err != nil {
+			return err
+		}
 	}
 	srv, err := server.New(a)
 	if err != nil {
 		return err
 	}
-	if env.Get("TOKENS") == "" && env.Get("AUTH_HEADER") == "" && !strings.HasPrefix(addr, "127.0.0.1") && !strings.HasPrefix(addr, "localhost") {
+	if !readOnly && env.Get("TOKENS") == "" && env.Get("AUTH_HEADER") == "" && !strings.HasPrefix(addr, "127.0.0.1") && !strings.HasPrefix(addr, "localhost") {
 		return errors.New("refusing to listen beyond localhost without CHEAPSEATS_TOKENS or CHEAPSEATS_AUTH_HEADER set")
 	}
 	// Runs get their own context, so shutdown can first mark them interrupted (to resume on the
 	// next start) rather than have the signal cancel them.
 	runs, stopRuns := context.WithCancel(context.Background())
-	go func() {
-		a.Resume(runs, interrupted)
-		a.Schedule(runs)
-	}()
+	if !readOnly {
+		go func() {
+			a.Resume(runs, interrupted)
+			a.Schedule(runs)
+		}()
+	}
 	hs := &http.Server{Addr: addr, Handler: srv.Handler(), ReadHeaderTimeout: 10 * time.Second}
 	go func() {
 		<-ctx.Done()

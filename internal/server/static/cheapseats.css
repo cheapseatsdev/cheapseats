@@ -192,3 +192,7 @@ form.mark{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:8px 0}fo
 .seat-meter{--seat-active:#C73532;--seat-inactive:#81786F;--seat-gold:#F2B544;--seat-gold-stroke:#936000;flex-shrink:0;vertical-align:-3px}
 :root[data-theme="dark"] .seat-meter{--seat-active:#EF7770;--seat-inactive:#8F877E;--seat-gold-stroke:#F2B544}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .seat-meter{--seat-active:#EF7770;--seat-inactive:#8F877E;--seat-gold-stroke:#F2B544}}
+/* A read-only copy (CHEAPSEATS_READONLY): the server refuses every change, so hide the controls. */
+.readonly form[method="post"]{display:none}
+.demo-banner{margin:0;padding:8px 16px;background:var(--pc-gold-bg);color:var(--pc-gold-text);font-size:14px;text-align:center}
+.demo-banner a{color:inherit}
