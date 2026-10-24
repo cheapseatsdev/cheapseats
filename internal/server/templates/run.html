@@ -42,7 +42,9 @@
 {{with .Opinion}}{{if or .Sentiment.Named .Themes}}<h2 id="opinion">What the answers say about {{brand}}</h2>
 <div class="card"><div class="kpis"><div class="kpi"><b>{{.Sentiment.NetText}}</b><small>net sentiment</small></div>{{range .Sentiment.Tones}}<div class="kpi"><b>{{.N}}</b><small>{{.Tone}}</small></div>{{end}}</div>
 <p class="muted small">Net sentiment is the share of answers naming {{brand}} that are positive about it minus the share negative, in points, over the {{.Sentiment.Toned}} with a tone{{if ne .Sentiment.Toned .Sentiment.Named}} ({{.Sentiment.Named}} name it; older grades have no tone){{end}}.</p>
-{{with .Sentiment.Praise}}<p><b>Praised for:</b> {{range .}}{{.Text}} ×{{.N}}; {{end}}</p>{{end}}{{with .Sentiment.Objections}}<p><b>Objections:</b> {{range .}}{{.Text}} ×{{.N}}; {{end}}</p>{{end}}</div>
+</div>
+{{if or .Sentiment.Praise .Sentiment.Objections}}<div class="scroll"><table><thead><tr><th>Said about {{brand}}</th><th class="num">Answers</th><th>Pages behind it</th></tr></thead>
+<tbody>{{range .Sentiment.Praise}}<tr><td><b>Praised for</b> {{.Text}}</td><td class="num">{{.N}}</td><td>{{with .Behind}}{{template "behind" .}}{{end}}</td></tr>{{end}}{{range .Sentiment.Objections}}<tr><td><b>Objection</b> {{.Text}}</td><td class="num">{{.N}}</td><td>{{with .Behind}}{{template "behind" .}}{{end}}</td></tr>{{end}}</tbody></table></div>{{end}}
 {{with .Themes}}{{if .Themes}}<div class="scroll"><table><thead><tr><th>Theme</th><th>Kind</th><th class="num">Answers</th><th>Helps</th><th>In their words</th></tr></thead>
 <tbody>{{range .Themes}}<tr><td>{{.Name}}</td><td>{{.Kind}}</td><td class="num">{{.Answers}}</td><td>{{.Beneficiary}}</td><td class="muted">“{{.Quote}}”</td></tr>{{end}}</tbody></table></div>{{else if .Error}}<p class="err">Theme pass failed: {{.Error}}</p>{{else if .Skipped}}<p class="muted small">No themes: {{.Skipped}}.</p>{{end}}{{end}}{{end}}{{end}}
 
@@ -67,9 +69,9 @@
 <tbody>{{range .}}<tr><td>{{.Name}}</td><td class="num">{{.Both}}</td><td class="num">{{.BrandAhead}}</td><td class="num">{{.CompetitorAhead}}</td><td class="num">{{.BrandOnly}}</td><td class="num">{{.CompetitorOnly}}</td><td class="num">{{.Neither}}</td></tr>{{end}}</tbody></table></div>{{end}}
 
 {{with .Objections}}<h2 id="objections">Objections</h2>
-<p class="sub">Concerns the answers that name {{brand}} raised about it, folded so the same phrase counts once, most common first.</p>
-<div class="scroll"><table><thead><tr><th>Objection</th><th class="num">Answers</th><th>For example</th></tr></thead>
-<tbody>{{range .}}<tr><td>{{.Text}}{{if gt .Wordings 1}} <span class="muted small" title="wordings Jev judged to say the same thing">({{.Wordings}} wordings)</span>{{end}}</td><td class="num">{{.Answers}}</td><td><a href="#prompt-{{add .Prompt 1}}">{{.PromptText}}</a></td></tr>{{end}}</tbody></table></div>
+<p class="sub">Concerns the answers that name {{brand}} raised about it, folded so the same phrase counts once, most common first. Pages behind it: the pages the answers raising it cited most, each with its type, whether it is {{brand}}'s own (owned) or someone else's (earned), and how many of those answers cited it; “from memory” counts the recall answers, which cite nothing.</p>
+<div class="scroll"><table><thead><tr><th>Objection</th><th class="num">Answers</th><th>Pages behind it</th><th>For example</th></tr></thead>
+<tbody>{{range .}}<tr><td>{{.Text}}{{if gt .Wordings 1}} <span class="muted small" title="wordings Jev judged to say the same thing">({{.Wordings}} wordings)</span>{{end}}</td><td class="num">{{.Answers}}</td><td>{{template "behind" .Behind}}</td><td><a href="#prompt-{{add .Prompt 1}}">{{.PromptText}}</a></td></tr>{{end}}</tbody></table></div>
 {{if gt (len $d.Summary.Objections) (len .)}}<p class="muted small">Showing the {{len .}} most common; the rest are in the JSON export.</p>{{end}}{{end}}
 
 {{if .Hosts}}<h2 id="sources">Sources</h2>
@@ -132,3 +134,5 @@
 {{with .Answer}}{{$m := mark .Text (evidence $x)}}<pre>{{$m.Before}}{{with $m.Match}}<mark title="the grader's evidence">{{.}}</mark>{{end}}{{$m.After}}</pre>{{if .Searches}}<p class="muted">Searches: {{range .Searches}}“{{.Query}}” {{end}}</p>{{end}}{{if .Citations}}<p class="muted">Cited: {{range .Citations}}<a href="{{.URL}}">{{.URL}}</a> {{end}}</p>{{end}}{{end}}
 </details>{{end}}{{end}}</details>{{end}}
 {{end}}
+{{/* The pages behind an objection or a praise (opinion.Behind): the objections table and the sentiment share it. */}}
+{{define "behind"}}{{range .Sources}}<a class="mono" href="{{.URL}}" title="{{.URL}}">{{.Host}}</a> <span class="muted small">{{.Type}} · {{if .Owned}}owned{{else}}earned{{end}} · ×{{.Answers}}</span><br>{{end}}{{if .Recall}}<span class="muted small">{{.Recall}} from memory</span>{{else if not .Sources}}<span class="muted small">none cited</span>{{end}}{{end}}

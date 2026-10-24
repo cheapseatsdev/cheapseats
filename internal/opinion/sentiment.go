@@ -34,10 +34,31 @@ type ToneCount struct {
 	Share float64    `json:"share"`
 }
 
-// Count is how many answers said one thing, under the first wording seen.
+// Count is how many answers said one thing, under the first wording seen, and, once the run's
+// report has traced it (report.Summary.Trace), the pages behind it; nil until then.
 type Count struct {
 	Text string `json:"text"`
 	N    int    `json:"n"`
+	*Behind
+}
+
+// Behind is what taught the answers a praise or an objection: the pages the answers raising it
+// cited, most answers first and at most a few, and how many of those answers were on the recall
+// track, from memory with no pages at all.
+type Behind struct {
+	Sources []Source `json:"sources"`
+	Recall  int      `json:"recall_answers"`
+}
+
+// Source is one page cited by answers that raised a praise or an objection.
+type Source struct {
+	URL  string `json:"url"`
+	Host string `json:"host"`
+	Type string `json:"page_type"` // report.PageType: listicle, comparison, docs...
+	// On one of the brand's own sites (owned); otherwise someone else's page (earned).
+	Owned bool `json:"owned"`
+	// Answers raising it that cited this page.
+	Answers int `json:"answers"`
 }
 
 // top is how many praise and objection strings Sentiment keeps.
@@ -136,7 +157,7 @@ func (c *counter) add(items []string) {
 func (c *counter) top(n int) []Count {
 	out := []Count{}
 	for _, k := range c.order {
-		out = append(out, Count{c.text[k], c.n[k]})
+		out = append(out, Count{Text: c.text[k], N: c.n[k]})
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].N > out[j].N })
 	if len(out) > n {

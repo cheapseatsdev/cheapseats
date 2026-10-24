@@ -260,6 +260,7 @@ Don't propose generic marketing, brand campaigns, or anything you can't point at
 %[7]s`, brand, domain, cfg.Brand.About, facts, len(set.Prompts), set.Name, body, sites, triedText(brand, tried))
 	prompt += siteFindingsText(ctx, brand)
 	prompt += opportunitiesText(ctx, brand)
+	prompt += objectionsText(ctx, brand)
 	prompt += misstatementsText(ctx, brand)
 
 	var a Analysis
@@ -529,6 +530,52 @@ func opportunitiesText(ctx context.Context, brand string) string {
 	b.WriteString(strings.Join(lines, "\n"))
 	fmt.Fprintf(&b, "\nA kind of page that carries much of the citations and rarely names %s is one decision, not one host at a time: for somebody else's pages, one outreach fix naming the host that carries the kind most, with the kind and its share in the claim; for %s's own, a new page of that kind. Only where the prompts it carries are ones %s loses.\n", brand, brand, brand)
 	return b.String()
+}
+
+type objectionsKey struct{}
+
+// WithObjections gives Build the run's objections (report.Summary.Objections) with the pages
+// behind each, so a fix can target the page that taught one.
+func WithObjections(ctx context.Context, objections []report.Objection) context.Context {
+	return context.WithValue(ctx, objectionsKey{}, objections)
+}
+
+// objectionsText lists the most frequent objections for the analyst, each with the page the
+// answers raising it cited most and how many of them answered from memory, or "" when there are
+// none.
+func objectionsText(ctx context.Context, brand string) string {
+	objs, _ := ctx.Value(objectionsKey{}).([]report.Objection)
+	if len(objs) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "\nObjections raised by the answers naming %s, most frequent first, each with the page the answers raising it cited most (owned: on %s's own sites; earned: someone else's) and how many of those answers were recall answers, from memory with no pages:\n", brand, brand)
+	for _, o := range head(objs, 8) {
+		fmt.Fprintf(&b, "- %s (%d answers): ", o.Text, o.Answers)
+		if len(o.Sources) == 0 {
+			b.WriteString("no page cited")
+		} else {
+			p, voice := o.Sources[0], "earned"
+			if p.Owned {
+				voice = "owned"
+			}
+			fmt.Fprintf(&b, "%s (%s, %s, cited by %d)", p.URL, voice, p.Type, p.Answers)
+		}
+		if o.Recall > 0 {
+			fmt.Fprintf(&b, "; %d from memory", o.Recall)
+		}
+		b.WriteString("\n")
+	}
+	fmt.Fprintf(&b, "Where a fix answers an objection, aim it at the page that taught it and say so in target and claim: an owned page is %s's to fix (fix-page); an earned page is the one to correct, get onto or displace (outreach, displaces). An objection mostly from memory has no page behind it: the claim must be stated plainly on the page where the assistants look for it.\n", brand)
+	return b.String()
+}
+
+// head is at most the first n of xs.
+func head[T any](xs []T, n int) []T {
+	if len(xs) > n {
+		return xs[:n]
+	}
+	return xs
 }
 
 type siteFindingsKey struct{}
