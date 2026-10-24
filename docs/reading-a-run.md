@@ -90,6 +90,10 @@ ranked by distinct competitors named × answers citing it: where to get the bran
 **Found but not cited** (`found_not_cited`) lists the brand's pages that searches returned and no
 answer linked.
 
+**Cited pages that changed** (`cited_page_changes`) appears when this run and an earlier run of the
+set both had a [citation check](audit.md#cited-pages-that-changed): the pages that now name the
+brand or a competitor, or stopped, since that check.
+
 ### Page types
 
 The kind of site says whose page it is; the **page type** (`page_type` on each page, rolled up in
