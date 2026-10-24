@@ -53,12 +53,12 @@ func TestCheckBaselineStoresTheWebsPagesAndReadsThemAgainstTheAnswers(t *testing
 		var results []any
 		if strings.Contains(q, "visibility tool") {
 			results = []any{
-				map[string]any{"title": "Best AI visibility tools", "url": "https://tryprofound.com/blog/best-ai-visibility-tools"},
+				map[string]any{"title": "Best AI visibility tools", "url": "https://docs.tryprofound.com/blog/best-ai-visibility-tools"},
 				map[string]any{"title": "Metrics", "url": "https://cheapseats.dev/docs/metrics"},
 			}
 		} else {
 			results = []any{
-				map[string]any{"title": "Share of voice", "url": "https://tryprofound.com/learn/share-of-voice"},
+				map[string]any{"title": "Share of voice", "url": "https://docs.tryprofound.com/learn/share-of-voice"},
 				map[string]any{"title": "Measuring share of voice", "url": "https://reviews.example.com/share-of-voice"},
 				map[string]any{"title": "SoV tools", "url": "https://roundup.example.net/sov-tools"},
 			}
@@ -102,9 +102,9 @@ func TestCheckBaselineStoresTheWebsPagesAndReadsThemAgainstTheAnswers(t *testing
 		t.Fatalf("baseline %+v", b)
 	}
 	want := map[int][]BaselinePage{
-		0: {{URL: "https://tryprofound.com/blog/best-ai-visibility-tools", Title: "Best AI visibility tools", Status: "unseen", Class: "competitor", Competitor: "Profound"},
+		0: {{URL: "https://docs.tryprofound.com/blog/best-ai-visibility-tools", Title: "Best AI visibility tools", Status: "unseen", Class: "competitor", Competitor: "Profound"},
 			{URL: "https://cheapseats.dev/docs/metrics", Title: "Metrics", Status: "unseen", Class: "own"}},
-		1: {{URL: "https://tryprofound.com/learn/share-of-voice", Title: "Share of voice", Status: "unseen", Class: "competitor", Competitor: "Profound"},
+		1: {{URL: "https://docs.tryprofound.com/learn/share-of-voice", Title: "Share of voice", Status: "unseen", Class: "competitor", Competitor: "Profound"},
 			{URL: "https://reviews.example.com/share-of-voice", Title: "Measuring share of voice", Status: "cited", Class: "editorial"},
 			{URL: "https://roundup.example.net/sov-tools", Title: "SoV tools", Status: "retrieved", Class: "editorial"}},
 	}
@@ -117,8 +117,9 @@ func TestCheckBaselineStoresTheWebsPagesAndReadsThemAgainstTheAnswers(t *testing
 			t.Errorf("prompt %d pages:\n got %+v\nwant %+v", idx, got.Pages, pages)
 		}
 	}
-	// The host table: the competitor's domains as one row, the brand's sites as one, and no row
-	// for a host one answer retrieved once (cheapseats.dev/other is ours; nothing else is alone).
+	// The host table: the competitor's domains as one row named for its first configured domain
+	// (its pages were all on docs.tryprofound.com), the brand's sites as one, and no row for a
+	// host one answer retrieved once (cheapseats.dev/other is ours; nothing else is alone).
 	rows := map[string]BaselineHost{}
 	for _, h := range b.Hosts {
 		rows[h.Host] = h

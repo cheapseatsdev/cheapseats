@@ -411,7 +411,8 @@ coverage line, the neutral top pages carry two chips: whose the page is (ours, a
 name, or its source class) and the status coverage uses, `cited`, `retrieved` (a search returned
 it, no answer cited it) or `unseen`. Above the pages, a "Neutral retrieval" table has one row per
 host over the prompts searched, with a competitor's configured domains as one row and the brand's
-sites as one: `neutral` is the number of prompts a neutral index ranks the host for, `assistants`
+sites as one, each named for its first configured domain or site: `neutral` is the number of
+prompts a neutral index ranks the host for, `assistants`
 the number of prompts any answer retrieved or cited it for, and the reading is `content` when
 neutral is at least two and at least the assistants' count, `query` when the assistants found it
 for two or more prompts and a neutral search never ranked it, and `both` otherwise. A host one
