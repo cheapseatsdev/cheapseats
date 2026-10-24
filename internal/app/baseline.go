@@ -194,10 +194,21 @@ func (a *App) Baseline(ctx context.Context, id string, results []run.Result) *Ba
 	if err != nil {
 		return nil
 	}
-	cls := report.NewClassifier(a.RunBrand(r), a.RunCompetitors(r), a.Cfg.Sources)
+	brand, competitors := a.RunBrand(r), a.RunCompetitors(r)
+	cls := report.NewClassifier(brand, competitors, a.Cfg.Sources)
 	// The row a URL counts under: the brand's sites as one, each competitor's domains as one,
-	// every other host as itself.
+	// every other host as itself. A shared row is named for its first configured site, not for
+	// whichever of its pages happened to be counted first.
 	type rowKey struct{ class, competitor, host string }
+	firstSite := map[string]string{}
+	for _, c := range competitors {
+		if len(c.Domains) > 0 {
+			firstSite[c.Name] = config.CleanSite(c.Domains[0])
+		}
+	}
+	if sites := brand.AllSites(); len(sites) > 0 {
+		firstSite[""] = config.CleanSite(sites[0].URL)
+	}
 	keyOf := func(u string) (rowKey, string, string) {
 		class, comp := cls.Class(u)
 		host := report.Host(report.NormalizeURL(u))
@@ -219,7 +230,13 @@ func (a *App) Baseline(ctx context.Context, id string, results []run.Result) *Ba
 		k, class, comp := keyOf(u)
 		c := hosts[k]
 		if c == nil {
-			c = &counts{host: report.Host(report.NormalizeURL(u)), class: class, competitor: comp, neutral: map[int]bool{}, assistants: map[int]bool{}}
+			host := report.Host(report.NormalizeURL(u))
+			if k.host == "" {
+				if site, ok := firstSite[comp]; ok {
+					host = site
+				}
+			}
+			c = &counts{host: host, class: class, competitor: comp, neutral: map[int]bool{}, assistants: map[int]bool{}}
 			hosts[k] = c
 		}
 		if neutral {
