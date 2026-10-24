@@ -80,6 +80,10 @@ func TestReviewShowsJevsPromptJudgments(t *testing.T) {
 	if code != 200 || !strings.Contains(body, `consider intent = &#34;info&#34;`) || !strings.Contains(body, `(0.80)`) || strings.Contains(body, "None yet.") {
 		t.Errorf("page with rows: %d %s", code, limit(body))
 	}
+	// Each flag row names its own prompt by id, not the page's whole prompt list.
+	if id := j.Intent[0].Prompts[0]; !strings.Contains(body, `<span class="muted mono">`+id+`</span>`) || strings.Contains(body, `<span class="muted mono">{`) {
+		t.Errorf("flag row should show prompt id %q: %s", id, limit(body))
+	}
 	code, body = get("/api/sets/" + set.ID + "/review")
 	var rev app.Review
 	if code != 200 || json.Unmarshal([]byte(body), &rev) != nil || rev.Jev == nil || len(rev.Jev.Intent) != want || rev.Jev.Judged == 0 || rev.Jev.Pending != 0 {
