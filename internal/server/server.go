@@ -694,6 +694,7 @@ func (s *Server) runData(ctx context.Context, id string) (*RunData, error) {
 	d.Insights, d.FixesAt = insights.String, fixesAt.String
 	d.Progress = s.App.RunProgress(ctx, id)
 	d.Opinion = s.App.Opinion(ctx, id, res)
+	d.Summary.Trace(&d.Opinion.Sentiment) // the pages behind each praise and objection
 	d.Coverage = s.App.Coverage(ctx, id, res)
 	d.Baseline = s.App.Baseline(ctx, id, res)
 	d.Prospects = s.App.Prospects(ctx, id, res)

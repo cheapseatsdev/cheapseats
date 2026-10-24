@@ -116,7 +116,9 @@ func (a *App) BuildFixes(ctx context.Context, id string) error {
 	cfg.Brand = r.Snapshot.Brand
 	cfg.Brand.Facts = a.Cfg.Brand.Facts
 	ctx = analysis.WithSiteFindings(ctx, a.siteFindings(ctx)) // the latest site audit, as evidence
-	ctx = analysis.WithOpportunities(ctx, a.Summary(r, results).Opportunities)
+	sum := a.Summary(r, results)
+	ctx = analysis.WithOpportunities(ctx, sum.Opportunities)
+	ctx = analysis.WithObjections(ctx, sum.Objections) // with the pages behind each
 	ctx = analysis.WithMisstatements(ctx, a.misstatementLines(ctx, id, results))
 	an, cost, err := analysis.Build(ctx, &cfg, r.Snapshot.Set, results, a.triedFor(ctx, r.SetID))
 	if err != nil {
@@ -295,9 +297,9 @@ func (a *App) RunBrand(r *run.Run) config.Brand {
 func (a *App) Summary(r *run.Run, results []run.Result) report.Summary {
 	r.Intents(results)
 	// Sources and PageTypes are the config's [sources] with Jev's host classes merged under them,
-	// and Jev's page types (classify.go); Objections folds wordings Jev clustered (cluster.go).
-	// With no decisions stored they are the config as it is.
-	return report.BuildWith(a.RunBrand(r), results, report.Options{Competitors: a.RunCompetitors(r), Sources: a.SourceClasses(), Aliases: a.Aliases(), PageTypes: a.PageTypes(), Objections: a.PhraseClusters(objectionKind)})
+	// and Jev's page types (classify.go); Objections and Praise fold wordings Jev clustered
+	// (cluster.go). With no decisions stored they are the config as it is.
+	return report.BuildWith(a.RunBrand(r), results, report.Options{Competitors: a.RunCompetitors(r), Sources: a.SourceClasses(), Aliases: a.Aliases(), PageTypes: a.PageTypes(), Objections: a.PhraseClusters(objectionKind), Praise: a.PhraseClusters(praiseKind)})
 }
 
 // RunCompetitors are the competitors a run's report sorts products and sources by: the ones the

@@ -41,6 +41,20 @@ answers naming only one of them, and answers naming neither (`head_to_head`).
 punctuation collapsed) so "Pricing unclear." and "pricing, unclear" count once, with an example
 prompt for each (`objections`).
 
+**Pages behind it**, on each objection row and on each of the top praise and objections in "What
+the answers say", is where the answers raising it got it: the pages those answers cited, most
+answers first, at most three, each with its host, its page type (see below), whether it is on
+one of the brand's own sites (owned) or someone else's (earned), and how many of those answers
+cited it; and how many of the answers raising it were recall answers, which cite nothing and so
+had it from memory ("2 from memory"). An objection taught by the brand's own pricing page is that
+page to fix; one taught by a third-party comparison is that page to correct or displace; one
+mostly from memory is baked into the model, and only pages it reads over time will move it. It
+is a join over the citations already stored, so it costs nothing and changes no grade.
+`GET /api/runs/{id}` carries it as `sources` (url, host, page_type, owned, answers) and
+`recall_answers` on each `objections` row and on each `opinion.sentiment` praise and objection;
+MCP `get_run` keeps the top two pages per row. The fix list's analyst gets the top page behind
+each of the eight most frequent objections, so a fix can target the page that taught one.
+
 ## Sources
 
 Every page an answer cited, or its searches returned, is sorted into a kind of site:

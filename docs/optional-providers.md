@@ -138,7 +138,8 @@ found.
 Decisions land in `phrase_clusters` with Jev's probability for the cluster it chose, and the
 cluster's wording as it was first written. `App.PhraseClusters` reads them back at
 `typesafe.min_confidence`, `report.Options.Objections` counts the run page's objections through
-them, and `opinion.SummarizeWith` the sentiment's praise and objections. An objection row that
+them, `opinion.SummarizeWith` the sentiment's praise and objections, and `report.Options.Praise`
+the pages behind each praise ([reading-a-run.md](reading-a-run.md)). An objection row that
 gathered more than one wording says so, "(3 wordings)", and `GET /api/runs/{id}` and MCP `get_run`
 carry `wordings` on each objection. `cheapseats cluster <run-id>` runs the pass on a finished run
 and prints each wording with its cluster and probability. A run's pass is a request per new

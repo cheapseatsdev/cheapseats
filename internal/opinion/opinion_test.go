@@ -52,7 +52,7 @@ func TestSentiment(t *testing.T) {
 	if s.Named != 5 || s.Toned != 4 || s.NetText() != "+25" {
 		t.Fatalf("named %d toned %d net %s", s.Named, s.Toned, s.NetText())
 	}
-	if s.Praise[0] != (Count{"Open source", 2}) || s.Objections[0] != (Count{"early stage", 2}) || len(s.Objections) != 2 {
+	if s.Praise[0] != (Count{Text: "Open source", N: 2}) || s.Objections[0] != (Count{Text: "early stage", N: 2}) || len(s.Objections) != 2 {
 		t.Fatalf("%+v %+v", s.Praise, s.Objections)
 	}
 	if len(s.Tones) != 4 || s.Tones[0].Tone != grade.Positive || s.Tones[0].Share != 0.5 {
@@ -71,11 +71,11 @@ func TestSentiment(t *testing.T) {
 		Praise:     map[string]string{"setup is easy and quick": "Easy setup"},
 		Objections: map[string]string{"coverage of two assistants unverified": "Coverage unverified"},
 	})
-	if len(s.Praise) != 2 || s.Praise[0] != (Count{"Easy setup", 3}) || len(s.Objections) != 2 || s.Objections[0] != (Count{"Coverage unverified", 2}) {
+	if len(s.Praise) != 2 || s.Praise[0] != (Count{Text: "Easy setup", N: 3}) || len(s.Objections) != 2 || s.Objections[0] != (Count{Text: "Coverage unverified", N: 2}) {
 		t.Fatalf("%+v %+v", s.Praise, s.Objections)
 	}
 	// A wording mapped to its own first wording counts under that wording.
-	if s := SummarizeWith(clustered[2:], Options{Praise: map[string]string{"cheap": "Cheap"}}); len(s.Praise) != 2 || s.Praise[1] != (Count{"Cheap", 1}) {
+	if s := SummarizeWith(clustered[2:], Options{Praise: map[string]string{"cheap": "Cheap"}}); len(s.Praise) != 2 || s.Praise[1] != (Count{Text: "Cheap", N: 1}) {
 		t.Fatalf("%+v", s.Praise)
 	}
 	if s := Summarize(clustered); len(s.Praise) != 3 || len(s.Objections) != 3 {

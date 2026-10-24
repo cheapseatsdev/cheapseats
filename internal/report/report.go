@@ -11,6 +11,7 @@ import (
 	"github.com/cheapseatsdev/cheapseats/internal/answer"
 	"github.com/cheapseatsdev/cheapseats/internal/config"
 	"github.com/cheapseatsdev/cheapseats/internal/grade"
+	"github.com/cheapseatsdev/cheapseats/internal/opinion"
 	"github.com/cheapseatsdev/cheapseats/internal/run"
 	"github.com/cheapseatsdev/cheapseats/internal/sets"
 )
@@ -102,7 +103,12 @@ type Objection struct {
 	// The first prompt (0-based) it was raised for, and its text, as an example.
 	Prompt     int    `json:"example_prompt_idx"`
 	PromptText string `json:"example_prompt"`
+	// The pages behind it: what the answers raising it cited, and how many were recall answers.
+	opinion.Behind
 }
+
+// MaxSources is how many pages behind an objection or a praise a report keeps.
+const MaxSources = 3
 
 // SourceRates are how far a page or host reached. Retrieved and cited rates are of every answer
 // graded with its text; citation share is of every citation in the run, so a run's shares add up
@@ -251,6 +257,81 @@ type Summary struct {
 	Pending  int         `json:"pending"`
 	CostUSD  float64     `json:"cost_usd"`
 	Searches int         `json:"searches"`
+
+	// The pages behind each praise, by its counting key, for Trace.
+	praise map[string]opinion.Behind
+}
+
+// Trace fills in the pages behind a sentiment's praise and objections (opinion.Count.Behind) from
+// a report of the same results, which counts each phrase under the same key.
+func (s Summary) Trace(st *opinion.Sentiment) {
+	objections := map[string]opinion.Behind{}
+	for _, o := range s.Objections {
+		objections[o.Text] = o.Behind
+	}
+	trace := func(cs []opinion.Count, by map[string]opinion.Behind) {
+		for i := range cs {
+			b, ok := by[NormalizeObjection(cs[i].Text)]
+			if !ok {
+				b = opinion.Behind{Sources: []opinion.Source{}}
+			}
+			cs[i].Behind = &b
+		}
+	}
+	trace(st.Praise, s.praise)
+	trace(st.Objections, objections)
+}
+
+// behinds counts, per objection or praise, the pages the answers raising it cited and how many of
+// those answers were recall answers.
+type behinds map[string]*behindAcc
+
+type behindAcc struct {
+	pages  map[string]int // normalized URL -> answers raising it that cited the page
+	recall int
+}
+
+// add counts one answer that raised each of keys: the pages it cited, and whether it was a
+// recall answer.
+func (b behinds) add(keys []string, cited map[string]bool, recall bool) {
+	for _, k := range keys {
+		a := b[k]
+		if a == nil {
+			a = &behindAcc{pages: map[string]int{}}
+			b[k] = a
+		}
+		if recall {
+			a.recall++
+		}
+		for u := range cited {
+			a.pages[u]++
+		}
+	}
+}
+
+// of is the pages behind k, most answers first, at most MaxSources.
+func (b behinds) of(k string, pages map[string]*Page) opinion.Behind {
+	out := opinion.Behind{Sources: []opinion.Source{}}
+	a := b[k]
+	if a == nil {
+		return out
+	}
+	out.Recall = a.recall
+	for u, n := range a.pages {
+		p := pages[u]
+		out.Sources = append(out.Sources, opinion.Source{URL: u, Host: p.Host, Type: p.Type, Owned: p.Class == Own, Answers: n})
+	}
+	sort.Slice(out.Sources, func(i, j int) bool {
+		x, y := out.Sources[i], out.Sources[j]
+		if x.Answers != y.Answers {
+			return x.Answers > y.Answers
+		}
+		return x.URL < y.URL
+	})
+	if len(out.Sources) > MaxSources {
+		out.Sources = out.Sources[:MaxSources]
+	}
+	return out
 }
 
 // Tally counts graded answers: how many named the brand, and of the answers to prompts that ask for
@@ -300,12 +381,16 @@ type Options struct {
 	// Objections to count as one: a folded objection as the grader wrote it, to the wording of
 	// the objection it counts under (app.PhraseClusters). Absent, each wording counts on its own.
 	Objections map[string]string
+	// Praise to count as one, the same way (app.PhraseClusters): only the pages behind each
+	// praise (Summary.Trace) are counted here; the sentiment counts the praise itself.
+	Praise map[string]string
 }
 
-// objection returns the counting key for an objection the grader wrote, through Objections.
-func (o Options) objection(text string) string {
+// phrase returns the counting key for an objection or praise the grader wrote, through as
+// (Options.Objections or Options.Praise).
+func phrase(as map[string]string, text string) string {
 	k := NormalizeObjection(text)
-	if c, ok := o.Objections[k]; ok && c != "" {
+	if c, ok := as[k]; ok && c != "" {
 		if ck := NormalizeObjection(c); ck != "" {
 			return ck
 		}
@@ -369,6 +454,7 @@ func BuildWith(brand config.Brand, results []run.Result, opt Options) Summary {
 	var recs []answerRec
 	objections := map[string]*Objection{}
 	wordings := map[string]map[string]bool{} // counting key -> the folded wordings counted under it
+	objectionsBehind, praiseBehind := behinds{}, behinds{}
 	brandKey := strings.ToLower(brand.Name)
 	cls := NewClassifier(brand, opt.Competitors, opt.Sources)
 	pages := map[string]*Page{}
@@ -513,6 +599,7 @@ func BuildWith(brand config.Brand, results []run.Result, opt Options) Summary {
 				a.weighted += float64(n-p+1) / float64(n)
 			}
 		}
+		var raised, praised []string // counting keys of the objections and praise this answer gave
 		if named {
 			seen := map[string]bool{}
 			for _, o := range g.Objections {
@@ -520,7 +607,7 @@ func BuildWith(brand config.Brand, results []run.Result, opt Options) Summary {
 				if w == "" {
 					continue
 				}
-				k := opt.objection(o)
+				k := phrase(opt.Objections, o)
 				if wordings[k] == nil {
 					wordings[k] = map[string]bool{}
 				}
@@ -529,6 +616,7 @@ func BuildWith(brand config.Brand, results []run.Result, opt Options) Summary {
 					continue
 				}
 				seen[k] = true
+				raised = append(raised, k)
 				x := objections[k]
 				if x == nil {
 					x = &Objection{Text: k, Prompt: r.PromptIdx, PromptText: r.Prompt}
@@ -536,7 +624,16 @@ func BuildWith(brand config.Brand, results []run.Result, opt Options) Summary {
 				}
 				x.Answers++
 			}
+			seen = map[string]bool{}
+			for _, p := range g.Praise {
+				if k := phrase(opt.Praise, p); k != "" && !seen[k] {
+					seen[k] = true
+					praised = append(praised, k)
+				}
+			}
 		}
+		objectionsBehind.add(raised, nil, r.Track == answer.Recall)
+		praiseBehind.add(praised, nil, r.Track == answer.Recall)
 		recs = append(recs, rec)
 		recIdx := len(recs) - 1
 		if r.Answer == nil {
@@ -612,6 +709,8 @@ func BuildWith(brand config.Brand, results []run.Result, opt Options) Summary {
 				sitePrompts[p.Site][r.PromptIdx] = true
 			}
 		}
+		objectionsBehind.add(raised, cited, false)
+		praiseBehind.add(praised, cited, false)
 		surfaced := map[string]bool{}
 		surfacedSite := map[string]bool{}
 		surfacedHost := map[string]bool{}
@@ -693,7 +792,12 @@ func BuildWith(brand config.Brand, results []run.Result, opt Options) Summary {
 	s.HeadToHead = headToHeads(s.Voice, recs, brandKey)
 	for k, o := range objections {
 		o.Wordings = len(wordings[k])
+		o.Behind = objectionsBehind.of(k, pages)
 		s.Objections = append(s.Objections, *o)
+	}
+	s.praise = map[string]opinion.Behind{}
+	for k := range praiseBehind {
+		s.praise[k] = praiseBehind.of(k, pages)
 	}
 	sort.Slice(s.Objections, func(i, j int) bool {
 		a, b := s.Objections[i], s.Objections[j]
