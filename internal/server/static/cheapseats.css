@@ -258,3 +258,8 @@ article.fix-item,.fix-item>summary{display:grid;grid-template-columns:minmax(0,1
   summary{min-height:44px;align-content:center}.help-disclosure>summary{display:flex;align-items:center}
   input,select,textarea{font-size:16px}
 }
+/* In a table a host, hash or id never splits mid-word, so its column is at least as wide as its
+   longest name and a phone scrolls the table instead of squeezing that column to a few letters.
+   Only a cell that shows a whole URL may break anywhere, and it keeps a readable width. */
+td.mono,td .mono,td a.mono,td.mono a,td a[href^="http"]{overflow-wrap:normal}
+td.url,td.url a,td.url .mono{overflow-wrap:anywhere}td.url{min-width:16rem}td.names{min-width:12rem}table.wrap-heads th{white-space:normal}
