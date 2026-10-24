@@ -367,7 +367,7 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("%s: brand.name is required", path)
 	}
 	for i, s := range c.Brand.Sites {
-		if cleanSite(s.URL) == "" {
+		if CleanSite(s.URL) == "" {
 			return nil, fmt.Errorf("%s: brand.sites[%d]: url is required", path, i)
 		}
 		if !slices.Contains(SiteKinds, s.Kind) {
@@ -421,7 +421,7 @@ func Load(path string) (*Config, error) {
 			return nil, fmt.Errorf("%s: sources.%s: class must be one of %s", path, class, strings.Join(SourceClasses, ", "))
 		}
 		for _, h := range hosts {
-			k := cleanSite(h)
+			k := CleanSite(h)
 			if k == "" || strings.ContainsAny(k, " \t") {
 				return nil, fmt.Errorf("%s: sources.%s: %q is not a host or host/path", path, class, h)
 			}
@@ -622,7 +622,7 @@ func (b Brand) AllSites() []Site {
 	for _, d := range b.Domains {
 		dup := false
 		for _, s := range b.Sites {
-			dup = dup || strings.EqualFold(cleanSite(s.URL), cleanSite(d))
+			dup = dup || strings.EqualFold(CleanSite(s.URL), CleanSite(d))
 		}
 		if !dup {
 			out = append(out, Site{URL: d, Kind: "other"})
@@ -647,12 +647,16 @@ func (b Brand) SiteOf(url string) (Site, bool) {
 // prefix) matches a URL: the length of the site as written without scheme or www., or -1 when the
 // URL isn't on it. The longest match is the most specific.
 func MatchSite(site, url string) int {
-	d := cleanSite(site)
+	return MatchCleanSite(CleanSite(site), CleanSite(url))
+}
+
+// MatchCleanSite is MatchSite for a site and a URL already passed through CleanSite, for a caller
+// that matches many sites against many URLs and cleans each once.
+func MatchCleanSite(d, u string) int {
 	if d == "" {
 		return -1
 	}
-	u := cleanSite(url)
-	match := u == d || strings.HasPrefix(u, d+"/") || strings.HasPrefix(u, d+"?") || strings.HasPrefix(u, d+"#")
+	match := u == d || strings.HasPrefix(u, d) && len(u) > len(d) && strings.IndexByte("/?#", u[len(d)]) >= 0
 	// Subdomains of a bare host count too (docs.example.com under example.com).
 	if !match && !strings.Contains(d, "/") {
 		host := u
@@ -673,8 +677,8 @@ func (b Brand) FirstParty(url string) bool {
 	return ok
 }
 
-// cleanSite is a URL or site without its scheme, a leading www. or a trailing slash, lowercased.
-func cleanSite(u string) string {
+// CleanSite is a URL or site without its scheme, a leading www. or a trailing slash, lowercased.
+func CleanSite(u string) string {
 	u = strings.ToLower(strings.TrimSpace(u))
 	u = strings.TrimPrefix(strings.TrimPrefix(u, "https://"), "http://")
 	return strings.TrimSuffix(strings.TrimPrefix(u, "www."), "/")

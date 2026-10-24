@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 
 	"encoding/json"
 	"github.com/BurntSushi/toml"
@@ -230,8 +231,20 @@ func Names(text, name string) bool {
 	if name == "" {
 		return false
 	}
+	return nameRe(name).MatchString(text)
+}
+
+// nameRes caches Names' pattern per name: a report asks the same few brand and competitor names of
+// every prompt, and compiling the pattern cost more than matching it.
+var nameRes sync.Map // name -> *regexp.Regexp
+
+func nameRe(name string) *regexp.Regexp {
+	if re, ok := nameRes.Load(name); ok {
+		return re.(*regexp.Regexp)
+	}
 	re := regexp.MustCompile(`(?i)(^|[^\pL\pN])` + regexp.QuoteMeta(name) + `($|[^\pL\pN])`)
-	return re.MatchString(text)
+	nameRes.Store(name, re)
+	return re
 }
 
 func Parse(path string) (Set, error) {

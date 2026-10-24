@@ -52,12 +52,21 @@ var Classes = map[string][]string{
 // Classifier sorts URLs into source classes.
 type Classifier struct {
 	brand       config.Brand
-	competitors []sets.Competitor
-	overrides   map[string][]string
+	competitors []competitorSite
+	overrides   siteIndex
 }
 
+// competitorSite is one of a competitor's domains, cleaned once for matching.
+type competitorSite struct{ name, site string }
+
 func NewClassifier(brand config.Brand, competitors []sets.Competitor, overrides map[string][]string) Classifier {
-	return Classifier{brand, competitors, overrides}
+	c := Classifier{brand: brand, overrides: indexSites(overrides)}
+	for _, comp := range competitors {
+		for _, d := range comp.Domains {
+			c.competitors = append(c.competitors, competitorSite{comp.Name, config.CleanSite(d)})
+		}
+	}
+	return c
 }
 
 // Class is the URL's source class, and for a competitor's page, which competitor. The brand's
@@ -75,26 +84,25 @@ func (c Classifier) Class(u string) (class, competitor string) {
 func (c Classifier) classify(u string) (class, competitor, host string) {
 	host = Host(NormalizeURL(u))
 	if site, ok := c.brand.SiteOf(u); ok {
-		if d := bare(site.URL); strings.Contains(d, "/") {
+		if d := config.CleanSite(site.URL); strings.Contains(d, "/") {
 			host = d
 		}
 		return Own, "", host
 	}
+	cu := config.CleanSite(u)
 	best, bestSite := -1, ""
 	for _, comp := range c.competitors {
-		for _, d := range comp.Domains {
-			if n := config.MatchSite(d, u); n > best {
-				best, bestSite, competitor = n, d, comp.Name
-			}
+		if n := config.MatchCleanSite(comp.site, cu); n > best {
+			best, bestSite, competitor = n, comp.site, comp.name
 		}
 	}
 	if best >= 0 {
-		if d := bare(bestSite); strings.Contains(d, "/") {
-			host = d
+		if strings.Contains(bestSite, "/") {
+			host = bestSite
 		}
 		return Competitor, competitor, host
 	}
-	if cl := longest(c.overrides, u); slices.Contains(ClassOrder, cl) {
+	if cl := c.overrides.longest(cu); slices.Contains(ClassOrder, cl) {
 		return cl, "", host
 	}
 	if host == "github.com" {
@@ -104,7 +112,7 @@ func (c Classifier) classify(u string) (class, competitor, host string) {
 			}
 		}
 	}
-	if cl := longest(Classes, u); cl != "" {
+	if cl := builtin.longest(cu); cl != "" {
 		return cl, "", host
 	}
 	if institutional(host) {
@@ -116,22 +124,52 @@ func (c Classifier) classify(u string) (class, competitor, host string) {
 	return Editorial, "", host
 }
 
-// bare is a site as a host or host/path: no scheme, www. or trailing slash, lowercased.
-func bare(site string) string {
-	s := strings.ToLower(strings.TrimSpace(site))
-	s = strings.TrimPrefix(strings.TrimPrefix(s, "https://"), "http://")
-	return strings.TrimSuffix(strings.TrimPrefix(s, "www."), "/")
+// siteIndex is class lists (class -> sites) keyed by each site's host, so finding the entries that
+// can match a URL walks its host's suffixes (docs.example.com, example.com, com) rather than every
+// entry. A run's report classifies thousands of URLs against the hundreds of hosts Jev has classed.
+type siteIndex map[string][]siteEntry
+
+type siteEntry struct{ site, class string } // site as config.CleanSite leaves it
+
+var builtin = indexSites(Classes)
+
+func indexSites(lists map[string][]string) siteIndex {
+	ix := siteIndex{}
+	for cl, sites := range lists {
+		for _, s := range sites {
+			d := config.CleanSite(s)
+			if d == "" {
+				continue
+			}
+			h := d
+			if i := strings.IndexAny(h, "/?#"); i >= 0 {
+				h = h[:i]
+			}
+			ix[h] = append(ix[h], siteEntry{d, cl})
+		}
+	}
+	return ix
 }
 
-// longest is the class whose entry matches the URL most specifically, or "".
-func longest(lists map[string][]string, u string) string {
+// longest is the class whose entry matches the URL (already cleaned) most specifically, or "":
+// the longest matching entry, and of two the same length, the class that sorts first.
+func (ix siteIndex) longest(cu string) string {
+	host := cu
+	if i := strings.IndexAny(host, "/?#"); i >= 0 {
+		host = host[:i]
+	}
 	class, best := "", -1
-	for cl, hosts := range lists {
-		for _, h := range hosts {
-			if n := config.MatchSite(h, u); n > best || n == best && n >= 0 && cl < class {
-				class, best = cl, n
+	for h := host; ; {
+		for _, e := range ix[h] {
+			if n := config.MatchCleanSite(e.site, cu); n > best || n == best && n >= 0 && e.class < class {
+				class, best = e.class, n
 			}
 		}
+		i := strings.IndexByte(h, '.')
+		if i < 0 {
+			break
+		}
+		h = h[i+1:]
 	}
 	return class
 }

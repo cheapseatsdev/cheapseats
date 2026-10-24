@@ -2,7 +2,6 @@ package report
 
 import (
 	"net/url"
-	"regexp"
 	"strings"
 )
 
@@ -55,13 +54,6 @@ var (
 	repoHosts  = []string{"github.com", "gitlab.com", "codeberg.org", "bitbucket.org"}
 	blogHosts  = []string{"medium.com", "dev.to", "substack.com", "hashnode.dev"}
 	forumHosts = []string{"reddit.com", "quora.com", "lobste.rs", "discord.com"}
-
-	comparisonText = regexp.MustCompile(`\bvs\b|\bversus\b|\bcompar(e|es|ed|ing|ison|isons)\b|\balternative to\b`)
-	listicleText   = regexp.MustCompile(`\bbest\b|\btop \d+\b|\b\d+ (best|top)\b|\balternatives\b|\b(tools|apps|software|platforms) for\b`)
-	reviewText     = regexp.MustCompile(`\breviews?\b`)
-	dated          = regexp.MustCompile(`^(19|20)\d\d$`)
-	nonWord        = regexp.MustCompile(`[^a-z0-9]+`)
-	bestPractice   = regexp.MustCompile(`\bbest practices?\b`)
 )
 
 // PageType sorts a page by its URL and title, first rule that matches: forum (Reddit and other
@@ -112,7 +104,18 @@ func PageType(rawURL, title string) string {
 		}
 		return false
 	}
-	text := " " + strings.TrimSpace(nonWord.ReplaceAllString(path+" "+strings.ToLower(title), " ")) + " "
+	// The path and title as lowercase words, so that a phrase test is a whole-word test and the
+	// rules below need no regular expressions (a report runs them on thousands of pages).
+	words := strings.FieldsFunc(strings.ToLower(path+" "+title), func(r rune) bool { return !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9') })
+	text := " " + strings.Join(words, " ") + " "
+	phrase := func(ps ...string) bool {
+		for _, p := range ps {
+			if strings.Contains(text, " "+p+" ") {
+				return true
+			}
+		}
+		return false
+	}
 
 	switch {
 	case on(forumHosts...), host == "news.ycombinator.com" && seg("item"),
@@ -126,20 +129,62 @@ func PageType(rawURL, title string) string {
 	case strings.HasPrefix(host, "docs.") || strings.HasPrefix(host, "doc.") || on(docsHosts...) ||
 		seg("docs", "doc", "documentation", "reference", "api-reference"):
 		return Docs
-	case comparisonText.MatchString(text):
+	case phrase("vs", "versus", "compare", "compares", "compared", "comparing", "comparison", "comparisons", "alternative to"):
 		return Comparison
 	case on(reviewHosts...):
 		return ReviewPage
-	case listicleText.MatchString(bestPractice.ReplaceAllString(text, " ")):
+	case listicle(words):
 		return Listicle
-	case reviewText.MatchString(text):
+	case phrase("review", "reviews"):
 		return ReviewPage
 	case seg("blog", "blogs", "news", "article", "articles", "post", "posts", "insights", "stories", "press"),
-		len(segs) > 1 && dated.MatchString(segs[0]) || len(segs) > 2 && dated.MatchString(segs[1]),
+		len(segs) > 1 && dated(segs[0]) || len(segs) > 2 && dated(segs[1]),
 		strings.HasPrefix(host, "blog.") || strings.HasPrefix(host, "news."), on(blogHosts...):
 		return Article
 	case len(segs) == 0, seg("pricing", "plans", "features", "feature", "product", "products", "solutions", "integrations", "enterprise"):
 		return Product
 	}
 	return OtherPage
+}
+
+// listicle reports a list or roundup by its words: best (but not best practices), top N, N best
+// or N top, alternatives, or tools, apps, software or platforms for something.
+func listicle(words []string) bool {
+	next := func(i int) string {
+		if i+1 < len(words) {
+			return words[i+1]
+		}
+		return ""
+	}
+	bestOf := func(i int) bool { return words[i] == "best" && next(i) != "practice" && next(i) != "practices" }
+	for i, w := range words {
+		switch {
+		case bestOf(i), w == "alternatives":
+			return true
+		case w == "top" && digits(next(i)):
+			return true
+		case digits(w) && (next(i) == "top" || i+1 < len(words) && bestOf(i+1)):
+			return true
+		case (w == "tools" || w == "apps" || w == "software" || w == "platforms") && next(i) == "for":
+			return true
+		}
+	}
+	return false
+}
+
+// dated reports a year path segment, 1900 to 2099.
+func dated(seg string) bool {
+	return len(seg) == 4 && (seg[:2] == "19" || seg[:2] == "20") && digits(seg)
+}
+
+func digits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
 }
