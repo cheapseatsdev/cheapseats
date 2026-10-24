@@ -34,6 +34,7 @@ import (
 
 	"github.com/cheapseatsdev/cheapseats/internal/analysis"
 	"github.com/cheapseatsdev/cheapseats/internal/app"
+	"github.com/cheapseatsdev/cheapseats/internal/audit"
 	"github.com/cheapseatsdev/cheapseats/internal/env"
 	"github.com/cheapseatsdev/cheapseats/internal/grade"
 	"github.com/cheapseatsdev/cheapseats/internal/llm"
@@ -624,6 +625,12 @@ type RunData struct {
 	SecondOpinion *app.Agreement         `json:"second_opinion,omitempty"`
 	// The fact check: the facts answers naming the brand contradicted, when the run was checked.
 	Misstatements *app.FactReport `json:"misstatements,omitempty"`
+	// The cited pages whose reading changed since the set's previous citation check: started or
+	// stopped naming the brand or a competitor. Present only when both runs were checked.
+	CitedChanges []audit.PageFlip `json:"cited_page_changes,omitempty"`
+	// What each submitted fix's target page on a brand site said when last read, by "run/rank":
+	// evidence beside its done-when, never part of the outcome.
+	Landings map[string]*audit.Landing `json:"-"`
 	// The work submitted for this run's fixes, and for earlier fixes for the same pages, and when
 	// the fix list was built (FixAttempts.Status).
 	Attempts app.FixAttempts `json:"-"`
@@ -701,6 +708,12 @@ func (s *Server) runData(ctx context.Context, id string) (*RunData, error) {
 	d.Opinions = s.App.Opinions(ctx, id, res)
 	d.SecondOpinion = app.Agree(d.Opinions, res)
 	d.Misstatements = s.App.Misstatements(ctx, id, res)
+	d.CitedChanges = s.App.CitationFlips(ctx, r)
+	var submitted []shownFix
+	for _, f := range fx {
+		submitted = append(submitted, shownFix{id, f, d.Attempts.Status(id, f, d.FixesAt)})
+	}
+	d.Landings = s.landings(ctx, submitted)
 	for _, a := range r.Snapshot.Answerers {
 		d.Answerers = append(d.Answerers, a.ID)
 	}
@@ -765,6 +778,28 @@ func (s *Server) runData(ctx context.Context, id string) (*RunData, error) {
 	d.Uncited = head(d.Summary.Uncited, uncitedRows)
 	d.Shares, _ = s.App.Shares(ctx, id)
 	return d, nil
+}
+
+// shownFix is a fix on a page, with its run and where its work stands.
+type shownFix struct {
+	RunID  string
+	Fix    analysis.Fix
+	Status string
+}
+
+// landings is what each submitted fix's target page said when last read, by "run/rank"; an open
+// fix has nothing to have landed.
+func (s *Server) landings(ctx context.Context, fixes []shownFix) map[string]*audit.Landing {
+	out := map[string]*audit.Landing{}
+	for _, x := range fixes {
+		if x.Status == app.Open {
+			continue
+		}
+		if l := s.App.Landing(ctx, x.Fix); l != nil {
+			out[fmt.Sprintf("%s/%d", x.RunID, x.Fix.Rank)] = l
+		}
+	}
+	return out
 }
 
 // head is the first n of xs.
@@ -1104,7 +1139,12 @@ func (s *Server) quickWinsPage(w http.ResponseWriter, r *http.Request) {
 		row("Gap", "gap", f.Gap, gapV, gapV, func(v string) app.QuickWinFilter { x := f; x.Gap = v; return x }),
 		row("Set", "set", f.Set, setV, setL, func(v string) app.QuickWinFilter { x := f; x.Set = v; return x }),
 	}
-	s.render(w, "quickwins", map[string]any{"QuickWins": s.App.FilterQuickWins(all, f), "Rows": rows, "Total": len(all), "Back": r.URL.RequestURI()})
+	shown := s.App.FilterQuickWins(all, f)
+	var submitted []shownFix
+	for _, q := range shown {
+		submitted = append(submitted, shownFix{q.RunID, q.Fix, q.Status})
+	}
+	s.render(w, "quickwins", map[string]any{"QuickWins": shown, "Landings": s.landings(r.Context(), submitted), "Rows": rows, "Total": len(all), "Back": r.URL.RequestURI()})
 }
 
 // --- API ---

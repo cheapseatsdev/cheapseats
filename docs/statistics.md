@@ -117,7 +117,9 @@ these statuses:
 | no detectable change (±X pts) | both intervals cover 0. X is named's margin: a smaller real effect can still be hiding |
 
 The fix's page appearing in searches, fetches or citations after the attempt, when it didn't
-before, is shown as *newly surfaced*. That's supporting evidence and not by itself "moved". The
+before, is shown as *newly surfaced*. That's supporting evidence and not by itself "moved"; so is
+whether the target page now says the claim ([did the fix land](audit.md#did-the-fix-land)), which
+no status counts. The
 same goes for the target's host: `host h cited→not cited (left the cited set)` or `not
 cited→cited (entered the cited set)`, from whether any answer on each side cited a page on it
 (`target_host`, `host_cited_before`, `host_cited_after`). The same one-line summary goes to the

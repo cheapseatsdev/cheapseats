@@ -107,7 +107,7 @@ func (s *Server) mcpHandler() http.Handler {
 		}) (any, error) {
 			return s.waitForRun(ctx, a.Run, a.TimeoutSeconds)
 		})
-	addTool(srv, "get_run", "One run: rates per answerer and track (and without branded prompts), share of voice with positions, head to head, objections (wordings Jev judged the same count as one, with a wordings count; each with the top two pages the answers raising it cited, owned or earned, and how many were recall answers from memory), sources by kind and host, cited pages by type (listicle, comparison, review, docs, forum...), an outreach list of hosts cited without the brand (and, when [exa] has run the prospects pass, prospects: pages like the cited listicles that no answer cited, with whom each names), the brand's pages found but not cited, the fix list, net sentiment with top praise and objections (each with the same pages behind it), the run's themes, the facts answers got wrong about the brand (when brand.facts are checked), one line per prompt, and, when [exa] is configured, the neutral retrieval baseline per host (prompts a neutral index ranks it for against prompts the assistants found it for, read as content, query or both), and, when [typesafe] has read the run, second_opinion: how many grades Jev agreed with, disagreed with or was unsure about, the agreement rate, and up to 10 disagreements. Use get_result for a full answer.",
+	addTool(srv, "get_run", "One run: rates per answerer and track (and without branded prompts), share of voice with positions, head to head, objections (wordings Jev judged the same count as one, with a wordings count; each with the top two pages the answers raising it cited, owned or earned, and how many were recall answers from memory), sources by kind and host, cited pages by type (listicle, comparison, review, docs, forum...), an outreach list of hosts cited without the brand (and, when [exa] has run the prospects pass, prospects: pages like the cited listicles that no answer cited, with whom each names), cited_page_changes: cited pages that started or stopped naming the brand or a competitor since the set's previous citation check (when both runs were checked), the brand's pages found but not cited, the fix list, net sentiment with top praise and objections (each with the same pages behind it), the run's themes, the facts answers got wrong about the brand (when brand.facts are checked), one line per prompt, and, when [exa] is configured, the neutral retrieval baseline per host (prompts a neutral index ranks it for against prompts the assistants found it for, read as content, query or both), and, when [typesafe] has read the run, second_opinion: how many grades Jev agreed with, disagreed with or was unsure about, the agreement rate, and up to 10 disagreements. Use get_result for a full answer.",
 		func(ctx context.Context, a runArg) (any, error) {
 			d, err := s.runData(ctx, a.Run)
 			if err != nil {
@@ -722,14 +722,17 @@ func runDigest(d *RunData) any {
 		Hosts          []report.HostUse    `json:"top_hosts"`
 		Outreach       []report.Outreach   `json:"outreach"`
 		Prospects      []prospect          `json:"prospects,omitempty"`
-		Uncited        []string            `json:"found_not_cited"`
-		Pages          []report.Page       `json:"top_pages"`
-		Fixes          []analysis.Fix      `json:"fixes"` // without claude_prompt: get_quick_wins has it
-		Insights       string              `json:"insights"`
-		Opinion        opinion.Report      `json:"opinion"`
-		SecondOpinion  *app.Agreement      `json:"second_opinion,omitempty"`
-		Misstatements  *app.FactReport     `json:"misstatements,omitempty"` // the fact check, when the run was checked
-		Prompts        []prompt            `json:"prompts"`
+		// Cited pages that started or stopped naming the brand or a competitor since the set's
+		// previous citation check, when both runs were checked; /api/runs/{id} has them all.
+		CitedChanges  []audit.PageFlip `json:"cited_page_changes,omitempty"`
+		Uncited       []string         `json:"found_not_cited"`
+		Pages         []report.Page    `json:"top_pages"`
+		Fixes         []analysis.Fix   `json:"fixes"` // without claude_prompt: get_quick_wins has it
+		Insights      string           `json:"insights"`
+		Opinion       opinion.Report   `json:"opinion"`
+		SecondOpinion *app.Agreement   `json:"second_opinion,omitempty"`
+		Misstatements *app.FactReport  `json:"misstatements,omitempty"` // the fact check, when the run was checked
+		Prompts       []prompt         `json:"prompts"`
 		// The neutral retrieval baseline's host table, present only when [exa] searched the run's
 		// prompts: per host, the prompts a neutral index ranks it for against the prompts the
 		// assistants found it for, and the reading (content, query, both).
@@ -737,7 +740,7 @@ func runDigest(d *RunData) any {
 
 		Opportunities []report.Opportunity `json:"opportunities"`
 	}{&r, sum.Overall, sum.Slices, sum.Unbranded, sum.BrandedPrompts, sum.BrandRank(), voice, head(sum.HeadToHead, 10), objections,
-		sum.Classes, sum.PageTypes, head(sum.Hosts, 10), head(sum.Outreach, 10), prospects, uncited, pages, fixes, d.Insights, op, second, d.Misstatements, prompts, neutral, head(sum.Opportunities, 10)}
+		sum.Classes, sum.PageTypes, head(sum.Hosts, 10), head(sum.Outreach, 10), prospects, head(d.CitedChanges, 10), uncited, pages, fixes, d.Insights, op, second, d.Misstatements, prompts, neutral, head(sum.Opportunities, 10)}
 }
 
 // auditDigest is audit_sites' answer: each site in a line or two, and the findings without info

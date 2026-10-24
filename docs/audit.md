@@ -96,6 +96,37 @@ that serves a bot challenge, names nobody over plain HTTP. With `[exa]` configur
 (`(via Exa)` on the command line, a chip in the web UI). Without it, the row reads as it always
 did.
 
+### Cited pages that changed
+
+A run whose citation check can be compared with the check of the newest earlier run of the same
+prompt set that has one lists, under **Sources** on the run page, each page both checks read whose
+reading changed, with a chip per change: **now names you**, **stopped naming you**, **now names
+_competitor_**, **stopped naming _competitor_**. A page either check couldn't read, or only one
+check fetched, is never a change; a page that says the same is not listed. The flip is computed
+from the two stored checks when the run is shown: nothing more is fetched or stored.
+
+The same flags are on `GET /api/runs/<id>` as `cited_page_changes` (`url`, `now_names_brand`,
+`stopped_naming_brand`, `now_names`, `stopped_naming`, and `since_run`, the run compared with) and
+in the MCP `get_run` digest, the first ten. A run with no check, or none before it, has neither.
+
+### Did the fix land
+
+A fix marked with an attempt (proposed or accepted) whose target is on one of the brand's sites
+shows **On the page now** under its **Done when**, on the run page and on Quick wins: whether the
+target page names the brand and has each of the fix's claim terms, by the same whole-word match.
+The claim terms are the claim's quoted phrases and numbers (any word with a digit: `$49`, `99.9%`,
+`30-day`); a claim with neither uses its words of four letters or more, less common ones. **landed**
+means it names the brand and has every term; **not landed** lists the missing terms; a page that
+couldn't be read (robots.txt, an error, not text) says **could not read it** and why, and nothing
+else.
+
+The page is fetched with the citation check's fetcher, under the same rules: robots.txt, public
+addresses only, the 200 KB text cap and the same day cache. Showing the fix reads the newest cached
+reading (with its day) and, when there is none from today, fetches the page in the background, so
+the next view has it; a page is fetched at most once a day however often the fix is shown. It is
+never read through Exa. This is evidence beside the fix's done-when, not a grade: it counts toward
+no [outcome](statistics.md#fix-outcomes).
+
 ## AI crawlers
 
 ```bash
