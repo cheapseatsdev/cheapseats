@@ -217,6 +217,37 @@ func TestClassify(t *testing.T) {
 	}
 }
 
+// The lists are indexed by host, so a lookup walks the URL's host suffixes: an override still
+// covers its subdomains, a host/path entry still beats a host entry whatever class each is in,
+// entries are matched as cleaned (scheme, www., case) and a tie between classes goes to the one
+// that sorts first, as it did when every entry was tried.
+func TestClassifyIndex(t *testing.T) {
+	c := NewClassifier(config.Brand{Name: "Acme"}, nil, map[string][]string{
+		"review":    {"HTTPS://www.Example.com/", "shop.example.com/reviews"},
+		"ugc":       {"forum.example.com", "example.com/community"},
+		"editorial": {"shop.example.com"},
+		"reference": {"tie.example"},
+		"ugc ":      {"tie.example"}, // not a class: ignored, not a tie
+	})
+	for u, want := range map[string]string{
+		"https://example.com":                      Review,    // the cleaned entry
+		"https://www.example.com/pricing":          Review,    // its subdomain and path
+		"https://deep.forum.example.com/t/1":       UGC,       // the most specific host wins
+		"https://example.com/community/t/1":        UGC,       // a host/path entry beats the host
+		"https://example.com/communityx":           Review,    // but only on a path boundary
+		"https://shop.example.com/reviews/acme":    Review,    // host/path beats host of another class
+		"https://shop.example.com/about":           Editorial, //
+		"https://notexample.com":                   Editorial, // a suffix, not a subdomain
+		"https://tie.example/x":                    Reference, // same length: the class that sorts first
+		"https://en.wikipedia.org/wiki/Acme":       Reference, // the built-in lists still apply
+		"https://www.gartner.com/reviews/market/x": Review,    //
+	} {
+		if got, _ := c.Class(u); got != want {
+			t.Errorf("%s: %s, want %s", u, got, want)
+		}
+	}
+}
+
 func cite(urls ...string) *answer.Answer {
 	a := &answer.Answer{}
 	for _, u := range urls {
