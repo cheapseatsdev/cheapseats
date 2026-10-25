@@ -126,7 +126,7 @@ type Stats struct {
 	Unread    int                `json:"unread"`     // in no format Parse knows, or too long to be a request
 	Counted   int                `json:"counted"`    // new AI crawler fetches, referred visits and other visits
 	Duplicate int                `json:"duplicate"`  // counted by an earlier import
-	TooOld    int                `json:"too_old"`    // from more than keepDays ago: not counted
+	TooOld    int                `json:"too_old"`    // from more than KeepDays ago: not counted
 	Future    int                `json:"future"`     // dated after tomorrow (UTC): not counted
 	OverLimit int                `json:"over_limit"` // past maxEvents new ones in this import: not counted; import the log again for the rest
 	ByClass   map[bots.Class]int `json:"by_class"`
@@ -156,7 +156,7 @@ func Import(ctx context.Context, db *sql.DB, r io.Reader, host string) (Stats, e
 	// before then imported again can't count twice. The counts are kept as long, too. A line
 	// dated after tomorrow is a wrong clock or a forged line, and is left out as well.
 	now := time.Now().UTC()
-	horizon := now.AddDate(0, 0, -keepDays).Format("2006-01-02")
+	horizon := now.AddDate(0, 0, -KeepDays).Format("2006-01-02")
 	tomorrow := now.AddDate(0, 0, 1).Format("2006-01-02")
 	for _, table := range []string{"crawl_seen", "crawl_daily"} {
 		if _, err := tx.ExecContext(ctx, `DELETE FROM `+table+` WHERE day < ?`, horizon); err != nil {
@@ -220,8 +220,8 @@ func Import(ctx context.Context, db *sql.DB, r io.Reader, host string) (Stats, e
 	return st, tx.Commit()
 }
 
-// keepDays is how far back an import counts lines, and keeps their hashes and the daily counts.
-const keepDays = 400
+// KeepDays is how far back an import counts lines, and keeps their hashes and the daily counts.
+const KeepDays = 120
 
 // maxEvents is the most new requests one import counts. Duplicates don't count toward it, so
 // importing the same log again carries on where this one stopped.

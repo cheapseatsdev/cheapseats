@@ -169,8 +169,8 @@ publish can drop them with `DELETE FROM crawl_daily WHERE class = 'visit'`.
 checks the IP against the operator's published ranges.
 
 Stored data is daily counts per host, page, class and bot, plus request hashes for deduplication;
-raw log lines are not kept. Counts and hashes expire after 400 days. Older lines and dates after
-tomorrow (UTC) are ignored. All 4xx requests share the host's `/(errors)` row, which is never
+raw log lines are not kept. Counts and hashes expire after 120 days, enough for the 90-day view;
+older lines and dates after tomorrow (UTC) are ignored. All 4xx requests share the host's `/(errors)` row, which is never
 flagged; 5xx requests stay on their page. Each import accepts at most a million new requests;
 repeat it to process the remainder. Lines over 1 MiB are marked unreadable without stopping import.
 

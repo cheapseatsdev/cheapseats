@@ -173,8 +173,8 @@ func crawlCmd(ctx context.Context, args []string) error {
 			if err != nil {
 				return fmt.Errorf("%s: %w", name, err)
 			}
-			fmt.Printf("%s: %d lines, %d counted (%d assistant, %d search, %d training, %d engine, %d AI referrals, %d other visits), %d already imported, %d over 400 days old, %d unreadable\n",
-				name, st.Lines, st.Counted, st.ByClass[bots.Assistant], st.ByClass[bots.Search], st.ByClass[bots.Training], st.ByClass[bots.Engine], st.ByClass[bots.Referral], st.ByClass[bots.Visit], st.Duplicate, st.TooOld, st.Unread)
+			fmt.Printf("%s: %d lines, %d counted (%d assistant, %d search, %d training, %d engine, %d AI referrals, %d other visits), %d already imported, %d over %d days old, %d unreadable\n",
+				name, st.Lines, st.Counted, st.ByClass[bots.Assistant], st.ByClass[bots.Search], st.ByClass[bots.Training], st.ByClass[bots.Engine], st.ByClass[bots.Referral], st.ByClass[bots.Visit], st.Duplicate, st.TooOld, crawl.KeepDays, st.Unread)
 			if st.Future > 0 {
 				fmt.Printf("  %d lines are dated after tomorrow (UTC) and weren't counted\n", st.Future)
 			}

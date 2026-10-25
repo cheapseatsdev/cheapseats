@@ -163,7 +163,7 @@ func TestImportSkipsLongAndOldLines(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	old := today.AddDate(0, 0, -keepDays-5).Format("02/Jan/2006:15:04:05 -0700")
+	old := today.AddDate(0, 0, -KeepDays-5).Format("02/Jan/2006:15:04:05 -0700")
 	log := strings.Join([]string{
 		`203.0.113.7 - - [` + clf + `] "GET /a HTTP/1.1" 200 1 "-" "GPTBot/1.0"`,
 		`203.0.113.7 - - [` + clf + `] "GET /` + strings.Repeat("x", 3*maxLine) + ` HTTP/1.1" 200 1 "-" "GPTBot/1.0"`,
@@ -174,7 +174,7 @@ func TestImportSkipsLongAndOldLines(t *testing.T) {
 	if err != nil || st.Lines != 4 || st.Unread != 1 || st.TooOld != 1 || st.Counted != 2 {
 		t.Fatalf("%+v %v", st, err)
 	}
-	db.Exec(`INSERT INTO crawl_seen (hash, day) VALUES ('stale', ?)`, today.AddDate(0, 0, -keepDays-1).Format("2006-01-02"))
+	db.Exec(`INSERT INTO crawl_seen (hash, day) VALUES ('stale', ?)`, today.AddDate(0, 0, -KeepDays-1).Format("2006-01-02"))
 	if _, err := Import(context.Background(), db.DB, strings.NewReader(""), ""); err != nil {
 		t.Fatal(err)
 	}
@@ -204,7 +204,7 @@ func TestImportBoundsWhatAForgedLogCanAdd(t *testing.T) {
 		`203.0.113.9 - - [`+clf+`] "GET /real HTTP/1.1" 500 1 "-" "GPTBot/1.0"`,
 		`203.0.113.7 - - [`+future+`] "GET /future HTTP/1.1" 200 1 "-" "GPTBot/1.0"`)
 	db.Exec(`INSERT INTO crawl_daily (day, host, path, class, bot, hits, errors) VALUES (?, 'cheapseats.dev', '/stale', 'training', 'GPTBot', 1, 0)`,
-		today.AddDate(0, 0, -keepDays-1).Format("2006-01-02"))
+		today.AddDate(0, 0, -KeepDays-1).Format("2006-01-02"))
 	st, err := Import(ctx, db.DB, strings.NewReader(strings.Join(lines, "\n")), "cheapseats.dev")
 	if err != nil || st.Counted != 52 || st.Future != 1 {
 		t.Fatalf("%+v %v", st, err)
