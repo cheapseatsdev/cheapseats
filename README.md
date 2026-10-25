@@ -38,8 +38,8 @@ For API runs, review the example's model IDs and prices before spending. The dai
 calls against estimated reservations; **it is not a hard billing ceiling**. Actual charges can
 exceed reservations. See [cost and budget](https://cheapseats.dev/docs/cost-and-budget/).
 
-Without `CHEAPSEATS_TOKENS`, the server listens only on loopback and is open to every user and
-program on that machine, including starting paid runs. Set a token on shared machines; see [Access](#access).
+These defaults listen on loopback without authentication: every local user or program can
+start paid runs. Set `CHEAPSEATS_TOKENS` on shared machines; see [Access](#access).
 
 To measure your brand, generate a config repo:
 
@@ -166,7 +166,7 @@ is not a quote. `regrade` also defaults to a dry run.
 
 ## Access
 
-- **Local:** without tokens, every local user or process can read answers and start runs.
+- **Local:** the default setup lets every local user or process read answers and start runs.
   `CHEAPSEATS_TOKENS` supplies bearer tokens for API/MCP; the web UI asks once.
 - **Remote:** serve over HTTPS. A sign-in proxy can use `CHEAPSEATS_AUTH_HEADER`, narrowed by
   `CHEAPSEATS_ALLOWED_EMAILS`; these settings must come from the real environment, not `.env`.
@@ -174,8 +174,9 @@ is not a quote. `regrade` also defaults to a dry run.
   [Auth and proxy rules](https://cheapseats.dev/docs/reference/#access).
 - **Share one run:** use an [expiring, revocable report link](docs/sharing.md). Anyone holding it
   can view that report without signing in.
-- **Public copy:** `CHEAPSEATS_READONLY=1` disables writes, MCP and scheduling, but serves the copied
-  data without authentication. Treat its database and config as public. [Publication boundaries](https://cheapseats.dev/docs/read-only-copy/).
+- **Public copy:** `CHEAPSEATS_READONLY=1` disables writes, MCP and scheduling; it does not redact
+  copied data or change configured authentication. Without tokens or proxy authentication,
+  anyone can read it. Review the database and config before publishing. [Publication boundaries](https://cheapseats.dev/docs/read-only-copy/).
 - **CLI isolation:** the CLIs are agents with tools. Cheap Seats restricts tools and environment;
   a CLI update can change what is reachable. Use `CHEAPSEATS_CLI_USER` for a separate user on
   sensitive machines. `CHEAPSEATS_CLI_ENV` is an explicit environment allowlist, set outside `.env`;

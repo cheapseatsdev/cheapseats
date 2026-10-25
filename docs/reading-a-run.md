@@ -1,14 +1,13 @@
 # Reading a run
 
-Everything on a run page is worked out from the answers and grades already stored: no model is
-called to build it. The same numbers are in the JSON export (`/runs/<id>/export.json`, under
-`Summary`), `cheapseats report <run-id> -json`, and MCP `get_run` (cut to the top rows, without the run's snapshot or the fixes' Claude prompts, which `get_quick_wins` has).
-
-The statuses a run and its results pass through, and every move between them, are drawn in [states.md](states.md).
+Run reports use stored answers and grades without model calls. The same metrics are in the JSON
+export (`/runs/<id>/export.json`, under `Summary`), `cheapseats report -json <run-id>` and MCP
+`get_run`. MCP keeps top rows and omits the snapshot and fixes' Claude prompts; `get_quick_wins`
+includes those prompts. [Run and result states](states.md).
 
 ## Scores
 
-- **Named**: answers that name the brand, of all answers.
+- **Named**: graded answers that substantively name the brand, of all graded answers.
 - **Recommended**, **top pick**: of the answers to prompts that ask for a choice (info prompts
   only count toward named).
 - **Branded prompts** name the brand or one of its aliases, as a whole word ("Is Acme any
@@ -16,22 +15,20 @@ The statuses a run and its results pass through, and every move between them, ar
   without them (`unbranded` in JSON) and show the rates with them underneath. The prompt list marks
   each branded prompt. Rankings and trends still use the overall rates.
 
-Each grade carries **evidence**: the sentence of the answer that most supports its verdict. The
-grader is asked to copy it; Cheap Seats then looks for it in the answer, ignoring case, spacing,
-markdown emphasis and curly quotes, and keeps the answer's own span of text, or nothing if it isn't
-there, so a quote shown is always one the answer contains. The run page highlights it in the
-answer; it's `evidence` in the grade (JSON, CSV export, MCP `get_result`). Absent answers have
-none, nor do grades from before it.
+**Evidence** is the answer span supporting a grade, highlighted in the answer and exported as
+`evidence` (JSON, CSV, MCP `get_result`). Cheap Seats checks the grader's copied quote against the
+answer, ignoring case, spacing, Markdown emphasis and curly quotes, and keeps the answer's own
+text. An unmatched quote is dropped. Absent answers have no evidence; older grades may lack it.
 
 ## Share of voice
 
 | Column | What it is | JSON |
 | --- | --- | --- |
-| Named | answers naming the product, of all answers: each product's own rate, so the column adds up to more than 100% | `named_rate` (formerly `share`, still written) |
+| Named | answers naming the product, of all graded answers; rates can sum above 100% | `named_rate` (formerly `share`, still written) |
 | Share of voice | the product's mentions, of all products' mentions, each product counted at most once per answer: the column adds up to 100% | `share_of_voice` |
-| Avg place | its mean position among the products an answer names, over the answers that name it, in the order the grader listed the products (for the brand, its grade's position only when the list left it out) | `avg_position` |
+| Avg place | mean recorded position, in the grader's product-list order; the brand's grade position is a fallback only when the list omitted it | `avg_position` |
 | First, top 3 | answers naming it first, or in the first three, of the answers to prompts that ask for a choice (with 95% intervals in JSON) | `named_first`, `top3` |
-| Weighted | position-weighted visibility, as SE Ranking defines it: (N − place + 1) / N in an answer naming N products, 0 where it isn't named, averaged over every answer | `position_weighted` |
+| Weighted | (N − place + 1) / N where N = max(products named, recorded place); 0 without a position, averaged over all graded answers | `position_weighted` |
 
 **Head to head** sets the brand against each product on the board: answers naming both, and of
 those which led (the top pick if it's one of the two, otherwise whichever was named first),
@@ -41,19 +38,15 @@ answers naming only one of them, and answers naming neither (`head_to_head`).
 punctuation collapsed) so "Pricing unclear." and "pricing, unclear" count once, with an example
 prompt for each (`objections`).
 
-**Pages behind it**, on each objection row and on each of the top praise and objections in "What
-the answers say", is where the answers raising it got it: the pages those answers cited, most
-answers first, at most three, each with its host, its page type (see below), whether it is on
-one of the brand's own sites (owned) or someone else's (earned), and how many of those answers
-cited it; and how many of the answers raising it were recall answers, which cite nothing and so
-had it from memory ("2 from memory"). An objection taught by the brand's own pricing page is that
-page to fix; one taught by a third-party comparison is that page to correct or displace; one
-mostly from memory is baked into the model, and only pages it reads over time will move it. It
-is a join over the citations already stored, so it costs nothing and changes no grade.
-`GET /api/runs/{id}` carries it as `sources` (url, host, page_type, owned, answers) and
-`recall_answers` on each `objections` row and on each `opinion.sentiment` praise and objection;
-MCP `get_run` keeps the top two pages per row. The fix list's analyst gets the top page behind
-each of the eight most frequent objections, so a fix can target the page that taught one.
+**Pages behind it** associates an objection or praise with the pages cited by answers raising
+it: up to three, ordered by answer count, with host, page type and owned/earned status. It also
+counts recall answers ("2 from memory"). These are leads to inspect, not proof a page caused the
+claim or that a later edit will change it. Recall means no tools were used for that answer.
+
+`GET /api/runs/{id}` carries `sources` (`url`, `host`, `page_type`, `owned`, `answers`) and
+`recall_answers` on each `objections` row and each `opinion.sentiment` praise/objection. MCP
+`get_run` keeps two pages per row. The analyst gets the leading page for each of the eight most
+frequent objections. This uses stored citations and changes no grade.
 
 ## Sources
 
@@ -75,14 +68,28 @@ For each host and each page:
 
 - **Retrieved**: answers whose searches returned it, of the answers that could reach a page: the search track, plus any answer that searched, fetched or cited (`retrieved_rate`). Recall answers have no tools, so they are left out rather than diluting every rate.
 - **Cited**: answers that linked it, of the same (`cited_rate`).
-- **Share**: its citations, of all the run's citations: adds up to 100% (`citation_share`).
+- **Share**: page citations divided by all page citations, or host citations divided by all host
+  citations; each URL or host counts once per answer. Each board sums to 100% (`citation_share`).
 - **Cited when retrieved**: of the answers that retrieved it, those that also linked it
   (`cited_when_surfaced`).
 
-A host that isn't the brand's also gets a **bucket**, from the products named in the answers that
-cite it: **missing** (they name competitors, never the brand), **shared** (both), **strong** (the
-brand more often than any competitor) or **unique** (only the brand). With competitors configured,
-only they count as competitors; with none, every other product does.
+Search returns and citations are separate observations:
+
+| Search returned the URL | Answer cited it | What is recorded |
+| --- | --- | --- |
+| Yes | Yes | Returned and linked |
+| Yes | No | Returned, without a citation |
+| No | Yes | Linked without a recorded search return |
+| No | No | Neither observed |
+
+Neither observation proves the assistant read the full page; a citation is not an endorsement.
+Source-class and page-type answer counts also overlap: one answer can cite several kinds.
+Do not add their answer counts as a funnel.
+
+A non-brand host gets a **bucket** from its citing answers: **missing** (competitors, never the
+brand), **unique** (brand, no competitors), **strong** (brand more often than every competitor),
+or **shared** (brand and a competitor at least as often). Neither named means no bucket. Only
+configured competitors count when any are configured; otherwise every other product does.
 
 **Cited without the brand** (`outreach`) lists the missing hosts that aren't a competitor's own,
 ranked by distinct competitors named × answers citing it: where to get the brand mentioned.
@@ -106,8 +113,9 @@ URL and the title the search result or citation gave it. The first rule that mat
 | `repo` | a repository's front page: github.com/owner/repo (and GitLab, Codeberg, Bitbucket) |
 | `docs` | docs.* hosts, a `/docs/`, `/documentation/` or `/reference/` path, Read the Docs, pkg.go.dev, docs.rs, MDN, Microsoft Learn |
 | `comparison` | the path or title says vs, versus, compare or comparison, or "alternative to" |
-| `review` | G2, Capterra, TrustRadius, GetApp, Software Advice, Trustpilot, PeerSpot, Gartner reviews; after the listicle rule, any page whose path or title says review |
+| `review` | Known review hosts: G2, Capterra, TrustRadius, GetApp, Software Advice, Trustpilot, PeerSpot, Gartner reviews, Product Hunt product pages |
 | `listicle` | best (not "best practices"), top N, N best, alternatives, tools/apps/software/platforms for |
+| `review` | Other pages whose path or title says review or reviews |
 | `article` | a `/blog/`, `/news/`, `/articles/`, `/posts/` path, a dated path (`/2026/05/`), blog.* and news.* hosts, Medium, dev.to, Substack, Hashnode |
 | `product` | the home page, `/pricing`, `/plans`, `/features`, `/product`, `/solutions`, `/integrations` |
 | `other` | everything else (Wikipedia, a repository's files) |
@@ -118,17 +126,16 @@ carries `page_types` and each top page's `page_type`.
 
 ### Opportunities
 
-The two together, scored (`opportunities`): each kind of site, and each page type within it, with
-its share of the run's citations (`citation_share`), the answers citing any page of it
-(`answers`), and of those, the share naming the brand (`brand_presence`) and the share naming a
-competitor (`competitor_presence`, with `competitors_named`). **Gap** is citation share × (1 −
-brand presence): a kind of page the answers lean on and that rarely names the brand scores highest.
-A row is owned (`own`: the brand's pages, so the fix is writing that kind of page) or earned
-(everyone else's, so the fix is getting onto them). A cell with fewer than 3 citations isn't
-listed on its own; its citations still count toward its kind of site. Each row carries its most
-cited hosts and the prompts its citing answers were for. The analyst gets the top rows beside the
-answers, so an outreach or new-page fix can name the kind of page and its share rather than one
-host. It's a view over the stored citations and grades: no model call, and no change to any trend.
+`opportunities` scores each source class and each page type within it. Rows carry citation share,
+distinct citing answers, brand and competitor presence among those answers, competitors named,
+leading hosts and prompt IDs. **Gap = citation share × (1 − brand presence)**: a frequently cited
+kind whose citing answers rarely name the brand ranks higher. This measures answer content, not
+whether the cited pages themselves name the brand; use a [citation check](audit.md#citation-check)
+for that.
+
+Rows are owned (`own`) or earned (other classes). Cells need at least three citations to appear;
+smaller cells still contribute to the class total. Class rows include their page-type rows, so
+do not add both. The analyst receives leading opportunities. No model call or trend change occurs.
 
 ## Configuring it
 

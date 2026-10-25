@@ -10,16 +10,15 @@ cheapseats init yoursite.com -name "Acme" -competitors "Asana,Trello" -suggest
 | --- | --- |
 | `-name X` | the brand's name, instead of what the site calls itself |
 | `-competitors a,b` | competitors, comma-separated: `[[competitors]]` entries, alternatives prompts and head-to-heads |
-| `-suggest [-n 10]` | add suggested prompts to the starter sets: one analyst call on the claude CLI, so nothing on a subscription |
+| `-suggest [-n 10]` | add suggested prompts: one analyst call through the `claude` CLI, using your subscription |
 | `-dry-run` | print what it found and every file it would write; write nothing |
 
-It refuses to overwrite a file that exists, and writes nothing if one does.
+If any target file exists, it writes nothing.
 
 ## What it reads
 
-Three requests, through the same guarded fetcher as the [site audit](audit.md) (public addresses
-only): the home page, `/llms.txt` and `/sitemap.xml` (an index is followed to a few of its
-sitemaps). No model is called unless you pass `-suggest`.
+The home page, `/llms.txt` and `/sitemap.xml`, following a few child sitemaps for an index. Fetches
+use the [site audit](audit.md)'s public-address guard. No model is called without `-suggest`.
 
 - **Name**, the first of: `og:site_name`, `application-name`, the `name` of a JSON-LD
   Organization or SoftwareApplication, the part of `<title>` that spells the domain (else the
@@ -52,9 +51,19 @@ sitemaps). No model is called unless you pass `-suggest`.
                                  that names the brand
 ```
 
-The generated files pass `cheapseats check` before they're written. Review every TODO
-(`grep -rn TODO`): `audience` and `facts` are left for you, and `about` and the category are
-guesses. Settle `about` and `audience` before the first run, since changing them restarts every
-trend. Then `cheapseats check`, `cheapseats audit`, `cheapseats run discovery`, and commit the directory as
-its own git repo. The commit init prints stages the files it wrote by name, not `git add .`, so a
-`.env` made in the meantime stays out even before the `.gitignore` is committed.
+Generated files pass `cheapseats check` before writing. Review every TODO (`grep -rn TODO`): supply
+`audience` and public `facts`, and check the guessed `about` and category. Settle `about` and
+`audience` before the first run; changing them restarts every trend.
+
+Point subsequent commands at the generated config:
+
+```bash
+export CHEAPSEATS_CONFIG=./your-config/cheapseats.toml  # use the directory init wrote
+cheapseats check
+cheapseats audit
+cheapseats run discovery
+```
+
+`run` asks real questions; review the prompts first. Commit the directory as its own repo using
+the command `init` prints. It stages only generated files, keeping a new `.env` out even before
+`.gitignore` is committed.

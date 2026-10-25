@@ -1,9 +1,8 @@
 # Grading, and the golden set
 
-Every answer Cheap Seats collects is read once by the grader (`internal/grade`), a Claude model
-under the prompt `grade.System`, and what it says is the product: the rates, ranks, trends and
-fix lists are all computed from grades. This page is what the grader decides, what counts as
-changing it, and how a change is measured before it ships.
+The grader (`internal/grade`) reads each collected answer with a Claude model under
+`grade.System`. Its grades drive rates, ranks, trends and fix lists. Before shipping a change
+to grading, measure it against the [golden set](#the-golden-set).
 
 ## What the grader decides
 
@@ -27,13 +26,10 @@ For one answer, for the brand on the `Brand:` line and only that brand:
 - **evidence**: the one sentence of the answer that most supports the verdict, checked against
   the answer (`grade.Quote`) so it's only ever the answer's own words.
 
-**An echoed name is not visibility.** Questions that name the brand ("Cheap Seats or X for a
-small team?") get answers that repeat the name only to disclaim it: "I couldn't find a product
-called Cheap Seats", "I can't verify its pricing", then advice on how to evaluate it, or
-hypotheticals about what it might offer. The brand is in the question, not in the assistant's
-knowledge, so those answers are `absent`. They become `mentioned` only when the answer states
-something about the brand itself, a feature, a price, a quality or a fit, even hedged. Before
-this rule the grader split such answers between `absent` and `mentioned` from run to run, and
+**An echoed name is not visibility.** "I couldn't find a product called Cheap Seats", followed
+by evaluation advice or hypothetical features, is `absent`. It becomes `mentioned` only when
+the answer states something about the brand itself—a feature, price, quality or fit, even
+hedged. Before this rule, the grader split such disclaimers between `absent` and `mentioned`;
 the head-to-heads set read 84% visible for a brand no assistant knew.
 
 The grader reads the brand (name, aliases, about), the set's competitors, the question and the
@@ -43,23 +39,25 @@ the model said, and an `other_product` grade is `absent`.
 
 ## A method change
 
-A run's **method** (`run.Method`) is how its answers were asked and graded: the answer prompt,
-the search policy, the grader prompt and model, and the brand as the grader knows it. Runs
-trend together only within one method. The grading half of it is `run.GradeInputs`: the grader
-prompt and model, the brand's name, aliases and about, and the competitors' names and aliases.
-Changing any of it is a **method change**: earlier runs become non-comparable, and open fix
-attempts can't be measured until their runs are [re-graded](regrading.md). So a method change
+A run's **method** (`run.Method`) covers the answer prompt, search policy, grader prompt/model
+and the brand's name, aliases and `about`. Runs trend together only within one method.
+`run.GradeInputs` fingerprints the grading inputs, including competitors' names and aliases.
+Competitor changes affect that fingerprint without themselves changing `Method`.
 
-- passes the golden set below,
-- says in its PR body that it is a method change and what the release notes should say,
-- is followed by `cheapseats regrade` of the sets that have open attempts.
+A method change breaks comparability with earlier runs. [Re-grading](regrading.md) can bring
+stored answers onto today's grading method, retaining replaced grades, but cannot repair a
+different answer prompt or search policy. Before shipping a method change:
+
+- Pass the golden set below.
+- State the method change and proposed release notes in the PR body.
+- Re-grade sets with open attempts when answers were asked alike. This is a manual step, not
+  an automatic migration. Attempts asked differently remain not comparable.
 
 ## The golden set
 
-The golden set is labeled answers the grader is measured against: real stored answers, each with
-what grading it *should* say. It's the only check that grading quality has; the rest of the
-tests use a fake model. It lives in `internal/grade/testdata/golden/*.jsonl`, one file per
-prompt set, one JSON record per line:
+The golden set measures grading quality against labeled, stored answers; ordinary tests use
+fake models. It lives in `internal/grade/testdata/golden/*.jsonl`, one file per prompt set,
+one JSON record per line:
 
 | field | what |
 |---|---|
@@ -74,10 +72,10 @@ prompt set, one JSON record per line:
 | `note` | why the label is what it is, when it needs saying |
 | `source` | run, result, answerer, track, grader and method the answer came from |
 
-The committed records are about the sample brand (Cheap Seats itself, from
-`examples/cheapseats-config`); `TestGoldenFixturesAreWellFormedAndBrandNeutral` refuses any
-other brand, because a deployment's answers are its own. A deployment can keep its own golden
-set in its config repo and point the test at it with `CHEAPSEATS_CONFIG`.
+Committed records use Cheap Seats itself, from `examples/cheapseats-config`;
+`TestGoldenFixturesAreWellFormedAndBrandNeutral` refuses other brands. Keep deployment exports
+private. The test reads this fixture directory; `CHEAPSEATS_CONFIG` selects its grader and
+pricing, not another record directory. Each record supplies its own brand and competitors.
 
 ### Exporting
 
@@ -86,31 +84,30 @@ cheapseats backup data/snapshots/today.db                    # a consistent copy
 cheapseats golden export data/snapshots/today.db -n 80       # [-set head-to-heads] [-o internal/grade/testdata/golden]
 ```
 
-The export samples graded answers from the snapshot, drawing one at a time from each set in
-turn and within a set from each verdict in turn (`top pick`, `recommended`, `mentioned`, `other
-product`, `absent`), so the rare verdicts are there before the common one is there twice. The
-sample is deterministic for a given snapshot. Each record's `expected` is the **current grader's
-verdict**, with `labeled_by: "claude"`: a starting point for a person to check, not a truth.
-Records already in the directory are kept exactly as they are and their answers aren't written
-again, so exporting again adds to the set without touching labels. The brand and competitors are
-today's, from the config, as a re-grade would use them. An answer naming a name the brand has
-since retired (one some run in the snapshot knew it by that today's config doesn't) is left out.
+Export rotates through sets and verdicts (`top pick`, `recommended`, `mentioned`, `other
+product`, `absent`) so rare verdicts appear before common ones repeat. Sampling is deterministic
+for a snapshot. Each `expected` is the **stored grader's verdict**, with `labeled_by: "claude"`:
+a starting point for human review, not truth. Existing records and labels are never overwritten.
+
+Brand and competitors come from today's config, as for a re-grade. Records whose prompt or
+answer names a retired brand name absent from today's config are excluded.
 
 ### Labeling
 
-Open the set's `.jsonl` file, find the record (its `prompt`, `answer` and `evidence` are all
-there), and edit `expected` to what the answer actually says: `"verdict"` to `recommended`,
-`mentioned` or `absent`; `"top_pick"` true only when the brand is the one pick (then the verdict
-is `recommended`); `"other_product"` true only when the name meant something else (then
-`absent`); `"tone"` one of `positive`, `neutral`, `mixed`, `negative`, or leave it out for an
-absent brand. Set `"labeled_by": "human"` whether or not you changed anything, and say why in
-`note` when the call was close. Leave `id` and `answer` alone: the id is the answer's hash and
-`go test` checks it. Twenty records is a useful afternoon: start with every `top pick`,
-`recommended` and `other product` record, then a sample of the rest.
+Read each record's prompt, answer and evidence, then edit `expected`:
+
+- `verdict`: `recommended`, `mentioned` or `absent` under the definitions above.
+- `top_pick`: true only for the single strongest recommendation; verdict must be `recommended`.
+- `other_product`: true only for a namesake; verdict must be `absent`.
+- `tone`: `positive`, `neutral`, `mixed` or `negative`; omit for an absent brand.
+
+Set `labeled_by` to `human` even when no label changed; explain close calls in `note`. Leave
+`id` and `answer` untouched: tests verify the answer's hash. Start with `top pick`,
+`recommended` and `other product`, then sample the remaining records.
 
 ```sh
 # the records still waiting for a person
-grep -h '"labeled_by":"claude"' internal/grade/testdata/golden/*.jsonl | python3 -c '
+rg --no-filename '"labeled_by":"claude"' internal/grade/testdata/golden/*.jsonl | python3 -c '
 import sys, json
 for l in sys.stdin:
     r = json.loads(l); print(r["id"], r["set"], r["expected"]["verdict"], "|", r["prompt"][:70])'
@@ -119,37 +116,34 @@ for l in sys.stdin:
 ### Running
 
 ```sh
-CHEAPSEATS_GOLDEN=1 go test ./internal/grade/... -run Golden -v [-golden.threshold 0.9] [-golden.set head-to-heads]
+CHEAPSEATS_GOLDEN=1 go test ./internal/grade/... -run Golden -v
 ```
 
-`TestGolden` is skipped unless `CHEAPSEATS_GOLDEN=1`, because it grades every record with the
-real grader over the network: the grader in `CHEAPSEATS_CONFIG` (else the sample config's), with
-`ANTHROPIC_API_KEY` or `CHEAPSEATS_ANTHROPIC_BASE_URL` from the environment the way the app
-finds them (the test doesn't read `.env`). On `provider = "claude-code"` it runs on the
-subscription. With `CHEAPSEATS_GOLDEN=1` and no key it fails rather than passes. It prints, before
-grading, the grader, a digest of its prompt and today's `run.Method`, so a result is attributable
-to a grader version, and the estimated cost from `[pricing]` (80 records on the sample config's
-grader is a few cents). Then, for each scored field, the share of records the grader agreed with
-the labels on, a verdict confusion table (rows are labels, columns the grader), and each record
-that disagreed with both sides' evidence and the grader's reasoning.
+`TestGolden` is skipped unless `CHEAPSEATS_GOLDEN=1`: it calls the real grader from
+`CHEAPSEATS_CONFIG` (or the sample config). It uses `ANTHROPIC_API_KEY` or
+`CHEAPSEATS_ANTHROPIC_BASE_URL` from the environment, never `.env`; `claude-code` uses the
+subscription. Missing credentials with the test enabled fail it.
 
-It **fails** when `verdict`, `top_pick` or `other_product` agrees on fewer than
-`-golden.threshold` of the records (default 0.925). `tone` is reported, not gated: it's the most
-subjective field. The threshold is below 1.0 because the grader is a language model and doesn't
-grade the same answer the same way every time. The default comes from the first pilots on
-2026-10-23: under the old rubric the grader agreed with its own earlier verdicts on 90.0% of 80
-records, every miss an echoed-name answer; with the echoed-name rule, two runs: 98.8% and 96.2% on
-verdict (the misses all echoed-name answers the grader still read as mentioned), 100% on top
-pick, 98.8% and 97.5% on other product, 96.2% on tone. 0.925 sits two records under the worse
-run. Re-check it the same way
-after a method change (run the test twice on the same labels: the agreement between the two runs
-is the noise floor, and the threshold belongs a little under it). Each record is graded
-once per run; grading them several times would cost more and only sharpen a number the threshold
-already allows for.
+The report identifies the grader, prompt digest, `run.Method` and estimated `[pricing]` cost
+(a few cents for 80 sample-config answers). It shows field agreement, a verdict confusion
+table (label rows, grader columns), and disagreements with evidence and grader reasoning.
+Optional flags: `-golden.threshold 0.9` changes the gate; `-golden.set head-to-heads` selects a set.
 
-In GitHub, the manual workflow **golden** (`.github/workflows/golden.yml`, *Run workflow*) runs
-the same with the repository secret `ANTHROPIC_API_KEY`; without the secret it fails with a
-message, never passes. It is deliberately not part of `ci.yml`, which has no network. The job
-runs in the `golden` environment, so reviewers required on that environment approve each run
-before it can spend the key, and it refuses a threshold that is not a number from 0 to 1 or a set
-that is not a prompt set id.
+The test **fails** if `verdict`, `top_pick` or `other_product` agreement is below
+`-golden.threshold` (default **0.925**). Tone is reported, not gated. Grading varies between
+calls, so perfect agreement is not required.
+
+The default comes from pilots on **23 October 2026**, using 80 records: the old rubric agreed
+with earlier verdicts on 90.0%, with every miss an echoed-name answer. Two runs of the new rule
+scored 98.8% and 96.2% on verdict, 100% on top pick, 98.8% and 97.5% on other product, and 96.2%
+on tone. Remaining verdict misses were echoed names still read as mentioned; the 0.925 gate
+requires at least 74 agreements out of 80. After a grading change, repeat the test twice on the
+same labels to inspect run-to-run disagreement before revisiting the threshold. Failed calls
+can be retried; each successful grade is scored once. These pilots compare grader outputs with
+earlier labels, not independent human truth.
+
+The manual GitHub workflow **golden** (`.github/workflows/golden.yml`) uses repository secret
+`ANTHROPIC_API_KEY` and fails without it. Its threshold input currently defaults to **0.90**,
+overriding the test's 0.925 default. It is separate from network-free `ci.yml` and runs in the
+`golden` environment: any reviewers required there approve before it spends. Inputs reject
+thresholds outside 0–1 and set names that do not match prompt-set ID syntax.

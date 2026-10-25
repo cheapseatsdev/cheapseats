@@ -15,17 +15,17 @@ For user-facing prose and explanatory visuals, follow the [Cheap Seats editor sk
 
 ## Before you push
 
-The `.claude/hooks/pre-push.sh` hook runs these when a `git push` is about to happen; run them
-yourself if you push some other way:
+The Claude Bash hook runs pre-push checks. From other tools, invoke the same hook from the
+repository root:
 
 ```sh
-gofmt -l .            # must print nothing
-go vet ./...
-go test -race ./...
-bash -n deploy/*.sh .claude/hooks/*.sh
+bash .claude/hooks/pre-push.sh <<'JSON'
+{"tool_input":{"command":"git push"}}
+JSON
 ```
 
-`internal/server` takes about eight seconds; the rest is under a second each.
+It checks formatting (excluding `.claude/worktrees/`), `go vet ./...`, `go test -race ./...`,
+and `bash -n` for each deployment and hook script.
 
 The hook and the weekly-cut fleet trust the checked-out branch: they run its tests, scripts and
 agent files with your credentials. Run them only on branches you or this repo's agents wrote,
@@ -54,23 +54,27 @@ Never write a guess that becomes permanent: a backfill writes only confident mat
 
 ## Grading is the product
 
-Any change to the grader prompt (`grade.System`), the answer prompt, the search policy or
-anything else `run.GradeInputs` covers is a **method change**. A method change makes earlier
-runs non-comparable: trends break and open fix attempts cannot be measured until their runs are
-regraded. So a method change:
+`run.Method` covers the answer prompt, search policy, grader prompt/model and brand name,
+aliases and `about`. Changing it breaks comparisons with earlier runs. `run.GradeInputs` also
+includes competitors; those edits can require re-grading without changing `Method`.
 
-- passes the grader golden set (`go test ./internal/grade/... -run Golden`, see docs/grading.md),
+A method change:
+
+- passes the real grader golden set (`CHEAPSEATS_GOLDEN=1 go test ./internal/grade/... -run Golden`;
+  this uses configured provider access, see [grading](docs/grading.md#running)),
 - says in its PR body that it is a method change and what the release notes should say,
-- is followed by a regrade of the sets that have open attempts.
+- is followed by re-grading eligible stored answers for sets with open attempts. A changed
+  answer prompt or search policy cannot be repaired by re-grading; it needs a new baseline.
 
 ## Tests
 
-- Tests talk to fake providers (`fakeAnthropic`, `fakeJev`, `fakeExa` in their packages) over
-  `httptest`; nothing in `go test` reaches the network.
+- Ordinary tests use fake providers (`fakeAnthropic`, `fakeJev`, `fakeExa` in their packages)
+  over `httptest`, without contacting external services.
 - No `time.Sleep` in tests; wait on a channel or poll a condition with a deadline.
 - A test earns its place by failing when the code is wrong. If you cannot say what bug a test
   would catch, delete it or strengthen it. Table-driven only when it makes the file shorter.
-- The three `t.Skip` tests are external integrations and stay skipped without keys.
+- The real-provider golden evaluation is opt-in with `CHEAPSEATS_GOLDEN=1`; ordinary checks
+  leave it off. Symlink tests may skip where symlinks are unavailable.
 
 ## Shell scripts
 

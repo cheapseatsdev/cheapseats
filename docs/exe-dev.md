@@ -1,8 +1,8 @@
 # Cheap Seats on exe.dev
 
-An [exe.dev](https://exe.dev) VM runs Cheap Seats as a systemd service behind exe.dev's HTTPS proxy,
-which signs people in by email. Because it's a whole VM, its answerers can be the `claude` and
-`codex` CLIs on subscriptions (both come installed) as well as the APIs. exe.dev's own docs are at
+Run Cheap Seats as a systemd service behind [exe.dev](https://exe.dev)'s email sign-in and HTTPS
+proxy. The VM supports API answerers and the installed `claude` and `codex` CLIs on subscriptions.
+exe.dev's own docs are at
 `ssh exe.dev doc` (`doc proxy`, `doc sharing`, `doc login-with-exe`, `doc send-email`).
 
 ## Set up once
@@ -14,11 +14,10 @@ which signs people in by email. Because it's a whole VM, its answerers can be th
    ssh exe.dev "new --name=<vm> --comment='Cheap Seats'"
    ```
 
-2. **Write its secrets** to `~/cheapseats/cheapseats.env` on the VM, readable only by its user. The proxy
-   passes a signed-in person's email as `X-ExeDev-Email`, and nothing reaches the VM except
-   through the proxy (and on the VM, the CLI user is kept off the port: step 3), so Cheap Seats
-   trusts that header; `CHEAPSEATS_ALLOWED_EMAILS` narrows it further
-   (emails, or `@domain`). `CHEAPSEATS_HOSTS` names the host the proxy serves it as, which MCP needs (see step 7).
+2. **Write its secrets** to `~/cheapseats/cheapseats.env`, readable only by the VM user. Cheap Seats
+   trusts the proxy's `X-ExeDev-Email` only because outside requests arrive through that proxy
+   and the CLI user is blocked from the port (step 3). `CHEAPSEATS_ALLOWED_EMAILS` restricts access
+   to emails or `@domain`; `CHEAPSEATS_HOSTS` names the proxy's host for MCP (step 7).
 
    ```bash
    { printf 'ANTHROPIC_API_KEY=%s\n' "<key>"
@@ -33,9 +32,8 @@ which signs people in by email. Because it's a whole VM, its answerers can be th
 
    To keep the Anthropic key off the VM, add it as an exe.dev integration instead, and replace the
    `ANTHROPIC_API_KEY` line with `CHEAPSEATS_ANTHROPIC_BASE_URL=https://anthropic.int.exe.xyz`.
-   Cheap Seats' own API calls (grading, the fix list, `anthropic` answerers) then go through that
-   proxy, which adds the key. The `claude` CLI doesn't read this variable, so `claude-code`
-   answerers stay on your subscription.
+   The proxy adds the key to Cheap Seats' API calls (grading, the fix list, `anthropic` answerers).
+   The `claude` CLI ignores this variable; `claude-code` answerers stay on your subscription.
 
    The optional providers work the same way: with `[typesafe]` or `[exa]` in the config, add each
    as an integration and set `CHEAPSEATS_TYPESAFE_BASE_URL=https://typesafe.int.exe.xyz` and
@@ -43,13 +41,11 @@ which signs people in by email. Because it's a whole VM, its answerers can be th
    `EXA_API_KEY`. See [Optional providers](optional-providers.md).
 
 3. **Deploy** (below), with `SEED_DB=path/to/cheapseats.db` the first time to start from an existing
-   database. The deploy also makes a `cheapseats-cli` user for the `claude` and `codex` CLIs to run
-   as: each is an agent with tools the model drives, and this keeps the VM's env file, database
-   and logins out of a prompt-injected answer's reach whatever a CLI update adds. Since anything
-   on the VM that connects to Cheap Seats' port could send its own `X-ExeDev-Email`, an nftables
-   rule (`/etc/cheapseats/cli-firewall.nft`, loaded by `cheapseats-cli-firewall.service`, which
-   Cheap Seats won't start without) refuses that user's connections to the port, and the deploy
-   fails if the CLI user can still reach it.
+   database. The deploy creates a separate `cheapseats-cli` user for the model-driven CLIs,
+   keeping the service user's env file, database and logins out of their reach. Local connections
+   could forge `X-ExeDev-Email`, so nftables blocks that user's connections to Cheap Seats' port.
+   The rule lives at `/etc/cheapseats/cli-firewall.nft`; Cheap Seats requires its
+   `cheapseats-cli-firewall.service`, and deployment fails if the CLI user can reach the port.
 
 4. **Log the CLIs in** as that user, if your answerers use them. The subscription is whoever logs
    in. (Logins made before the CLI user existed move over on the first deploy.)
@@ -75,9 +71,8 @@ which signs people in by email. Because it's a whole VM, its answerers can be th
    ssh exe.dev share add <vm> someone@example.com
    ```
 
-7. Connect Claude Code (or any MCP client). The proxy only lets in people who signed in by email,
-   so a client gets through with an exe.dev token scoped to the VM, sent as
-   `X-Exedev-Authorization`; the proxy then passes your email, and Cheap Seats signs you in as usual.
+7. **Connect an MCP client.** Use a VM-scoped exe.dev token in `X-Exedev-Authorization`; the proxy
+   passes your email to Cheap Seats. For Claude Code:
 
    ```bash
    tok=$(ssh exe.dev ssh-key generate-api-key --vm=<vm> --label=claude-code --exp=90d --json |
@@ -99,10 +94,10 @@ From a checkout of this repo, with your config repo committed:
 deploy/exe-dev.sh <vm> ../your-config
 ```
 
-It builds a Linux binary, ships the config as committed (recording its commit on every run, and
-refusing a config with committed symlinks, which would point outside it on the VM), runs
-`cheapseats check` on the VM, swaps both in, restarts, and rolls back to the previous binary and config
-if Cheap Seats doesn't come up healthy. Runs in progress resume after the restart.
+The script builds a Linux binary, ships the committed config, runs `cheapseats check` on the VM
+and restarts. It records the config commit on every run and refuses committed symlinks, which
+could reach outside the config. If startup fails, it restores the previous binary and config.
+Runs in progress resume after restart.
 
 ## Running it
 

@@ -1,10 +1,9 @@
 # Site audit, citation check and AI crawlers
 
-Three checks beside the runs. None of them calls a model: they're plain HTTP and your own logs, so
-they cost nothing. The one exception is optional: with `[exa]` configured and `contents_fallback`
-on, a page that is empty without JavaScript, or served as a bot challenge, is read through Exa's
-contents API instead, a tenth of a cent a page, at most once a day, and marked `via: exa`
-([optional providers](optional-providers.md)).
+Audit your sites, check cited pages or import crawler logs without model calls. Plain HTTP and
+log processing have no provider charge. Optional Exa contents fallback can charge for shells and
+bot challenges; successful page text is cached for 24 hours and marked `via: exa`. Failed or empty
+reads can be retried. [Setup, pricing and limits](optional-providers.md#reading-a-page-through-exa-exa).
 
 ## Site audit
 
@@ -14,9 +13,8 @@ cheapseats audit example.com     # just one, which needn't be yours (not kept)
 cheapseats audit -pages 20 -info # more sitemap pages; list info findings too
 ```
 
-Also **Site audit** in the web UI (`/audit`, "Audit now"), `POST /api/audit` and `GET /api/audit`
-(the latest), and the MCP tool `audit_sites`. The web UI, API and MCP audit only the brand's own
-sites; another site takes the CLI.
+Use **Site audit** (`/audit`, "Audit now"), `POST /api/audit`, `GET /api/audit` (latest) or MCP
+`audit_sites` for your brand's sites. Auditing another site requires the CLI and is not saved.
 
 Every fetch, here and in the citation check, goes to public addresses only: loopback, private,
 link-local (cloud metadata included), CGNAT, ULA and multicast addresses are refused, and so is
@@ -25,15 +23,14 @@ every other range in IANA's special-purpose registries that is not globally reac
 the address dialed, so a redirect or a DNS name pointing at one is refused too. At most 5
 redirects, http and https only, never through a proxy.
 
-For each site it fetches robots.txt, the home page, `/llms.txt`, the sitemap and up to 10 pages
-from the sitemap (spread through it), as `Mozilla/5.0 (compatible; CheapSeats-Audit/<version>;
-+https://cheapseats.dev)`, 4 requests at a time (and 16 across every audit and citation check
-running at once), 15 s timeout, 2 MB cap. It reads the raw HTML, as a crawler that runs no
-JavaScript does. A host/path site (`github.com/example`) gets its robots.txt rules checked for that
-path, but no llms.txt or sitemap check, since those belong to the host. Sites of kind `code` or
-`community` (your GitHub, a forum) raise no robots.txt, firewall, llms.txt, sitemap or markup
-findings: none of that is yours to fix. Which crawlers the host blocks
-is still recorded on the site's `blocked` line, so you know it, without a fix you can't apply.
+Each site is checked through robots.txt, its home page, `/llms.txt`, sitemap and up to 10 spread-out
+sitemap pages. Fetches use `Mozilla/5.0 (compatible; CheapSeats-Audit/<version>; +https://cheapseats.dev)`,
+four concurrent requests per check, 16 across the process, a 15-second timeout and a 2 MiB body
+cap. Checks inspect raw HTML without executing JavaScript.
+
+Host/path sites (`github.com/example`) get robots rules for that path, but no host-level llms.txt
+or sitemap check. Sites of kind `code` or `community` raise no robots, firewall, llms.txt, sitemap
+or markup findings; their `blocked` line still records crawler blocks.
 
 The newest audit of the brand's own sites is kept. If it's less than 30 days old, its errors and
 warnings go to the analyst with the next fix list as more evidence, so a fix can say "this page is
@@ -86,27 +83,25 @@ cheapseats check-citations -n 50 <run-id>   # at most 100
 Also on the **Site audit** page ("Check citations", for any finished run),
 `POST`/`GET /api/runs/<id>/citation-check`, and the MCP tool `check_citations`.
 
-It takes the run's third-party pages, most cited first, then most surfaced in searches, and fetches
-each one as Cheap Seats (where its robots.txt allows `CheapSeats-Audit`; once per page per day, kept a
-month). It reads the page's visible text and says whether it names the brand or an alias, and which
-of the set's competitors. A page that names competitors but not you is marked **outreach**: the
-answers read it, and it leaves you out. Matching is by whole word, ignoring case: stricter than the
-grader's own check, so a short alias doesn't match inside another word.
+Third-party pages are fetched most-cited first, then most-returned in searches, where robots.txt
+allows `CheapSeats-Audit`. HTTP readings are cached per URL and UTC day for 30 days; matching uses
+at most 200,000 bytes of visible text. Whole-word, case-insensitive matches find the brand or
+aliases and the set's competitors. A page naming competitors but not the brand is **outreach**.
+This is a page-content lead, not proof the assistant read the full page or an outreach success
+prediction. A short alias does not match inside another word; a common-word name can still match
+unrelated prose.
 
-A page that is empty without JavaScript (under 200 characters of text and a `<script>`), or one
-that serves a bot challenge, names nobody over plain HTTP. With `[exa]` configured and
-`contents_fallback` on it is read through Exa instead, once a day, and the row carries `via: exa`
-(`(via Exa)` on the command line, a chip in the web UI). Without it, the row reads as it always
-did.
+An HTML shell has under 200 characters of visible text and a `<script>` or `<noscript>`. Without
+fallback, its remaining text is matched; a bot challenge is skipped. With Exa fallback enabled,
+successful alternative reads carry `via: exa` (`(via Exa)` in the CLI, a chip in the UI).
 
 ### Cited pages that changed
 
-A run whose citation check can be compared with the check of the newest earlier run of the same
-prompt set that has one lists, under **Sources** on the run page, each page both checks read whose
-reading changed, with a chip per change: **now names you**, **stopped naming you**, **now names
-_competitor_**, **stopped naming _competitor_**. A page either check couldn't read, or only one
-check fetched, is never a change; a page that says the same is not listed. The flip is computed
-from the two stored checks when the run is shown: nothing more is fetched or stored.
+**Sources** compares the run's citation check with the newest earlier checked run of the same set.
+Pages read by both checks get chips for changed matches: **now names you**, **stopped naming you**,
+**now names _competitor_**, **stopped naming _competitor_**. Unreadable, unshared and unchanged pages
+are excluded. This compares stored readings; it fetches nothing and does not establish when the
+page changed or whether a fix caused it.
 
 The same flags are on `GET /api/runs/<id>` as `cited_page_changes` (`url`, `now_names_brand`,
 `stopped_naming_brand`, `now_names`, `stopped_naming`, and `since_run`, the run compared with) and
@@ -117,14 +112,15 @@ in the MCP `get_run` digest, the first ten. A run with no check, or none before 
 A fix marked with an attempt (proposed or accepted) whose target is on one of the brand's sites
 shows **On the page now** under its **Done when**, on the run page and on Quick wins: whether the
 target page names the brand and has each of the fix's claim terms, by the same whole-word match.
-The claim terms are the claim's quoted phrases and numbers (any word with a digit: `$49`, `99.9%`,
-`30-day`); a claim with neither uses its words of four letters or more, less common ones. **landed**
+The claim terms are its quoted phrases and numbers (any word with a digit: `$49`, `99.9%`,
+`30-day`); a claim with neither uses non-common words of at least four letters. Terms are lowercased,
+deduplicated and capped at 12. **landed**
 means it names the brand and has every term; **not landed** lists the missing terms; a page that
 couldn't be read (robots.txt, an error, not text) says **could not read it** and why, and nothing
 else.
 
-The page is fetched with the citation check's fetcher, under the same rules: robots.txt, public
-addresses only, the 200 KB text cap and the same day cache. Showing the fix reads the newest cached
+The page uses the citation fetcher's robots and public-address rules, 200,000-byte text cap and
+UTC-day cache. Showing the fix reads the newest cached
 reading (with its day) and, when there is none from today, fetches the page in the background, so
 the next view has it; a page is fetched at most once a day however often the fix is shown. It is
 never read through Exa. This is evidence beside the fix's done-when, not a grade: it counts toward
@@ -160,15 +156,11 @@ Each request is classed by its user agent:
 **Unverified (UA only):** anyone can send a crawler's user agent, and nothing here checks the IP
 against the operator's published ranges.
 
-Only daily counts per host, page, class and bot are kept, not log lines, plus a hash of each
-counted request so importing the same log, or one that overlaps it, counts nothing twice. Counts
-and hashes are kept 400 days, and lines older than that aren't counted; nor are lines dated after
-tomorrow (UTC), which a wrong clock or a forged line would be. A request answered 4xx is counted
-under one row per host, `/(errors)`, rather than under its path, so a stream of made-up URLs sent
-with a crawler's user agent adds no rows of its own; that row is never flagged. A 5xx stays on its
-page, so a crawler's server error on a real page still shows there. One
-import counts at most a million new requests; importing the same log again counts the rest. A
-line over 1 MB counts as unreadable and the import carries on.
+Stored data is daily counts per host, page, class and bot, plus request hashes for deduplication;
+raw log lines are not kept. Counts and hashes expire after 400 days. Older lines and dates after
+tomorrow (UTC) are ignored. All 4xx requests share the host's `/(errors)` row, which is never
+flagged; 5xx requests stay on their page. Each import accepts at most a million new requests;
+repeat it to process the remainder. Lines over 1 MiB are marked unreadable without stopping import.
 
 The page lists each page's fetches by class and AI referrals beside how often the latest finished
 run of each set cited and surfaced it, and flags:

@@ -1,11 +1,8 @@
 # Got wrong about you
 
-An answer can name you and get you wrong: a hosted product you aren't, a price you don't have,
-a platform you don't run on. The grader records whether you were recommended, named or absent,
-and the answer's tone, and nothing flags the error. The fact check does. After a run, each
-answer that names the brand is read once more by the grader model, beside the `facts` under
-`[brand]`, for the claims that contradict one. The run page lists them under **Got wrong about
-you**, by fact, with the answer's own words; the fix list gets them as evidence.
+The fact check finds answer claims that contradict your `[brand] facts`. After a run, the grader
+model checks eligible answers against that list. **Got wrong about you** groups contradictions by
+fact, with verified answer quotes; the fix list receives them as evidence. Grades stay unchanged.
 
 ```toml
 [brand]
@@ -30,20 +27,19 @@ check_facts = false   # off; on by default when facts are listed
   answer's span. The quote is checked to be in the answer (the same check as the grader's
   evidence); one the model didn't copy is dropped, and so is a fact number off the list.
 
-It changes no grade and no trend. The grader's prompt and inputs are part of a run's method
-([re-grading](regrading.md)); the fact check is a separate reading, stored in its own tables
-(`fact_checks`, `misstatements`), and the facts never reach the grader.
+Checks are stored separately in `fact_checks` and `misstatements`. Facts are sent to the checker
+and analyst, not the answer grader, and do not change a run's grading method or trends. Treat
+facts as public product context; do not put secrets in them. [Provider boundaries](optional-providers.md#the-shape-that-keeps-them-optional).
 
 ## Cost, and when it runs again
 
-One grader call per answer that names the brand: on `provider = "claude-code"` it's $0, on your
-subscription; through the API it's spent from the same daily budget as runs, a few cents a run on
-Haiku. An answer is checked once per facts list: running the pass again asks nothing. Change,
-add or remove a fact and the next pass, or `cheapseats misstatements <run-id>`, checks every
-answer again under the new list and replaces what it found. The page says how many answers were
-checked, and how many under an older list, until then.
+Each eligible, unchecked answer takes one grader call. `provider = "claude-code"` uses your
+subscription allowance without an API charge; API calls use the same daily budget as runs.
+Completed checks are cached per answer and facts-list hash. A changed, added or removed fact
+makes eligible answers due for checking again; the next pass or `cheapseats misstatements <run-id>`
+replaces their findings. Until then, the page counts checks made under an older list.
 
-A re-grade doesn't run it: the grades change, the answers don't. Rerun it with the command if the
+[Re-grading](regrading.md) doesn't run it: the grades change, the answers don't. Rerun it with the command if the
 verdicts moved enough that different answers now name you.
 
 ## Where it shows
