@@ -324,45 +324,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/competitors/suggestions", s.apiCompetitorSuggestions)
 	mux.HandleFunc("POST /api/competitors/suggestions/{host}/dismiss", s.apiDismissSuggestion)
 	mux.Handle("/api/mcp", s.mcpHandler())
-	return secureHeaders(s.refuseForeign(s.auth(logRequests(s.refuseChanges(mux)))))
-}
-
-// contentPolicy is every response's Content-Security-Policy. No page may frame Cheap Seats, so
-// another site can't overlay its buttons (Run now, Cancel, Make a link) and trick a click. Images
-// load only from Cheap Seats itself (the icons are inline SVG), so nothing on a page can fetch an
-// outside URL that carries data off. Scripts and styles aren't limited: the layout has an inline
-// theme script and the templates use style attributes, and every page is escaped.
-const contentPolicy = "frame-ancestors 'none'; img-src 'self'; object-src 'none'; base-uri 'self'"
-
-// secureHeaders sets the headers that say what a browser may do with a response.
-func secureHeaders(h http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Security-Policy", contentPolicy)
-		w.Header().Set("X-Frame-Options", "DENY") // frame-ancestors, for browsers without it
-		h.ServeHTTP(w, r)
-	})
-}
-
-// markdownRenderer renders the analyst's Markdown. goldmark escapes raw HTML unless told
-// otherwise, and an image is rendered as its alt text: the analyst read pages and answers anyone
-// can write, and an image that loads fetches whatever URL they put in it.
-var markdownRenderer = goldmark.New(goldmark.WithRendererOptions(renderer.WithNodeRenderers(util.Prioritized(altTextImages{}, 500))))
-
-func analystMarkdown(md string) template.HTML {
-	var b strings.Builder
-	if markdownRenderer.Convert([]byte(md), &b) != nil {
-		return template.HTML(template.HTMLEscapeString(md))
-	}
-	return template.HTML(b.String())
-}
-
-// altTextImages renders an image as nothing but its children, the alt text.
-type altTextImages struct{}
-
-func (altTextImages) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
-	reg.Register(ast.KindImage, func(util.BufWriter, []byte, ast.Node, bool) (ast.WalkStatus, error) {
-		return ast.WalkContinue, nil
-	})
+	return s.refuseForeign(s.auth(logRequests(s.refuseChanges(mux))))
 }
 
 // refuseForeign refuses what a page on another site can make a browser send here, which the
@@ -372,10 +334,12 @@ func (altTextImages) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
 // A form or fetch from another origin that changes something is cross-site request forgery: with
 // no sign-in there's no cookie for SameSite to hold back, and behind a signing-in proxy the proxy's
 // own session would sign it in. A proxy on the same machine serves Cheap Seats under the names in
-// CHEAPSEATS_HOSTS; MCP's guard against rebinding is the same one (see mcpHandler).
+// CHEAPSEATS_HOSTS; MCP's guard against rebinding is the same one (see mcpHandler). And every
+// response tells the browser no other site may frame it (refuseFraming).
 func (s *Server) refuseForeign(h http.Handler) http.Handler {
 	open := len(s.tokens) == 0 && s.authHeader == "" && !s.readOnly
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		refuseFraming(w.Header())
 		if open && s.rebound(r) {
 			http.Error(w, fmt.Sprintf("Forbidden: invalid Host header %q (add it to CHEAPSEATS_HOSTS if a proxy serves Cheap Seats under it)", r.Host), http.StatusForbidden)
 			return
@@ -458,6 +422,42 @@ var assetHashes = func() map[string]string {
 
 // asset is a static file's URL with its version, for cache busting.
 func asset(name string) string { return "/static/" + name + "?v=" + assetHashes[name] }
+
+// contentPolicy is every response's Content-Security-Policy. No page may frame Cheap Seats, so
+// another site can't overlay its buttons (Run now, Cancel, Make a link) and trick a click. Images
+// load only from Cheap Seats itself (the icons are inline SVG), so nothing on a page can fetch an
+// outside URL that carries data off. Scripts and styles aren't limited: the layout has an inline
+// theme script and the templates use style attributes, and every page is escaped.
+const contentPolicy = "frame-ancestors 'none'; img-src 'self'; object-src 'none'; base-uri 'self'"
+
+// refuseFraming sets the headers that tell a browser what a page on another site may do with a
+// response: frame it never, load images for it from nowhere but here.
+func refuseFraming(h http.Header) {
+	h.Set("Content-Security-Policy", contentPolicy)
+	h.Set("X-Frame-Options", "DENY") // frame-ancestors, for browsers without it
+}
+
+// markdownRenderer renders the analyst's Markdown. goldmark escapes raw HTML unless told
+// otherwise, and an image is rendered as its alt text: the analyst read pages and answers anyone
+// can write, and an image that loads fetches whatever URL they put in it.
+var markdownRenderer = goldmark.New(goldmark.WithRendererOptions(renderer.WithNodeRenderers(util.Prioritized(altTextImages{}, 500))))
+
+func analystMarkdown(md string) template.HTML {
+	var b strings.Builder
+	if markdownRenderer.Convert([]byte(md), &b) != nil {
+		return template.HTML(template.HTMLEscapeString(md))
+	}
+	return template.HTML(b.String())
+}
+
+// altTextImages renders an image as nothing but its children, the alt text.
+type altTextImages struct{}
+
+func (altTextImages) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
+	reg.Register(ast.KindImage, func(util.BufWriter, []byte, ast.Node, bool) (ast.WalkStatus, error) {
+		return ast.WalkContinue, nil
+	})
+}
 
 // emailAllowed reports whether a proxy-signed-in email may use Cheap Seats: anyone when no list is
 // set, else an exact address or an @domain on it.
