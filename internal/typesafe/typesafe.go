@@ -11,12 +11,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"strconv"
 	"time"
 
+	"github.com/cheapseatsdev/cheapseats/internal/bounded"
 	"github.com/cheapseatsdev/cheapseats/internal/budget"
 	"github.com/cheapseatsdev/cheapseats/internal/config"
 )
@@ -27,6 +27,10 @@ const (
 )
 
 var ErrNoKey = errors.New(KeyVar + " is not set")
+
+// maxResponse is the largest successful response read. Typed answers to a few questions are a
+// few KB; past this the reply is an error, not a retry.
+var maxResponse int64 = 4 << 20
 
 // Question is one judgment to ask about the state. Type is noul (yes/no), choice or score.
 type Question struct {
@@ -143,9 +147,13 @@ func (c *Client) Ask(ctx context.Context, operation string, state any, questions
 			}
 			last = err
 		} else {
-			data, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
 			if resp.StatusCode == http.StatusOK {
+				data, err := bounded.Read(resp.Body, maxResponse)
+				resp.Body.Close()
+				if err != nil {
+					settle(lease, 0, false)
+					return nil, fmt.Errorf("typesafe: reading response: %w", err)
+				}
 				var out Response
 				if err := json.Unmarshal(data, &out); err != nil {
 					settle(lease, 0, false)
@@ -159,8 +167,10 @@ func (c *Client) Ask(ctx context.Context, operation string, state any, questions
 				}
 				return &out, nil
 			}
+			msg := bounded.Prefix(resp.Body)
+			resp.Body.Close()
 			settle(lease, 0, resp.StatusCode < 500)
-			last = &APIError{Status: resp.StatusCode, Body: string(data)}
+			last = &APIError{Status: resp.StatusCode, Body: msg}
 			if resp.StatusCode != http.StatusTooManyRequests && resp.StatusCode != 529 {
 				return nil, last
 			}

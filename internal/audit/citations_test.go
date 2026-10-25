@@ -110,12 +110,12 @@ func TestCheckCitations(t *testing.T) {
 // the cut: the brand named well past the byte is still found.
 func TestClipText(t *testing.T) {
 	page := "Caf\xe9 roundup. " + strings.Repeat("filler ", 20_000) + "Cheap Seats is our pick. " + strings.Repeat("filler ", 20_000)
-	got := clipText(page)
+	got := ClipText(page)
 	if len(page) <= maxText || len(got) > maxText || !utf8.ValidString(got) || !NamesAny(got, []string{"Cheap Seats"}) || !strings.HasPrefix(got, "Caf\uFFFD roundup") {
 		t.Errorf("len %d, valid %v, prefix %q", len(got), utf8.ValidString(got), got[:20])
 	}
 	long := strings.Repeat("é", maxText) // two bytes each: the cut falls inside a rune
-	if got := clipText(long); !utf8.ValidString(got) || len(got) > maxText || len(got) < maxText-1 {
+	if got := ClipText(long); !utf8.ValidString(got) || len(got) > maxText || len(got) < maxText-1 {
 		t.Errorf("len %d, valid %v", len(got), utf8.ValidString(got))
 	}
 }

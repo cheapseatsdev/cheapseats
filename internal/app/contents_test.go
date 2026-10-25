@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -26,10 +27,12 @@ const (
 
 // fakeExa is Exa's contents endpoint: it answers every URL with renderedText, counts its calls
 // and remembers the URLs asked. It returns no cost estimate, so the configured price applies.
+// text, set before the first call, replaces renderedText.
 type fakeExa struct {
 	calls atomic.Int32
 	mu    sync.Mutex
 	asked []string
+	text  string
 }
 
 func serveFakeExa(t *testing.T) (*fakeExa, *httptest.Server) {
@@ -51,7 +54,11 @@ func serveFakeExa(t *testing.T) (*fakeExa, *httptest.Server) {
 			f.mu.Lock()
 			f.asked = append(f.asked, u.(string))
 			f.mu.Unlock()
-			results = append(results, map[string]any{"url": u, "title": "Rendered roundup", "text": renderedText})
+			text := renderedText
+			if f.text != "" {
+				text = f.text
+			}
+			results = append(results, map[string]any{"url": u, "title": "Rendered roundup", "text": text})
 		}
 		json.NewEncoder(w).Encode(map[string]any{"requestId": "r", "results": results})
 	}))
@@ -166,6 +173,21 @@ func TestContentsFallbackReadsAShellOnceADayInTheCitationCheck(t *testing.T) {
 	}
 	if f.calls.Load() != 1 {
 		t.Errorf("switched off or unpriced, Exa was still called: %d calls", f.calls.Load())
+	}
+}
+
+func TestContentsFallbackKeepsAPageClipped(t *testing.T) {
+	a, _, site, f := fallbackApp(t)
+	f.text = strings.Repeat("Profound tops this roundup. ", 20_000) // 560,000 bytes
+	read := a.ContentsReader()
+	text, _, ok := read(context.Background(), site.URL+"/shell")
+	if !ok || len(text) > 200_000 || len(text) < 199_000 {
+		t.Fatalf("read %d bytes, ok %v; want the page clipped to 200,000", len(text), ok)
+	}
+	var kept int
+	a.DB.QueryRow(`SELECT length(CAST(text AS BLOB)) FROM exa_contents WHERE url=?`, site.URL+"/shell").Scan(&kept)
+	if kept != len(text) {
+		t.Errorf("exa_contents kept %d bytes; want the clipped %d", kept, len(text))
 	}
 }
 

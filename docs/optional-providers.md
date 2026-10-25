@@ -51,6 +51,10 @@ Every use of either provider follows the same rules, and anything added later sh
 6. **Decisions carry provenance and a threshold read at use.** A stored decision says who made it
    (`jev`, `manual`) and with what confidence. The confidence a decision needs to take effect is
    read from the config each time, so tightening it never asks anything again.
+7. **Bounded replies.** A successful reply is read up to a cap (32 MB from Exa, whose contents
+   replies carry whole pages; 4 MB from Jev), and a longer one is an error that is not retried,
+   settled as unknown cost. An error reply keeps its first 4 KB for the message. The Anthropic
+   and OpenAI clients (`internal/llm`) read the same way, with a 32 MB cap.
 
 ## How a pass is wired
 
@@ -299,9 +303,10 @@ isn't a browser, reads as naming nobody. Both are findings about a page the assi
 With `[exa]` configured and `contents_fallback` on, such a page is read once more through Exa's
 contents endpoint, which renders it. The trigger is narrow: a 200 HTML page with under 200
 characters of visible text and a `<script>` or `<noscript>` in it, or a challenge page. The text
-Exa returns is kept in `exa_contents` for a day, so a page costs at most one read a day whichever
-check asks, and it stands in for the page's text. The citation row says whether the page names the
-brand and which competitors, with `via: "exa"`. On the audit, the page's text count is what Exa
+Exa returns (its first 200,000 bytes, as much as the citation check matches) is kept in
+`exa_contents` for a day, so a page costs at most one read a day whichever check asks, and it
+stands in for the page's text. The citation row says whether the page names the brand and which
+competitors, with `via: "exa"`. On the audit, the page's text count is what Exa
 read, and the `page.needs-js` or `page.challenge` finding becomes an info one carrying
 `via: "exa"`: the content exists, and crawlers that run no JavaScript still see the empty HTML, so
 it stays on the page without going to the analyst as an error. The web UI and MCP show `via Exa`,

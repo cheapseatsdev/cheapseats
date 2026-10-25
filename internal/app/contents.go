@@ -18,9 +18,10 @@ import (
 // without JavaScript, or a bot challenge served instead of the page, then reads as nothing: a
 // "needs JavaScript" finding about a page whose content is there once rendered, or a cited page
 // that names nobody. With [exa] configured and contents_fallback on, such a page is read once more
-// through Exa's contents endpoint, which renders it, and the text is kept in exa_contents for a
-// day, so neither check pays for a page twice in a day. The result carries via: "exa". This is not
-// a pass: it runs inside the two checks, which run on demand and never from a page.
+// through Exa's contents endpoint, which renders it, and the text (clipped as the citation check
+// clips a page, audit.ClipText) is kept in exa_contents for a day, so neither check pays for a
+// page twice in a day. The result carries via: "exa". This is not a pass: it runs inside the two
+// checks, which run on demand and never from a page.
 
 // contentsTTL is how long a page's text read through Exa serves both checks.
 const contentsTTL = 24 * time.Hour
@@ -63,7 +64,7 @@ func (a *App) ContentsReader() audit.Reader {
 		if page == nil {
 			return "", "", false // Exa couldn't read it either; nothing kept, so a later check may try again
 		}
-		text = strings.Join(strings.Fields(page.Text), " ")
+		text = audit.ClipText(strings.Join(strings.Fields(page.Text), " "))
 		if _, err := a.DB.ExecContext(ctx, `INSERT OR REPLACE INTO exa_contents (url, title, text, cost_usd, fetched_at) VALUES (?,?,?,?,?)`, u, page.Title, text, resp.CostUSD, store.Now()); err != nil {
 			slog.Warn("exa contents: keeping the text", "url", u, "err", err)
 		}
