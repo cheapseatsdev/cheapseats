@@ -274,6 +274,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /sets/{id}/regrade", s.regradeForm)
 	mux.HandleFunc("GET /sets/{id}/review", s.reviewPage)
 	mux.HandleFunc("POST /sets/{id}/review", s.reviewSuggestForm)
+	mux.HandleFunc("POST /sets/{id}/reviewed", s.reviewedForm)
 	mux.HandleFunc("GET /runs/{id}", s.runPage)
 	mux.HandleFunc("POST /runs/{id}/fixes", s.rebuildFixesForm)
 	mux.HandleFunc("POST /runs/{id}/fixes/{rank}/attempts", s.markFixForm)

@@ -29,6 +29,8 @@ type ReviewData struct {
 	Subscription bool
 	// The minimum data for a prompt to be reviewed.
 	MinRuns, MinAnswers int
+	// When the set's prompts were last marked reviewed, "" if never.
+	LastReview string
 }
 
 func (s *Server) reviewData(r *http.Request) (*ReviewData, int, error) {
@@ -45,7 +47,7 @@ func (s *Server) reviewData(r *http.Request) (*ReviewData, int, error) {
 		return nil, http.StatusInternalServerError, err
 	}
 	d := &ReviewData{Review: rev, Subscription: s.App.Cfg.Analyst.Via() == config.ClaudeCode,
-		MinRuns: app.ReviewMinRuns, MinAnswers: app.ReviewMinAnswers}
+		MinRuns: app.ReviewMinRuns, MinAnswers: app.ReviewMinAnswers, LastReview: s.App.LastReview(r.Context(), id)}
 	for _, w := range app.ReviewWindows {
 		d.Windows = append(d.Windows, filterOption{Label: strconv.Itoa(w) + " days", On: w == days, Href: "?days=" + strconv.Itoa(w)})
 	}
@@ -58,12 +60,25 @@ func (s *Server) reviewPage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), code)
 		return
 	}
-	// Reading the page is a review; a HEAD (which GET routes match too) isn't, nor is the JSON,
-	// nor is anyone's visit to a read-only copy.
-	if r.Method == http.MethodGet && !s.readOnly {
-		s.App.MarkReviewed(r.Context(), d.SetID)
-	}
 	s.render(w, "review", d)
+}
+
+// reviewedForm is the page's "Mark reviewed" button: it records the review, which quiets
+// get_started's monthly reminder. Opening the page records nothing, so a link from another site
+// can't (a GET isn't checked for forgery; a POST is).
+func (s *Server) reviewedForm(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if _, ok := s.App.Set(id); !ok {
+		http.Error(w, errNoSet(id).Error(), http.StatusNotFound)
+		return
+	}
+	days, err := reviewDays(r.FormValue("days"))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	s.App.MarkReviewed(r.Context(), id)
+	http.Redirect(w, r, "/sets/"+id+"/review?days="+strconv.Itoa(days), http.StatusSeeOther)
 }
 
 // reviewSuggestForm is the page's button: one analyst call for edits, shown on the page. Nothing

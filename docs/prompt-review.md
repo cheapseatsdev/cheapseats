@@ -11,8 +11,9 @@ Nothing runs on a schedule.
 - JSON: `GET /api/sets/<id>/review?days=30`, every prompt's numbers.
 - MCP: `review_prompts` (`set`, optional `days`, `suggest`), the counts and the top five of each
   flag, numbers rounded. `get_started` suggests it once a set has four weeks of runs and hasn't
-  been reviewed in 30 days. Opening the page, the CLI and the MCP tool count as a review; the JSON
-  doesn't.
+  been reviewed in 30 days. The page's **Mark reviewed** button, the CLI and the MCP tool count as a
+  review; opening the page and the JSON don't, so a link from another site can't quiet the
+  reminder. The page shows when the set was last marked reviewed.
 - CLI: `cheapseats review <set-id> [-days 30] [-json] [-suggest] [-jev]`.
 - With `[typesafe]` configured, a "Jev" section (JSON `jev`) lists what Jev makes of the prompts'
   wording, read from storage: see [Jev's flags](#jevs-flags) below.
