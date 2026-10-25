@@ -1,5 +1,22 @@
 # Starting a config repo: cheapseats init
 
+`init` starts a config for the **Go/subscription route**. Its answerer, grader and analyst use
+the local `claude` CLI, so running the generated config requires that CLI to be installed and
+logged in to a Claude subscription. A `codex` answerer is included but commented out.
+
+**For Docker with API keys,** start from the [config template](https://github.com/cheapseatsdev/cheapseats-config-template)
+and follow the [Docker quick start](deploying.md#try-docker-with-api-keys), which needs no Go.
+The image contains neither subscription CLI; an `init` config's providers must be changed
+before it can run there.
+
+From an app checkout with Go 1.27 or later:
+
+```bash
+go run ./cmd/cheapseats init https://yoursite.com ../your-config
+```
+
+With a built `cheapseats` binary, the same command and its options are:
+
 ```bash
 cheapseats init https://yoursite.com                  # writes ./<brand>-cheapseats-config
 cheapseats init yoursite.com ../acme-config -dry-run  # prints what it found and would write
@@ -10,7 +27,7 @@ cheapseats init yoursite.com -name "Acme" -competitors "Asana,Trello" -suggest
 | --- | --- |
 | `-name X` | the brand's name, instead of what the site calls itself |
 | `-competitors a,b` | competitors, comma-separated: `[[competitors]]` entries, alternatives prompts and head-to-heads |
-| `-suggest [-n 10]` | add suggested prompts: one analyst call through the `claude` CLI, using your subscription |
+| `-suggest [-n 10]` | add suggested prompts with one analyst call on the installed, logged-in `claude` CLI; uses the subscription allowance with no API spend |
 | `-dry-run` | print what it found and every file it would write; write nothing |
 
 If any target file exists, it writes nothing.

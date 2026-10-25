@@ -5,6 +5,9 @@ proxy. The VM supports API answerers and the installed `claude` and `codex` CLIs
 exe.dev's own docs are at
 `ssh exe.dev doc` (`doc proxy`, `doc sharing`, `doc login-with-exe`, `doc send-email`).
 
+For a first local run, [choose Go with subscriptions or Docker with API keys](../README.md#quick-start).
+This guide covers the VM setup; its deploy script builds the app on your machine with Go 1.27 or later.
+
 ## Set up once
 
 1. **Create the VM.** Its proxy serves `https://<vm>.exe.xyz` from port 8000, where Cheap Seats listens,
@@ -14,26 +17,32 @@ exe.dev's own docs are at
    ssh exe.dev "new --name=<vm> --comment='Cheap Seats'"
    ```
 
-2. **Write its secrets** to `~/cheapseats/cheapseats.env`, readable only by the VM user. Cheap Seats
+2. **Write its access settings** to `~/cheapseats/cheapseats.env`, readable only by the VM user. Cheap Seats
    trusts the proxy's `X-ExeDev-Email` only because outside requests arrive through that proxy
    and the CLI user is blocked from the port (step 3). `CHEAPSEATS_ALLOWED_EMAILS` restricts access
    to emails or `@domain`; `CHEAPSEATS_HOSTS` names the proxy's host for MCP (step 7).
 
    ```bash
-   { printf 'ANTHROPIC_API_KEY=%s\n' "<key>"
-     printf 'CHEAPSEATS_AUTH_HEADER=X-ExeDev-Email\n'
+   { printf 'CHEAPSEATS_AUTH_HEADER=X-ExeDev-Email\n'
      printf 'CHEAPSEATS_ALLOWED_EMAILS=%s\n' "you@example.com,@yourcompany.com"
      printf 'CHEAPSEATS_HOSTS=%s\n' "<vm>.exe.xyz"   # and a custom domain, comma-separated
      printf 'CHEAPSEATS_TOKENS=%s\n' "$(openssl rand -hex 32)"
    } | ssh <vm>.exe.xyz 'mkdir -p ~/cheapseats && umask 077 && cat > ~/cheapseats/cheapseats.env'
    ```
 
-   Add `OPENAI_API_KEY` if an answerer uses `provider = "openai"`.
+   **Subscriptions need no model API keys:** use `provider = "claude-code"` for the Claude answerer,
+   grader and analyst, and optionally `provider = "codex"` for a second answerer. The
+   [subscription example](../examples/cheapseats-config/cheapseats.subscriptions.toml) supplies
+   this config. Log the CLIs in as the service's CLI user in step 4.
 
-   To keep the Anthropic key off the VM, add it as an exe.dev integration instead, and replace the
-   `ANTHROPIC_API_KEY` line with `CHEAPSEATS_ANTHROPIC_BASE_URL=https://anthropic.int.exe.xyz`.
-   The proxy adds the key to Cheap Seats' API calls (grading, the fix list, `anthropic` answerers).
-   The `claude` CLI ignores this variable; `claude-code` answerers stay on your subscription.
+   **API roles need their key or a proxy:** add `ANTHROPIC_API_KEY` if any answerer, grader or
+   analyst uses `anthropic` (the grader and analyst's default provider). Add `OPENAI_API_KEY`
+   if an answerer uses `provider = "openai"`.
+
+   To keep an Anthropic key off the VM, add it as an exe.dev integration and set
+   `CHEAPSEATS_ANTHROPIC_BASE_URL=https://anthropic.int.exe.xyz` instead of `ANTHROPIC_API_KEY`.
+   Roles configured for `anthropic` then go through that proxy, which adds the key. The `claude`
+   CLI doesn't read this variable, so `claude-code` roles stay on your subscription.
 
    The optional providers work the same way: with `[typesafe]` or `[exa]` in the config, add each
    as an integration and set `CHEAPSEATS_TYPESAFE_BASE_URL=https://typesafe.int.exe.xyz` and
@@ -47,8 +56,9 @@ exe.dev's own docs are at
    The rule lives at `/etc/cheapseats/cli-firewall.nft`; Cheap Seats requires its
    `cheapseats-cli-firewall.service`, and deployment fails if the CLI user can reach the port.
 
-4. **Log the CLIs in** as that user, if your answerers use them. The subscription is whoever logs
-   in. (Logins made before the CLI user existed move over on the first deploy.)
+4. **Log the CLIs in** as that user: Claude if any answerer, grader or analyst uses `claude-code`,
+   and Codex only if an answerer uses `codex`. The subscription is whoever logs in. (Logins made
+   before the CLI user existed move over on the first deploy.)
 
    ```bash
    ssh -t <vm>.exe.xyz sudo -H -u cheapseats-cli claude                      # /login, then /exit
@@ -88,7 +98,8 @@ exe.dev's own docs are at
 
 ## Every deploy
 
-From a checkout of this repo, with your config repo committed:
+From a checkout of this repo, with Go 1.27 or later on the machine running the script and your
+config repo committed:
 
 ```bash
 deploy/exe-dev.sh <vm> ../your-config
