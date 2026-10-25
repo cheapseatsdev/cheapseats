@@ -128,7 +128,7 @@ func fetchText(ctx context.Context, o CiteOptions, robots *robotsCache, u, day s
 	case shellReason, challengeReason:
 		if o.Reader != nil {
 			if read, _, ok := o.Reader(ctx, u); ok {
-				return status, "", clipText(read), ViaExa
+				return status, "", ClipText(read), ViaExa
 			}
 		}
 		if skipped == shellReason {
@@ -160,16 +160,16 @@ func fetchNow(ctx context.Context, f *Fetcher, robots *robotsCache, raw string) 
 	if ct != "" && !strings.HasPrefix(ct, "text/") && !strings.Contains(ct, "html") && !strings.Contains(ct, "xml") {
 		return r.Status, "not a text page (" + ct + ")", ""
 	}
-	text := clipText(Text(r.Body, ct))
+	text := ClipText(Text(r.Body, ct))
 	if html := strings.Contains(ct, "html") || ct == "" && looksHTML(r.Body); html && emptyShell(r.Body, runes(text)) {
 		return r.Status, shellReason, text
 	}
 	return r.Status, "", text
 }
 
-// clipText makes text valid UTF-8 (a Latin-1 page's bytes become U+FFFD, which matching reads as
+// ClipText makes text valid UTF-8 (a Latin-1 page's bytes become U+FFFD, which matching reads as
 // a word break) and cuts it to maxText bytes, without splitting the last rune.
-func clipText(text string) string {
+func ClipText(text string) string {
 	text = strings.ToValidUTF8(text, "\uFFFD")
 	if len(text) <= maxText {
 		return text

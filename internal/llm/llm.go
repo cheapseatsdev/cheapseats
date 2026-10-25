@@ -9,9 +9,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/cheapseatsdev/cheapseats/internal/bounded"
 	"github.com/cheapseatsdev/cheapseats/internal/config"
 	"github.com/cheapseatsdev/cheapseats/internal/redact"
-	"io"
 	"math/rand/v2"
 	"net/http"
 	"os"
@@ -27,6 +27,11 @@ var (
 	OpenAIURL    = "https://api.openai.com/v1/responses"
 )
 
+// maxResponse is the largest successful response read. A Messages or Responses reply with web
+// search results runs to a few hundred KB; past this the reply is an error, not a retry.
+var maxResponse int64 = 32 << 20
+
+// APIError is a non-200 reply. Body is at most bounded.ErrorPrefix bytes of what was sent.
 type APIError struct {
 	Status int
 	Body   string
@@ -70,9 +75,13 @@ func post(ctx context.Context, url string, headers map[string]string, body any) 
 			}
 			last = err
 		} else {
-			data, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
 			if resp.StatusCode == http.StatusOK {
+				data, err := bounded.Read(resp.Body, maxResponse)
+				resp.Body.Close()
+				if err != nil {
+					lease.Finish(0, false)
+					return nil, fmt.Errorf("reading response: %w", err)
+				}
 				var out map[string]any
 				if err := json.Unmarshal(data, &out); err != nil {
 					lease.Finish(0, false)
@@ -86,10 +95,12 @@ func post(ctx context.Context, url string, headers map[string]string, body any) 
 				}
 				return out, nil
 			}
+			msg := bounded.Prefix(resp.Body)
+			resp.Body.Close()
 			if err := lease.Finish(0, resp.StatusCode < 500); err != nil {
 				return nil, err
 			}
-			last = &APIError{Status: resp.StatusCode, Body: string(data)}
+			last = &APIError{Status: resp.StatusCode, Body: msg}
 			if !retryable(resp.StatusCode) {
 				return nil, last
 			}

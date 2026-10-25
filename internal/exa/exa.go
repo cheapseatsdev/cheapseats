@@ -10,13 +10,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/cheapseatsdev/cheapseats/internal/bounded"
 	"github.com/cheapseatsdev/cheapseats/internal/budget"
 	"github.com/cheapseatsdev/cheapseats/internal/config"
 )
@@ -33,6 +33,10 @@ const (
 )
 
 var ErrNoKey = errors.New(KeyVar + " is not set")
+
+// maxResponse is the largest successful response read. A contents reply carries whole pages'
+// text, so it is the largest Exa sends; past this the reply is an error, not a retry.
+var maxResponse int64 = 32 << 20
 
 type Result struct {
 	Title         string `json:"title"`
@@ -224,17 +228,23 @@ func (c *Client) post(ctx context.Context, operation, path, model string, body a
 			}
 			last = err
 		} else {
-			data, _ := io.ReadAll(resp.Body)
-			resp.Body.Close()
 			if resp.StatusCode == http.StatusOK {
+				data, err := bounded.Read(resp.Body, maxResponse)
+				resp.Body.Close()
+				if err != nil {
+					settle(lease, 0, false)
+					return nil, fmt.Errorf("exa: reading response: %w", err)
+				}
 				if err := json.Unmarshal(data, out); err != nil {
 					settle(lease, 0, false)
 					return nil, fmt.Errorf("exa: decoding response: %w", err)
 				}
 				return lease, nil
 			}
+			msg := bounded.Prefix(resp.Body)
+			resp.Body.Close()
 			settle(lease, 0, resp.StatusCode < 500)
-			last = &APIError{Status: resp.StatusCode, Body: string(data)}
+			last = &APIError{Status: resp.StatusCode, Body: msg}
 			if resp.StatusCode != http.StatusTooManyRequests && resp.StatusCode < 500 {
 				return nil, last
 			}
