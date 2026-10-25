@@ -5,7 +5,7 @@
 # The image has no config: a deployment builds its own on top of it (FROM this image, COPY its
 # config repo to /config), or mounts a checkout at /config. See docs/deploying.md.
 # Base images are pinned by digest (the tag is for reading); Dependabot's docker entry moves both.
-FROM --platform=$BUILDPLATFORM golang:1.26-bookworm@sha256:632dff7351799a5a9954a48dc06670ade72ee44e8c351cdc0e5a57af2fea21af AS build
+FROM --platform=$BUILDPLATFORM golang:1.27.3-bookworm@sha256:972b4110ba0f47539a975c31e52c64765e1ff19f2d74469ae4a595c6676e80a5 AS build
 ARG TARGETOS TARGETARCH
 ARG VERSION=dev
 WORKDIR /src
