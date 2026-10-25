@@ -54,7 +54,7 @@ func probeCmd(ctx context.Context, args []string) error {
 				fmt.Println("  none")
 			}
 			for _, u := range s.urls {
-				fmt.Printf("  %s\n", u)
+				fmt.Printf("  %s\n", printable(u))
 			}
 		}
 		fmt.Printf("\nClaude: ")
@@ -66,15 +66,28 @@ func probeCmd(ctx context.Context, args []string) error {
 }
 
 func printProbe(r probe.Result) {
-	fmt.Printf("%d results for %q (%s, $%.4f, %d ms)\n", len(r.Links), r.Query, r.Model, r.CostUSD, r.DurationMS)
+	fmt.Printf("%d results for %q (%s, $%.4f, %d ms)\n", len(r.Links), r.Query, printable(r.Model), r.CostUSD, r.DurationMS)
 	if r.Error != "" {
-		fmt.Fprintf(os.Stderr, "  error: %s\n", r.Error)
+		fmt.Fprintf(os.Stderr, "  error: %s\n", printable(r.Error))
 	}
 	for i, l := range r.Links {
 		if l.Title != "" {
-			fmt.Printf("%3d. %s\n     %s\n", i+1, l.Title, l.URL)
+			fmt.Printf("%3d. %s\n     %s\n", i+1, printable(l.Title), printable(l.URL))
 		} else {
-			fmt.Printf("%3d. %s\n", i+1, l.URL)
+			fmt.Printf("%3d. %s\n", i+1, printable(l.URL))
 		}
 	}
+}
+
+// printable is text from a search engine or a page, made safe to print to a terminal: control
+// characters (C0, DEL and C1, newlines included, and invalid UTF-8) become U+FFFD, so a title
+// cannot carry an escape sequence that retitles the window, rewrites the screen or forges a line.
+// The JSON output has the text as it was.
+func printable(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f || (r >= 0x80 && r < 0xa0) {
+			return '\uFFFD'
+		}
+		return r
+	}, s)
 }
