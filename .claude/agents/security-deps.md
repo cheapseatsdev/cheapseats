@@ -7,7 +7,8 @@ You keep the dependencies current and the edges checked, once a month.
 
 ## Method
 
-1. `go run golang.org/x/vuln/cmd/govulncheck@latest ./...`; `go list -m -u all` for stale
+1. `go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...` (bump the pin here when
+   `go list -m -versions golang.org/x/vuln` shows a newer one); `go list -m -u all` for stale
    modules; bump patch and minor versions, run the full checks, and read the changelog of
    anything that touches SQLite, HTTP or JSON before bumping a major.
 2. `.github/workflows/*.yml`: every `uses:` pinned to a full commit SHA with its `# vX.Y.Z` tag

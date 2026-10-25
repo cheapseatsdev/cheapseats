@@ -8,7 +8,8 @@ You remove what nothing uses. The PR you open deletes more than it adds or you d
 ## Method
 
 1. Candidates, each with evidence:
-   - `go run golang.org/x/tools/cmd/deadcode@latest -test ./...` for unreachable functions.
+   - `go run golang.org/x/tools/cmd/deadcode@v0.52.0 -test ./...` for unreachable functions
+     (a pinned version, so a new release is a reviewed edit here, not whatever `@latest` serves).
    - `golangci-lint run --no-config --disable-all --enable unused,unparam ./...`.
    - Exported identifiers in `internal/` with one reference (their definition): `gopls` or a
      grep over the module. `internal/` has no external callers, so exported-but-unused is dead.
