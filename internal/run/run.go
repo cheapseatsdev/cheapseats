@@ -326,7 +326,7 @@ func (e *Engine) execute(ctx context.Context, id string) error {
 		sort.SliceStable(jobs, func(a, b int) bool { return !jobs[a].extra && jobs[b].extra })
 		ch := make(chan job)
 		var wg sync.WaitGroup
-		for w := 0; w < e.Cfg.Budget.Concurrency; w++ {
+		for w := 0; w < min(e.Cfg.Budget.Concurrency, len(jobs)); w++ {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()

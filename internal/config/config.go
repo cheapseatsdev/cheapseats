@@ -156,6 +156,14 @@ func ModelFromRef(ref string) Model {
 	return Model{Model: ref}
 }
 
+// The most a config may ask for. Each is far past any useful setting, and each bounds work that
+// starts before the budget admits anything: concurrency is the run and re-grade workers and the
+// budget's gate, and samples are the result rows a run inserts when it is created.
+const (
+	MaxConcurrency = 64
+	MaxSamples     = 20
+)
+
 type Budget struct {
 	DailyUSD       float64 `toml:"daily_usd"`
 	Concurrency    int     `toml:"concurrency"`
@@ -440,6 +448,9 @@ func Load(path string) (*Config, error) {
 		if a.Model == "" || a.Samples.Search < 0 || a.Samples.Recall < 0 || a.Samples.Search+a.Samples.Recall == 0 {
 			return nil, fmt.Errorf("answerer %s requires model and positive sample count", a.ID)
 		}
+		if a.Samples.Search > MaxSamples || a.Samples.Recall > MaxSamples {
+			return nil, fmt.Errorf("%s: answerer %s: samples must be 0..%d per track", path, a.ID, MaxSamples)
+		}
 		switch a.Provider {
 		case Anthropic, OpenAI, ClaudeCode, Codex:
 		default:
@@ -478,8 +489,14 @@ func Load(path string) (*Config, error) {
 	if c.Schedule.DailyHourUTC != nil && (*c.Schedule.DailyHourUTC < 0 || *c.Schedule.DailyHourUTC > 23) {
 		return nil, fmt.Errorf("daily UTC hour must be 0..23")
 	}
+	if c.Budget.Concurrency > MaxConcurrency {
+		return nil, fmt.Errorf("%s: [budget] concurrency must be 1..%d", path, MaxConcurrency)
+	}
 	if c.Budget.Concurrency <= 0 {
 		c.Budget.Concurrency = 4
+	}
+	if c.Tiers.PLG.MaxSamples > MaxSamples {
+		return nil, fmt.Errorf("%s: [tiers.plg] max_samples must be 1..%d", path, MaxSamples)
 	}
 	if c.Tiers.Core.EveryDays <= 0 {
 		c.Tiers.Core.EveryDays = 1
