@@ -26,8 +26,18 @@ jobs:
       - run: go test ./...
       - name: version
         id: v
+        # The tag becomes an image tag, a chart version and a release name, so it must be plain
+        # vMAJOR.MINOR.PATCH (no prerelease suffix, no leading zeros) before anything uses it.
         run: |
-          if [ "$PUBLISH" = true ]; then v=${GITHUB_REF_NAME}; else v=v0.0.0-dev; fi
+          if [ "$PUBLISH" = true ]; then
+            v=$GITHUB_REF_NAME
+            if ! [[ "$v" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+              echo "::error::tag must look like v1.2.3"
+              exit 1
+            fi
+          else
+            v=v0.0.0-dev
+          fi
           {
             echo "version=$v"
             echo "semver=${v#v}"
@@ -61,10 +71,15 @@ jobs:
         with:
           version: v4.3.0
       - name: chart
+        env:
+          SEMVER: ${{ steps.v.outputs.semver }}
+          VERSION: ${{ steps.v.outputs.version }}
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REGISTRY_USER: ${{ github.actor }}
         run: |
-          helm package charts/cheapseats --version "${{ steps.v.outputs.semver }}" --app-version "${{ steps.v.outputs.version }}" -d dist
+          helm package charts/cheapseats --version "$SEMVER" --app-version "$VERSION" -d dist
           if [ "$PUBLISH" = true ]; then
-            echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+            printf '%s' "$REGISTRY_TOKEN" | helm registry login ghcr.io -u "$REGISTRY_USER" --password-stdin
             helm push dist/cheapseats-*.tgz "oci://ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/charts"
           fi
       - name: draft the release
