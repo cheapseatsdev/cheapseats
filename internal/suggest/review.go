@@ -219,7 +219,9 @@ const maxQuestion = 300
 
 // checked keeps the edits cheapseats check accepts: each is applied in turn to a copy of the sets in
 // a temporary directory, and one that adds an error (a repeat, a bad id, the brand where it may
-// not be) is dropped with the error.
+// not be) is dropped with the error. The directory is private to this call: it is emptied, never
+// removed and remade, between edits, and each file is created new, so nothing at that path can be
+// swapped for a symlink. If the copy can't be written, nothing is checked: e is returned as it was.
 func checked(set sets.Set, all []sets.Set, brand []string, e Edits) Edits {
 	dir, err := os.MkdirTemp("", "cheapseats-review-")
 	if err != nil {
@@ -232,16 +234,11 @@ func checked(set sets.Set, all []sets.Set, brand []string, e Edits) Edits {
 			others = append(others, s)
 		}
 	}
+	var failed error // writing the copy failed: the check can't be trusted
 	errs := func(s sets.Set) map[string]bool {
-		os.RemoveAll(dir)
-		os.MkdirAll(dir, 0o755)
-		for _, x := range append(others, s) {
-			f, err := os.Create(filepath.Join(dir, x.ID+".toml"))
-			if err != nil {
-				return map[string]bool{err.Error(): true}
-			}
-			toml.NewEncoder(f).Encode(x)
-			f.Close()
+		if err := reviewWriteSets(dir, append(others, s)); err != nil {
+			failed = err
+			return nil
 		}
 		out := map[string]bool{}
 		if err := sets.Check(dir, brand); err != nil {
@@ -257,9 +254,15 @@ func checked(set sets.Set, all []sets.Set, brand []string, e Edits) Edits {
 		kept.DroppedWhy = append(kept.DroppedWhy, fmt.Sprintf(why, a...))
 	}
 	base := errs(set)
+	if failed != nil {
+		return e
+	}
 	cur := set
 	cur.Prompts = append([]sets.Prompt(nil), set.Prompts...)
 	try := func(next sets.Set, what string) bool {
+		if failed != nil {
+			return false
+		}
 		for msg := range errs(next) {
 			if !base[msg] {
 				drop("%s: cheapseats check would refuse it: %s", what, msg)
@@ -297,7 +300,41 @@ func checked(set sets.Set, all []sets.Set, brand []string, e Edits) Edits {
 			kept.Add = append(kept.Add, x)
 		}
 	}
+	if failed != nil {
+		return e
+	}
 	return kept
+}
+
+// reviewWriteSets empties dir and writes each set into it as <id>.toml, every file created new
+// (O_EXCL, so an existing name or a symlink planted there is an error rather than followed).
+func reviewWriteSets(dir string, all []sets.Set) error {
+	old, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	for _, f := range old {
+		if err := os.Remove(filepath.Join(dir, f.Name())); err != nil {
+			return err
+		}
+	}
+	for _, x := range all {
+		if x.ID == "" || strings.ContainsAny(x.ID, `/\`) {
+			return fmt.Errorf("set id %q is not a file name", x.ID)
+		}
+		f, err := os.OpenFile(filepath.Join(dir, x.ID+".toml"), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+		if err != nil {
+			return err
+		}
+		err = toml.NewEncoder(f).Encode(x)
+		if cerr := f.Close(); err == nil {
+			err = cerr
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Diff renders edits against set's file: a rewrite as its prompt's text line replaced, a
