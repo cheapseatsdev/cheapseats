@@ -327,7 +327,27 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/competitors/suggestions", s.apiCompetitorSuggestions)
 	mux.HandleFunc("POST /api/competitors/suggestions/{host}/dismiss", s.apiDismissSuggestion)
 	mux.Handle("/api/mcp", s.mcpHandler())
-	return s.refuseForeign(s.auth(logRequests(s.refuseChanges(mux))))
+	return limitBodies(s.refuseForeign(s.auth(logRequests(s.refuseChanges(mux)))))
+}
+
+// The most a request body may hold: forms, JSON and MCP calls are all small. Sign-in, which
+// anyone can reach, gets only enough for a token, so a multipart upload can't spill to disk.
+const (
+	maxBody      = 1 << 20
+	maxLoginBody = 4 << 10
+)
+
+// limitBodies caps every request's body; a handler reading past the cap gets an error and the
+// connection is closed.
+func limitBodies(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := int64(maxBody)
+		if r.URL.Path == "/login" {
+			n = maxLoginBody
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, n)
+		h.ServeHTTP(w, r)
+	})
 }
 
 // refuseForeign refuses what a page on another site can make a browser send here, which the

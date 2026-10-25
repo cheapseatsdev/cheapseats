@@ -33,6 +33,10 @@ Mounting a checkout at `/config` instead of building an image works too, as in t
 - **Time to stop.** On SIGTERM Cheap Seats marks runs in progress as interrupted, and resumes them on
   the next start; give it 30 seconds.
 - **Probes:** `GET /healthz` answers `ok` without a token.
+- **Request limits:** a client has a minute to send a request and two to start the next on an idle
+  connection. A body holds at most 1 MiB (4 KiB for `/login`), a fix attempt's link 2048 bytes and
+  its note 4096. Responses aren't time-limited: MCP's `wait_for_run` holds a call open for up to ten
+  minutes, so a proxy in front needs a read timeout longer than that.
 - **Share links:** `GET /share/<token>` answers without a token, serving only that link's run
   ([sharing](sharing.md)). Set `CHEAPSEATS_PUBLIC_URL` to the address people reach Cheap Seats at, so the
   links point there; a proxy that signs people in must let `/share/` through for them to work.

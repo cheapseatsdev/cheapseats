@@ -111,6 +111,13 @@ func TestMarkingAFixAndItsRetry(t *testing.T) {
 		t.Errorf("no link: %d", rec.Code)
 	}
 	pr := "https://github.com/cheapseatsdev/cheapseats-site/pull/9"
+	// A note or link past its cap is refused, not stored (MCP's mark_fix reaches MarkFix too).
+	if rec := post("/runs/"+first+"/fixes/1/attempts", url.Values{"url": {pr}, "note": {strings.Repeat("x", app.MaxAttemptNote+1)}}); rec.Code != 400 {
+		t.Errorf("long note: %d", rec.Code)
+	}
+	if rec := post("/runs/"+first+"/fixes/1/attempts", url.Values{"url": {pr + "?" + strings.Repeat("x", app.MaxAttemptURL)}}); rec.Code != 400 {
+		t.Errorf("long link: %d", rec.Code)
+	}
 	rec := post("/runs/"+first+"/fixes/1/attempts", url.Values{"url": {pr}, "note": {"the guide"}, "back": {"//evil.example/"}})
 	if rec.Code != 303 || rec.Header().Get("location") != "/runs/"+first+"#fix-1" {
 		t.Fatalf("mark: %d %s", rec.Code, rec.Header().Get("location"))

@@ -252,10 +252,25 @@ func TargetKey(target string) string {
 	return strings.TrimRight(t, "/")
 }
 
+// The longest link and note an attempt stores, in bytes. A commit or pull request URL is far
+// shorter, and a note is a line or two; anything longer is a mistake or abuse, refused rather than
+// cut, so what's stored is what was sent.
+const (
+	MaxAttemptURL  = 2048
+	MaxAttemptNote = 4096
+)
+
 // MarkFix records work submitted for fix rank of run runID: the commit or pull request at link, in
 // state (proposed when empty).
 func (a *App) MarkFix(ctx context.Context, runID string, rank int, link, state, note, by string) (Attempt, error) {
-	u, err := url.Parse(strings.TrimSpace(link))
+	link, note = strings.TrimSpace(link), strings.TrimSpace(note)
+	if len(link) > MaxAttemptURL {
+		return Attempt{}, fmt.Errorf("the link is %d bytes; at most %d", len(link), MaxAttemptURL)
+	}
+	if len(note) > MaxAttemptNote {
+		return Attempt{}, fmt.Errorf("the note is %d bytes; at most %d", len(note), MaxAttemptNote)
+	}
+	u, err := url.Parse(link)
 	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
 		return Attempt{}, fmt.Errorf("a link to the commit or pull request is required, as an http(s) URL")
 	}
@@ -276,7 +291,7 @@ func (a *App) MarkFix(ctx context.Context, runID string, rank int, link, state, 
 			continue
 		}
 		now := store.Now()
-		at := Attempt{RunID: runID, SetID: r.SetID, Rank: rank, Fix: f, URL: u.String(), State: st, Note: strings.TrimSpace(note), By: by, CreatedAt: now, UpdatedAt: now}
+		at := Attempt{RunID: runID, SetID: r.SetID, Rank: rank, Fix: f, URL: u.String(), State: st, Note: note, By: by, CreatedAt: now, UpdatedAt: now}
 		AttemptTransitions.Check("fix_attempts", newAttempt, at.State)
 		res, err := a.DB.ExecContext(ctx, `INSERT INTO fix_attempts(run_id,set_id,fix_rank,fix,target_key,url,state,note,marked_by,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
 			at.RunID, at.SetID, at.Rank, mustJSON(f), TargetKey(f.Target), at.URL, at.State, at.Note, at.By, at.CreatedAt, at.UpdatedAt)
