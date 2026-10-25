@@ -7,7 +7,7 @@
   <span>{{len .Rows}} prompt sets</span>
   <span>Latest saved day per set and track</span>
   <span class="budget">Today's spend <b>{{money (index .Spend "spent_today_usd")}}</b> of {{money (index .Spend "daily_budget_usd")}}</span>
-  <details class="help-disclosure" id="dashboard-method"><summary>How to read this</summary><p>Buyer questions are asked of each assistant with and without web search. <b>Recommended</b> means {{brand}} is one of an answer's primary picks; <b>named</b> means it appears in the answer. Each prompt counts once. Search uses the web; recall does not. Rank is {{brand}}'s place on the share-of-voice board in search answers. Compare sets separately: each asks a different group of questions. Changes compare the prompts both days asked; a grey change is within noise.</p></details>
+  <details class="help-disclosure" id="dashboard-method"><summary>How to read this</summary><p><b>Recommended</b>: a primary pick. <b>Named</b>: graded recommended or mentioned. Search uses the web; recall doesn't. Each prompt counts once; rank uses search answers. Compare sets separately because their questions differ. Changes compare shared, unchanged prompts of the same answerers; grey means the 95% interval covers zero.</p></details>
 </div>
 
 {{if .Progress}}

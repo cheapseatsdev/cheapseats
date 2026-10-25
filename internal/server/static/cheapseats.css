@@ -147,6 +147,13 @@ h2[id]{scroll-margin-top:56px}details[id]{scroll-margin-top:56px}
 tr.us td{background:color-mix(in srgb,var(--cs-series) 8%,transparent)}
 td.barcell{width:35%}
 .s-pending{color:var(--cs-muted)}
+/* Gap bars share the largest score; paired retrieval bars share the baseline's prompt count.
+   Text cells retain every value, so these bars add no screen-reader repetition. */
+.gap-cell .bar{width:calc(var(--cs-space-12)*2);margin-top:var(--cs-space-2);margin-left:auto}
+.comparison-cell{min-width:calc(var(--cs-space-16)*3)}
+.bar-pair{display:grid;grid-template-columns:max-content minmax(var(--cs-space-16),1fr);gap:var(--cs-space-1) var(--cs-space-2);align-items:center;font-size:12px;color:var(--cs-muted)}
+.bar-pair .bar{min-width:0}
+
 
 /* Trend chart: one series in --cs-series; band a 10% wash; days faint; changes in gold. */
 .trend-wrap{position:relative;max-width:760px;margin:6px 0 10px}

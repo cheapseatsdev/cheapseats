@@ -4,6 +4,8 @@ Cheap Seats asks AI assistants a brand's buyers' questions, grades whether the a
 the brand, and builds a ranked fix list. Go, SQLite, server-rendered HTML, an MCP server. The
 docs in `docs/` are the spec: when behavior changes, the doc changes in the same PR.
 
+For user-facing prose and explanatory visuals, follow the [Cheap Seats editor skill](../cheapseats-site/skills/cheapseats-editor/SKILL.md) in the website checkout. Its canonical source is `cheapseatsdev/cheapseats-site`, under `skills/cheapseats-editor/`.
+
 ## Names
 
 - The project is Cheap Seats and always was. Do not introduce, restore or reference any other

@@ -1,11 +1,12 @@
 {{define "title"}}Rankings · {{end}}{{define "body"}}
 <div class="page-heading"><div><p class="eyebrow">Track your progress</p><h1>Rankings</h1><p class="sub">{{brand}}'s place on each category's share-of-voice board, day by day.</p></div></div>
-<div class="meta-row"><span>Search and recall tracked separately</span><details class="help-disclosure" id="rankings-method"><summary>How to read the trends</summary><p>The newest finished run each UTC day, search and recall apart. Rates count each prompt once. When a set's prompts, competitors or answerers change, the trend carries on and the day says what changed; "vs day before" only compares the prompts both days asked, worded the same, of the same answerers, prompt by prompt, and greys out a change within noise: one whose 95% interval covers zero. A change in how answers are asked or graded starts the comparison over.</p></details></div>
+<div class="meta-row"><span>Search and recall tracked separately</span><details class="help-disclosure" id="rankings-method"><summary>How comparisons work</summary><p>Each UTC day's newest finished run; each prompt counts once. Day-over-day changes compare shared, unchanged prompts of the same answerers. Grey changes have a 95% interval covering zero. Set changes are annotated; a change in how answers are asked or graded restarts comparisons.</p></details></div>
+<p class="muted small">Dots: daily rates. Line: rolling average. Shading: 95% band across prompts (questions like these). Hover a day for sampling uncertainty on that day's fixed prompts. Vertical lines mark set or method changes; triangles mark proposed or accepted fixes.</p>
 <div class="filter-toolbar filters"><p class="row"><span class="muted small filter-name">Rate</span>{{range .Metrics}}<a class="filter-option" href="{{.Href}}"{{if .On}} aria-current="true"{{end}}>{{.Label}}</a>{{end}}</p>
 <p class="row"><span class="muted small filter-name">Rolling</span>{{range .Windows}}<a class="filter-option" href="{{.Href}}"{{if .On}} aria-current="true"{{end}}>{{.Label}}</a>{{end}}</p></div>
 {{if not .Rankings}}<p class="muted">No finished runs yet.</p>{{end}}
 {{range .Rankings}}<h2>{{.SetName}} · {{.Track}} <span class="chip">{{.Tier}}</span></h2>
-<p class="muted small">{{$.MetricName}}, {{$.Window}}-day average, with its 95% band across prompts (questions like these); hover a day for its own rate with the interval for this set's prompts that day. Dots are single days, lines mark a change to the set, triangles a fix proposed or accepted.</p>
+<p class="muted small">{{$.MetricName}} · {{$.Window}}-day average · 95% band across prompts.</p>
 {{trend . $.Metric}}
 <details class="table-view"><summary class="muted small">Day by day</summary>
 <div class="scroll"><table><tr><th>Day</th><th>Rank</th><th>Leader</th><th>Recommended</th><th>Named</th><th>{{$.Window}}-day named</th><th>Vs day before</th><th>What changed</th></tr>
