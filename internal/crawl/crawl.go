@@ -29,6 +29,11 @@ type Event struct {
 	Hash  string // identifies the request, so a log imported twice counts once
 }
 
+// ErrorPath is the one path every request answered 4xx or 5xx is counted under, per host, day,
+// class and bot. Anyone can send a crawler's user agent for any path, and a 404 for each made-up
+// one would otherwise be a row of its own: errors are counted, but not by page.
+const ErrorPath = "/(errors)"
+
 // assets are file types that aren't pages: a crawler fetching them says nothing about a page.
 var assets = map[string]bool{".css": true, ".js": true, ".mjs": true, ".map": true, ".png": true, ".jpg": true, ".jpeg": true, ".gif": true,
 	".webp": true, ".avif": true, ".svg": true, ".ico": true, ".woff": true, ".woff2": true, ".ttf": true, ".otf": true, ".eot": true,
@@ -48,6 +53,9 @@ func Classify(h Hit, host string) (Event, bool) {
 		return Event{}, false
 	}
 	e := Event{Day: h.Time.UTC().Format("2006-01-02"), Host: host, Path: NormPath(p), Error: h.Status >= 400}
+	if e.Error {
+		e.Path = ErrorPath
+	}
 	if b, ok := bots.Match(h.UA); ok {
 		e.Class, e.Bot = b.Class, b.Token
 	} else if name, ok := referrer(h.Referer, q); ok {
@@ -105,10 +113,12 @@ func Key(raw string) (host, p string) {
 // Stats is what an import found.
 type Stats struct {
 	Lines     int                `json:"lines"`
-	Unread    int                `json:"unread"`    // in no format Parse knows, or too long to be a request
-	Counted   int                `json:"counted"`   // new AI crawler fetches and referred visits
-	Duplicate int                `json:"duplicate"` // counted by an earlier import
-	TooOld    int                `json:"too_old"`   // from more than keepDays ago: not counted
+	Unread    int                `json:"unread"`     // in no format Parse knows, or too long to be a request
+	Counted   int                `json:"counted"`    // new AI crawler fetches and referred visits
+	Duplicate int                `json:"duplicate"`  // counted by an earlier import
+	TooOld    int                `json:"too_old"`    // from more than keepDays ago: not counted
+	Future    int                `json:"future"`     // dated after tomorrow (UTC): not counted
+	OverLimit int                `json:"over_limit"` // past maxEvents new ones in this import: not counted; import the log again for the rest
 	ByClass   map[bots.Class]int `json:"by_class"`
 	NoHost    bool               `json:"no_host"` // lines had no host, and none was given
 }
@@ -133,14 +143,23 @@ func Import(ctx context.Context, db *sql.DB, r io.Reader, host string) (Stats, e
 		return st, err
 	}
 	// Hashes are kept as long as a log line counts: older lines are left out, so a log from
-	// before then imported again can't count twice.
-	horizon := time.Now().UTC().AddDate(0, 0, -keepDays).Format("2006-01-02")
-	if _, err := tx.ExecContext(ctx, `DELETE FROM crawl_seen WHERE day < ?`, horizon); err != nil {
-		return st, err
+	// before then imported again can't count twice. The counts are kept as long, too. A line
+	// dated after tomorrow is a wrong clock or a forged line, and is left out as well.
+	now := time.Now().UTC()
+	horizon := now.AddDate(0, 0, -keepDays).Format("2006-01-02")
+	tomorrow := now.AddDate(0, 0, 1).Format("2006-01-02")
+	for _, table := range []string{"crawl_seen", "crawl_daily"} {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM `+table+` WHERE day < ?`, horizon); err != nil {
+			return st, err
+		}
 	}
 	count := func(e Event) error {
 		if e.Host == "" {
 			st.NoHost = true
+		}
+		if st.Counted >= maxEvents {
+			st.OverLimit++
+			return nil
 		}
 		res, err := seen.ExecContext(ctx, e.Hash, e.Day)
 		if err != nil {
@@ -173,6 +192,8 @@ func Import(ctx context.Context, db *sql.DB, r io.Reader, host string) (Stats, e
 				st.Unread++ // a line too long to be a request, or in no format Parse knows
 			} else if e, ok := Classify(h, host); ok && e.Day < horizon {
 				st.TooOld++
+			} else if ok && e.Day > tomorrow {
+				st.Future++
 			} else if ok {
 				if err := count(e); err != nil {
 					return st, err
@@ -189,8 +210,12 @@ func Import(ctx context.Context, db *sql.DB, r io.Reader, host string) (Stats, e
 	return st, tx.Commit()
 }
 
-// keepDays is how far back an import counts lines, and keeps their hashes.
+// keepDays is how far back an import counts lines, and keeps their hashes and the daily counts.
 const keepDays = 400
+
+// maxEvents is the most new requests one import counts. Duplicates don't count toward it, so
+// importing the same log again carries on where this one stopped.
+var maxEvents = 1_000_000
 
 // maxLine is the longest log line read; a longer one is skipped, not the whole import.
 const maxLine = 1 << 20
@@ -329,6 +354,7 @@ func Build(ctx context.Context, db *sql.DB, days int, cited map[[2]string]Use) (
 		row.Use = cited[k]
 		ai := row.Assistant + row.Search + row.Training
 		switch {
+		case row.Path == ErrorPath: // not a page: nothing to cite
 		case ai > 0 && row.Cited == 0:
 			row.Flag = "crawled-not-cited"
 		case row.Cited > 0 && row.Assistant+row.Search == 0:

@@ -67,7 +67,7 @@ func TestClassify(t *testing.T) {
 		errorCount bool
 	}{
 		{Hit{Target: "/docs/", UA: "Mozilla/5.0; compatible; OAI-SearchBot/1.0"}, bots.Search, "OAI-SearchBot", "cheapseats.dev", "/docs", true, false},
-		{Hit{Target: "/", UA: "ClaudeBot/1.0", Status: 503}, bots.Training, "ClaudeBot", "cheapseats.dev", "/", true, true},
+		{Hit{Target: "/made-up", UA: "ClaudeBot/1.0", Status: 404}, bots.Training, "ClaudeBot", "cheapseats.dev", ErrorPath, true, true},
 		{Hit{Host: "WWW.CheapSeats.Dev:443", Target: "/a?b=1", UA: "Mozilla/5.0 (compatible; bingbot/2.0)"}, bots.Engine, "Bingbot", "cheapseats.dev", "/a", true, false},
 		{Hit{Target: "/p", UA: "Mozilla/5.0", Referer: "https://www.perplexity.ai/search?q=x"}, bots.Referral, "Perplexity", "cheapseats.dev", "/p", true, false},
 		{Hit{Target: "/p?utm_source=chatgpt.com", UA: "Mozilla/5.0"}, bots.Referral, "ChatGPT", "cheapseats.dev", "/p", true, false},
@@ -171,5 +171,65 @@ func TestImportSkipsLongAndOldLines(t *testing.T) {
 	db.QueryRow(`SELECT COUNT(*) FROM crawl_seen WHERE hash='stale'`).Scan(&n)
 	if n != 0 {
 		t.Error("hashes past the horizon weren't pruned")
+	}
+}
+
+// Anyone can send a crawler's user agent: made-up paths, future dates and old counts don't grow
+// the database, and one import stops at maxEvents.
+func TestImportBoundsWhatAForgedLogCanAdd(t *testing.T) {
+	db, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	ctx := context.Background()
+	future := today.AddDate(0, 0, 3).Format("02/Jan/2006:15:04:05 -0700")
+	var lines []string
+	for i := 0; i < 50; i++ {
+		lines = append(lines, `203.0.113.7 - - [`+clf+`] "GET /no-such-page-`+strconv.Itoa(i)+` HTTP/1.1" 404 0 "-" "GPTBot/1.0"`)
+	}
+	lines = append(lines,
+		`203.0.113.7 - - [`+clf+`] "GET /real HTTP/1.1" 200 1 "-" "GPTBot/1.0"`,
+		`203.0.113.7 - - [`+future+`] "GET /future HTTP/1.1" 200 1 "-" "GPTBot/1.0"`)
+	db.Exec(`INSERT INTO crawl_daily (day, host, path, class, bot, hits, errors) VALUES (?, 'cheapseats.dev', '/stale', 'training', 'GPTBot', 1, 0)`,
+		today.AddDate(0, 0, -keepDays-1).Format("2006-01-02"))
+	st, err := Import(ctx, db.DB, strings.NewReader(strings.Join(lines, "\n")), "cheapseats.dev")
+	if err != nil || st.Counted != 51 || st.Future != 1 {
+		t.Fatalf("%+v %v", st, err)
+	}
+	var paths []string
+	rows, _ := db.Query(`SELECT path || ':' || hits || ':' || errors FROM crawl_daily ORDER BY path`)
+	for rows.Next() {
+		var p string
+		rows.Scan(&p)
+		paths = append(paths, p)
+	}
+	rows.Close()
+	if strings.Join(paths, " ") != ErrorPath+":50:50 /real:1:0" {
+		t.Errorf("crawl_daily: %v; want the 404s in one row, the real page, nothing stale or future", paths)
+	}
+	rep, err := Build(ctx, db.DB, 30, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range rep.Pages {
+		if p.Path == ErrorPath && (p.Flag != "" || p.Errors != 50) {
+			t.Errorf("the errors row: %+v", p)
+		}
+	}
+
+	old := maxEvents
+	maxEvents = 2
+	t.Cleanup(func() { maxEvents = old })
+	more := []string{
+		`203.0.113.8 - - [` + clf + `] "GET /a HTTP/1.1" 200 1 "-" "GPTBot/1.0"`,
+		`203.0.113.8 - - [` + clf + `] "GET /b HTTP/1.1" 200 1 "-" "GPTBot/1.0"`,
+		`203.0.113.8 - - [` + clf + `] "GET /c HTTP/1.1" 200 1 "-" "GPTBot/1.0"`,
+	}
+	if st, err = Import(ctx, db.DB, strings.NewReader(strings.Join(more, "\n")), "cheapseats.dev"); err != nil || st.Counted != 2 || st.OverLimit != 1 {
+		t.Fatalf("over the limit: %+v %v", st, err)
+	}
+	if st, err = Import(ctx, db.DB, strings.NewReader(strings.Join(more, "\n")), "cheapseats.dev"); err != nil || st.Counted != 1 || st.Duplicate != 2 {
+		t.Errorf("imported again, the rest counts: %+v %v", st, err)
 	}
 }
