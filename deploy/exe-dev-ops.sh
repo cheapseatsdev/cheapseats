@@ -22,11 +22,15 @@ home=$(remote 'echo $HOME')
 user=$(remote whoami)
 dir="$home/cheapseats"
 
-remote "mkdir -p '$dir/bin' '$dir/backups' && cat > '$dir/bin/cheapseats-backup' && chmod +x '$dir/bin/cheapseats-backup'" <<'EOF'
+remote "mkdir -p '$dir/bin' '$dir/backups' && chmod 700 '$dir/backups' && cat > '$dir/bin/cheapseats-backup' && chmod +x '$dir/bin/cheapseats-backup'" <<'EOF'
 #!/usr/bin/env bash
-# A consistent copy of the database (safe while Cheap Seats runs), keeping the newest 14.
+# A consistent copy of the database (safe while Cheap Seats runs), keeping the newest 14. The
+# copies are this user's alone, like the database.
 set -euo pipefail
+umask 077
 dir="$HOME/cheapseats"
+chmod 700 "$dir/backups"
+find "$dir/backups" -maxdepth 1 -type f -name 'cheapseats-*.db' -exec chmod 600 {} +
 sqlite3 "$dir/data/cheapseats.db" ".backup '$dir/backups/cheapseats-$(date -u +%Y-%m-%d).db'"
 ls -1t "$dir"/backups/cheapseats-*.db | tail -n +15 | xargs -r rm -f
 EOF
