@@ -55,7 +55,6 @@ to check wording and coverage.
 | --- | --- |
 | `ai-search-visibility` | Named presence while explaining awareness and measurement; one explicit tool-discovery question also measures recommendations. |
 | `choosing-ai-visibility-tool` | Open tool selection and requests for alternatives, plus informational evaluation questions. |
-| `competitor-comparisons` | Choices within a supplied pair of other products; omission of a third brand is not failed open discovery. |
 | `fix-ai-recommendations` | Named presence while explaining diagnosis and improvement; one explicit tool-selection question also measures recommendations. |
 | `head-to-heads` | Known-brand comparison and fit; naming the brand in the question prevents a discovery claim. Named presence alone does not establish factual accuracy. |
 | `self-hosted-ai-visibility` | Open-source, self-hosted and DIY needs; a constrained segment, not the whole market. |
@@ -63,6 +62,13 @@ to check wording and coverage.
 Selection/info and whether the question supplies a brand or shortlist are separate distinctions.
 These descriptions do not add new TOML intent values. The `core` tier controls scheduling and
 samples; it does not by itself identify a frozen benchmark.
+
+Keep closed comparisons between other products outside this scored library. Every set still
+grades the configured brand and generates fixes for it; moving such questions to a separate
+set does not make their expected brand absence or missing own pages an actionable gap.
+Open requests such as "What are alternatives to Profound?" remain useful discovery questions.
+The closed-comparison ids `peec-ai-vs-profound` and `otterly-vs-peec-ai-budget` are retired;
+do not reuse them. Stored runs and their original ids remain in the database.
 
 **Set edits do not start a new method.** Rankings annotate added, removed and reworded prompts,
 intent changes, competitors and answerers. Day-over-day comparisons use only shared prompts,
