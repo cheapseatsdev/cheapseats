@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"html"
 	"net/http/httptest"
 	"os"
 	"strings"
@@ -27,11 +28,13 @@ func TestQuickWinsShowWhichSetsAlsoAskForAPage(t *testing.T) {
 		"ai-search-visibility":   {Rank: 1, Type: analysis.NewPage, Title: "Publish a pricing page", Target: "https://cheapseats.dev/pricing", Claim: "c", DoneWhen: "d", Prompts: []int{1}, Effort: "S"},
 		"fix-ai-recommendations": {Rank: 1, Type: analysis.NewPage, Title: "Add a plans and pricing page", Target: "https://cheapseats.dev/plans", Claim: "c", DoneWhen: "d", Prompts: []int{1}, Effort: "M"},
 	}
+	setNames := map[string]string{}
 	for id, f := range fixes {
 		set, ok := a.Set(id)
 		if !ok {
 			t.Fatalf("no set %s", id)
 		}
+		setNames[id] = set.Name
 		r, err := a.Runs.Create(ctx, set, "test")
 		if err != nil {
 			t.Fatal(err)
@@ -96,11 +99,12 @@ func TestQuickWinsShowWhichSetsAlsoAskForAPage(t *testing.T) {
 		t.Fatal(err)
 	}
 	body := get("/quick-wins")
-	if strings.Count(body, `class="fix-item"`) != 1 || !strings.Contains(body, "also asked for by Getting recommended instead of a competitor") || !strings.Contains(body, "<b>Also asked for by:</b>") {
+	otherSetName := setNames["fix-ai-recommendations"]
+	if strings.Count(body, `class="fix-item"`) != 1 || !strings.Contains(body, "also asked for by "+html.EscapeString(otherSetName)) || !strings.Contains(body, "<b>Also asked for by:</b>") {
 		t.Errorf("after: %s", limit(body))
 	}
 	json.Unmarshal([]byte(get("/api/quick-wins")), &api)
-	if len(api) != 1 || len(api[0].AlsoIn) != 1 || api[0].AlsoIn[0].SetID != "fix-ai-recommendations" || api[0].AlsoIn[0].Rank != 1 || api[0].AlsoIn[0].Confidence != 0.9 {
+	if len(api) != 1 || len(api[0].AlsoIn) != 1 || api[0].AlsoIn[0].SetID != "fix-ai-recommendations" || api[0].AlsoIn[0].SetName != otherSetName || api[0].AlsoIn[0].Rank != 1 || api[0].AlsoIn[0].Confidence != 0.9 {
 		t.Errorf("api after: %+v", api)
 	}
 	// Filtering by the other set still finds the card.
@@ -108,7 +112,8 @@ func TestQuickWinsShowWhichSetsAlsoAskForAPage(t *testing.T) {
 	if len(api) != 1 {
 		t.Errorf("filtered by the other set: %+v", api)
 	}
-	if out := quickWins(); !strings.Contains(out, `"also_in"`) || !strings.Contains(out, `"set_name":"Getting recommended instead of a competitor"`) {
+	encodedName, _ := json.Marshal(otherSetName)
+	if out := quickWins(); !strings.Contains(out, `"also_in"`) || !strings.Contains(out, `"set_name":`+string(encodedName)) {
 		t.Errorf("mcp after: %s", limit(out))
 	}
 }

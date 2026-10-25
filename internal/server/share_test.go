@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"html"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -108,11 +109,27 @@ func TestShareLifecycle(t *testing.T) {
 	if len(shares) != 2 || !shares[0].IncludeAnswers {
 		t.Fatalf("shares: %+v", shares)
 	}
-	// Every answer named the brand and none recommended it, so no prompt stands out: make the
-	// first one a loss to a competitor.
-	db.Exec(`UPDATE results SET verdict='absent', grade=replace(replace(grade, '"verdict":"mentioned"', '"verdict":"absent"'), ',"Cheap Seats"]', ']') WHERE run_id=? AND prompt_idx=0`, r1)
+	// Every answer named the brand and none recommended it, so no prompt stands out. Make a
+	// selection question a loss to a competitor; informational prompts are excluded from the digest.
+	sharedRun, err := a.Runs.Get(context.Background(), r1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lossID, lossText := "", ""
+	for _, prompt := range sharedRun.Snapshot.Set.Prompts {
+		if !prompt.Info() {
+			lossID, lossText = prompt.ID, prompt.Text
+			break
+		}
+	}
+	if lossID == "" {
+		t.Fatal("share fixture needs a selection question")
+	}
+	if _, err := db.Exec(`UPDATE results SET verdict='absent', grade=replace(replace(grade, '"verdict":"mentioned"', '"verdict":"absent"'), ',"Cheap Seats"]', ']') WHERE run_id=? AND prompt_id=?`, r1, lossID); err != nil {
+		t.Fatal(err)
+	}
 	withAnswers := create(r1, `{"include_answers":true}`)
-	if body := do("GET", pathOf(withAnswers.URL), "", false).Body.String(); !strings.Contains(body, "Use Docker Sandboxes or Cheap Seats.") {
+	if body := do("GET", pathOf(withAnswers.URL), "", false).Body.String(); !strings.Contains(body, html.EscapeString(lossText)) || !strings.Contains(body, "Use Docker Sandboxes or Cheap Seats.") {
 		t.Errorf("include_answers: no answer text in\n%s", limit(body))
 	}
 

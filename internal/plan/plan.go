@@ -84,7 +84,7 @@ func Markdown(before, after Config) string {
 				}
 			}
 			if ok && oldSetOf[p.ID] != s.ID {
-				lines = append(lines, fmt.Sprintf("- `%s` moved here from `%s`; its history comes with it.", p.ID, oldSetOf[p.ID]))
+				lines = append(lines, fmt.Sprintf("- `%s` moved here from `%s` with the same prompt id; stored runs retain their original set and prompt ids.", p.ID, oldSetOf[p.ID]))
 			}
 		}
 		if existed {
@@ -104,7 +104,7 @@ func Markdown(before, after Config) string {
 				lines = append(lines, "- Reworded: "+codes(reworded)+". Their history carries on, marked.")
 			}
 			if len(toInfo) > 0 {
-				lines = append(lines, "- Now info prompts: "+codes(toInfo)+". From the next run they're scored on being named or cited only, and leave the recommended and top-pick rates; the day it changes is marked.")
+				lines = append(lines, "- Now info prompts: "+codes(toInfo)+". From the next run they contribute to named rate only (citations are tracked separately), and leave the recommended and top-pick rates; the day it changes is marked.")
 			}
 			if len(fromInfo) > 0 {
 				lines = append(lines, "- No longer info prompts: "+codes(fromInfo)+". From the next run they count toward recommended and top pick again; the day it changes is marked.")

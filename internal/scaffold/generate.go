@@ -180,7 +180,7 @@ func Build(s Site, competitors []string) Plan {
 	alt := Starter{
 		ID: "alternatives", Name: "Alternatives", Tier: sets.PLG,
 		Description: fmt.Sprintf("Buyers using or weighing another %s, looking for something else.", cat),
-		Note:        "TODO: one prompt per competitor buyers move away from. Comparisons between competitors belong here; comparisons with the brand go in head-to-heads.",
+		Note:        "TODO: one prompt per competitor buyers move away from. A closed comparison between competitors is research about that shortlist, not open discovery for the brand; group it separately when interpreting results. Comparisons with the brand go in head-to-heads.",
 	}
 	for i, c := range competitors {
 		if i == 5 {
@@ -221,7 +221,7 @@ func Build(s Site, competitors []string) Plan {
 	}
 	h2h.Prompts = append(h2h.Prompts,
 		pr("is-"+brand+"-good", fmt.Sprintf("Is %s a good %s?", s.Name, cat), false),
-		pr(brand+"-downsides", fmt.Sprintf("What are the downsides of %s?", s.Name), false),
+		pr(brand+"-downsides", fmt.Sprintf("What are the downsides of %s?", s.Name), true),
 		pr("is-"+brand+"-worth-paying-for", fmt.Sprintf("Is %s worth paying for?", s.Name), false),
 	)
 	p.Sets = append(p.Sets, h2h)

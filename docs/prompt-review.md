@@ -20,13 +20,16 @@ since the last run, the review uses and identifies the last-run wording.
 
 A prompt needs **3 runs and 6 graded answers** in the window. Otherwise it is listed under
 "not enough data yet", with no flags except branded prompts, detectable from the first run.
+These are eligibility gates for the checks, not guarantees of precision or prompt quality.
 
 ## Flags
 
 Each flag comes with the numbers behind it and a one-line suggestion. Thresholds are constants in
-`internal/app/review.go`.
+`internal/app/review.go`. The table describes the current generated suggestions; review them
+against the buying situation before changing a prompt. A flag is evidence to investigate, not
+an instruction to make the brand win.
 
-| Flag | Rule | Suggestion |
+| Flag | Rule | Current generated suggestion |
 |---|---|---|
 | **Flat**, always absent | No answer named the brand, and no fix attempt made in the window moved this prompt's own named or recommended rate beyond its 95% margin. Another prompt in the same fix moving doesn't count. | Either reword or retire an unwinnable question, or keep it as an important gap and work its fixes. |
 | **Flat**, always recommended | Every answer recommended the brand (for an info prompt, named it). | At the ceiling, it only tells you when something breaks: reword it harder, or retire it to save answers. |
@@ -44,7 +47,18 @@ graded answer for the prompt does not count. One sample per cell cannot identify
 noise is not flagged. The χ² test is an approximation, not a guarantee about false flags.
 Products named repeatedly or through aliases count once per answer.
 
-A prompt with no flag and enough data is listed as healthy.
+A prompt with no flag and enough data is listed as healthy. That means none of these checks
+flagged its stored results; it does not establish buyer demand, neutrality, coverage or stability.
+In particular, one sample per answerer and track cannot separate drift from disagreement, so
+neither noise flag appears even when results vary.
+
+Keep a stable core of useful buyer questions for trends, alongside exploratory questions for
+new needs. Always-absent questions can expose important gaps or genuine product limitations;
+ceiling questions can catch regressions. Keep them when they serve those purposes. Do not
+automatically retire them, make them harder, or rewrite them toward the brand's capabilities.
+Likewise, similar answers make a duplicate candidate: check whether different constraints change
+the buying decision before merging. Record the reason for a change rather than treating a flag
+as that reason.
 
 ## Jev's flags
 
@@ -58,8 +72,17 @@ without calls.
 |---|---|---|
 | **duplicate** | Over each pair of prompts of the same intent that share a meaningful word: one good answer would serve both. | Merge them to save answers: keep one, retire the other. |
 | **off_target** | Per prompt, with `brand.category` and `brand.audience` in state: the prompt asks about something other than the category. Not asked without `brand.category`: against the product description in `brand.about` it flags every prompt that isn't about this one product. | Add context to the prompt (the category, who is asking), or retire it. |
-| **intent** | Per prompt, a Choice over `selection` (the answer that serves the buyer names a product in the category, including a how-do-I question about a job those products do) and `info` (it names none: what something is, how it works, whether a practice is worth doing); flagged when it reads as the other intent from the one it's set to. | Set or drop `intent = "info"`. |
+| **intent** | Per prompt, a Choice over `selection` (the useful answer points to a category product, including how-to jobs the category serves even when no product was requested) and `info` (an explanation without products); flagged when it reads as the other intent from the one it's set to. | Set or drop `intent = "info"`. |
 | **branded** | Per prompt outside `head-to-heads`, with the brand's name, aliases, description and sites in state: the prompt names the brand, a product of its maker or its domain in any spelling ("cheapseats.dev", "cheap-seats"). | Reword it as a buyer who hasn't heard of the brand would ask. |
+
+The current Jev selection criterion is broad: it can treat a category's how-to job as selection
+without an explicit request to choose a product. Review ambiguous cases yourself. Ask whether
+a complete, useful answer requires choosing, ranking or comparing products. If an explanation
+can fully satisfy the buyer without one, use `intent = "info"`; an optional product example
+does not make the question selection. Correct the label instead of adding a request for a tool
+solely to fit recommendation scoring. Named rates include info answers; recommended and top-pick
+rates exclude them. Changing intent keeps the id but changes those denominators, so comparisons
+must exclude that prompt across the change.
 
 `cheapseats check` judges every set after validation, printing `suggestion: set <id>: ...`
 with probabilities. Suggestions never fail validation; missing credentials print a note;
@@ -85,6 +108,10 @@ What the set's answers and searches keep coming back to that no prompt names, at
 Each gap includes a buyer-worded `[[prompts]]` entry with no search operators and an unused id:
 "What are the best alternatives to X?" for products, or the search as a question for topics.
 Review the wording before committing; ids are permanent.
+These are gaps in the observed answer/search coverage, not independent evidence that buyers ask
+the proposed questions. Validate the need and its weighting against buyer research when available.
+A named competitor shortlist can be useful research, but omission of a third brand there means
+something different from omission in open category discovery; interpret those questions separately.
 
 ## Proposed edits (optional, one analyst call)
 
@@ -96,6 +123,11 @@ words are fenced as data, quoted on one line and capped at 60 characters.
 - **Rewrites** replace a prompt's `text` and keep its `id`, so its history reads on as a reword.
 - **Retirements** are comments: delete the table by hand to stop asking it; the id stays retired.
 - **Additions** are new `[[prompts]]` tables with ids that don't collide with any set's.
+
+Keep an id for a wording clarification that preserves the buyer need. A different buying question
+needs a new id, even if a proposed rewrite reused the old one. Assess proposed changes against the
+stable core and measurement goal before applying them; generated edits do not establish demand or
+replace a review of intent.
 
 Proposals are dropped, with reasons, for nonexistent targets, unchanged rewrites, duplicate text
 across sets, search operators, quotes, links, text over 300 characters, brand names outside

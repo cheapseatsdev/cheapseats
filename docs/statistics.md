@@ -4,6 +4,26 @@ A few answers per prompt can produce large rate changes by chance. Cheap Seats e
 uncertainty from stored answers, with no extra model calls. A reading's interval and a change's
 interval answer different questions; neither establishes what caused a change.
 
+## Planning the evidence
+
+Start with 15–20 distinct buyer questions as a planning guide, not a quota or a precision
+guarantee. A smaller coherent set need not be padded. Count selection and info questions
+separately: only the selection subset contributes to recommended and top-pick rates, so twenty
+questions with three selection questions provide recommendation evidence for those three needs.
+Named rates include both intents. More questions do not establish representative buyer demand;
+check which needs the set covers and how heavily it weights them.
+
+| Add | What it helps measure |
+|---|---|
+| Distinct buyer questions | Breadth of buying situations; rewordings of the same need do not add independent coverage. |
+| Repeated samples per question, answerer and track | Within-run variation; repetition does not remove between-run drift. |
+| Comparable runs over time | Variation across runs; seven daily runs and one weekly run provide different evidence in a seven-day window. |
+
+Use the actual eligible questions, answerers, tracks, samples and measured days when discussing
+precision. A planned schedule is not an observed count. Keep search and recall separate, and
+do not transfer a worked example's margin to another configuration or cadence. See
+[sample advice](#a-sets-prompts) for the limits of estimating drift versus sampling noise.
+
 ## The building blocks
 
 For trends and outcomes, prompts are the units: rates average each prompt's rate equally,

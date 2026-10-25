@@ -1,7 +1,7 @@
 id = "fix-ai-recommendations"
-name = "Getting recommended instead of a competitor"
+name = "Improving AI answers about our product"
 tier = "core"
-description = """Past measuring: the buyer already knows assistants recommend someone else, or get the product wrong, and wants to change it. Competing for it: AEO/GEO agencies and consultants, and AI visibility platforms that add content recommendations (Profound, Gauge, Dageno AI, Peec AI). Cheap Seats' claim: its fix list names the exact page to publish or change, what it must say, which of the brand's sites it belongs on and who owns it, and the prompts it should flip, ranked by how fast it pays off."""
+description = """Marketers diagnosing inaccurate or unfavorable AI answers and deciding what work to try. Most questions ask for explanations or implementation advice and measure substantive named presence, not product preference. Only the explicit tool-selection question contributes to recommendation rates. Competing sources include agencies, consultants and visibility platforms with content guidance. Cheap Seats proposes evidence-backed pages and fix briefs and compares later answers; these observations do not establish that a fix caused a change."""
 
 # Why we lose, and what to change
 
@@ -13,6 +13,7 @@ intent = "info"
 [[prompts]]
 id = "find-why-ai-assistant-prefers"
 text = "How can I find out why an AI assistant prefers a competitor's product over ours?"
+intent = "info"
 
 [[prompts]]
 id = "ai-gets-product-facts-wrong"
@@ -69,6 +70,7 @@ intent = "info"
 [[prompts]]
 id = "see-search-results-llm-reads"
 text = "How can I see the web search results an AI assistant gets for a question before it writes its answer, to understand why we're missing?"
+intent = "info"
 
 [[prompts]]
 id = "llms-txt-worth-adding-site"

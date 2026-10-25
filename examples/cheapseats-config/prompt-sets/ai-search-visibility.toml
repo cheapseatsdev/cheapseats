@@ -1,13 +1,14 @@
 id = "ai-search-visibility"
-name = "Finding out whether AI assistants recommend us"
+name = "Understanding and measuring AI visibility"
 tier = "core"
-description = """The first questions a marketer, founder or SEO lead asks once buyers start asking ChatGPT, Claude, Perplexity, Gemini and Google AI Overviews instead of searching: is AI search costing us traffic, and are we in the answer? Competing for it: AI visibility (AEO/GEO) trackers such as Profound, Peec AI, Otterly.AI, Gauge and Dageno AI, and SEO suites adding AI features (Semrush AI Toolkit, Ahrefs Brand Radar). Cheap Seats' claim: an open-source, self-hosted tool that asks assistants your own buyer questions, with and without web search, grades whether they recommend you or merely mention you, and tells you what to fix."""
+description = """Marketers learning what AI visibility means and how to measure it. Most questions ask for methods or explanations and measure substantive named presence; only the explicit tool-discovery question contributes to recommendation rates. The questions include Google and other surfaces Cheap Seats does not measure, so their answers can expose a real coverage mismatch. Cheap Seats asks Claude and OpenAI models buyer questions, separates web search from recall, grades recommendations and builds a fix list. It does not establish that AI caused a traffic change."""
 
 # Problem awareness: is AI search affecting us, and what is this category called?
 
 [[prompts]]
 id = "ai-search-hurting-organic-traffic"
 text = "Our organic traffic is down and I suspect ChatGPT and Google AI Overviews. How do I check whether AI search is what's taking it?"
+intent = "info"
 
 [[prompts]]
 id = "geo-aeo-llm-seo-difference"
@@ -19,6 +20,7 @@ intent = "info"
 [[prompts]]
 id = "find-whether-chatgpt-recommends-product"
 text = "How can I find out whether ChatGPT recommends my product when people ask about my category?"
+intent = "info"
 
 [[prompts]]
 id = "recommended-versus-mentioned-ai-answers"
@@ -32,18 +34,22 @@ text = "What tools track how often AI assistants like ChatGPT, Claude, Perplexit
 [[prompts]]
 id = "measure-share-voice-ai-chatbot"
 text = "Is there a way to measure our share of voice in AI chatbot answers?"
+intent = "info"
 
 [[prompts]]
 id = "google-ai-overviews-mention-brand"
 text = "How can I tell whether Google AI Overviews and AI Mode mention our brand for the topics we care about?"
+intent = "info"
 
 [[prompts]]
 id = "monitor-whether-ai-search-engines"
 text = "How do I monitor whether AI search engines cite our website?"
+intent = "info"
 
 [[prompts]]
 id = "benchmark-brands-visibility-llm-answers"
 text = "What's the best way to benchmark my brand's visibility in LLM answers against competitors?"
+intent = "info"
 
 [[prompts]]
 id = "metrics-marketing-team-use-measure"
@@ -58,6 +64,7 @@ intent = "info"
 [[prompts]]
 id = "see-web-pages-ai-assistants"
 text = "How can I see which web pages AI assistants rely on when they answer questions in my category?"
+intent = "info"
 
 [[prompts]]
 id = "web-search-versus-training-data-answers"

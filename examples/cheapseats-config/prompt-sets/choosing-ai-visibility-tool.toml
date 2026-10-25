@@ -1,7 +1,7 @@
 id = "choosing-ai-visibility-tool"
 name = "Choosing an AI visibility tool"
 tier = "plg"
-description = """Buyers who have decided to track AI visibility and are comparing AEO/GEO tools: which one, for what kind of team, at what cost, covering which assistants. Competing for it: Profound, Peec AI, Otterly.AI, Gauge, Dageno AI and AI Peekaboo, and the AI features in Semrush and Ahrefs. Cheap Seats' claim: an open-source, self-hosted alternative that grades recommendation rather than mere mention, shows every answer and citation behind a number, and turns results into a ranked fix list, at the cost of the model API calls."""
+description = """Buyers choosing an AI visibility tool: team fit, price, engine coverage, evidence and integrations. Open category questions and requests for alternatives can discover products outside an existing shortlist. Closed comparisons between other named products live in competitor-comparisons. Informational questions measure named presence separately from product selection. Cheap Seats offers self-hosted Claude/OpenAI measurement, recommendation grades and fix briefs; the software is free, while model access and hosting depend on the setup. Agency, security and engine requirements remain genuine fit tests even when it cannot meet them."""
 
 [[prompts]]
 id = "generative-engine-optimization-tools-work"
@@ -10,6 +10,7 @@ text = "How do generative engine optimization tools work, and which ones are wor
 [[prompts]]
 id = "evaluate-ai-visibility-tools-checklist"
 text = "What should I look for when evaluating AI visibility or GEO tools?"
+intent = "info"
 
 [[prompts]]
 id = "best-aeo-tool-b2b-saas"
@@ -18,14 +19,6 @@ text = "What's the best AEO tool for a B2B SaaS company that wants to know if Ch
 [[prompts]]
 id = "alternatives-to-profound"
 text = "What are good alternatives to Profound for tracking AI search visibility?"
-
-[[prompts]]
-id = "peec-ai-vs-profound"
-text = "Peec AI vs Profound: which is better for a mid-size marketing team?"
-
-[[prompts]]
-id = "otterly-vs-peec-ai-budget"
-text = "Otterly.AI or Peec AI for tracking AI search visibility on a tight budget?"
 
 [[prompts]]
 id = "gauge-ai-visibility-worth-it"
