@@ -72,6 +72,20 @@ regraded. So a method change:
 `''`, no `grep -P`, no `readlink -f`, no `date -d`. `bash -n` every script you touch. Tailscale
 SSH to a Mac does not propagate exit status; branch on captured output, not `$?`.
 
+## The design system
+
+The Cheap Seats design system on Claude is built from this repo and cheapseats-site: its tokens
+from cheapseats-site `brand/web/tokens.css`, its component styles from
+`internal/server/static/cheapseats.css`, its icons from `internal/server/icons/`. After a PR that
+changes those merges, ask Claude to re-sync the design system.
+
+Three of its sections live only in the design system, not in either repo: **Product
+vocabulary**, **Accessibility** and **Icon rules**. A re-sync won't catch it when the docs or
+icons change, so when a PR adds or renames a metric, a verdict, a fix state (gap, priority,
+effort, attempt or outcome), a status or an icon, or changes how a screen handles focus,
+contrast or screen readers, say so in the PR body and ask Claude to review those sections
+after it merges.
+
 ## The weekly cut
 
 Sundays the fleet in `.claude/agents/` runs via `/weekly-cut` (`.claude/workflows/weekly-cut.js`):
