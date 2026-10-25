@@ -36,6 +36,8 @@ Mounting a checkout at `/config` instead of building an image works too, as in t
 - **Share links:** `GET /share/<token>` answers without a token, serving only that link's run
   ([sharing](sharing.md)). Set `CHEAPSEATS_PUBLIC_URL` to the address people reach Cheap Seats at, so the
   links point there; a proxy that signs people in must let `/share/` through for them to work.
+- **TLS at the proxy:** the `/login` cookie is the token, so it's `Secure` (sent only over https)
+  when `CHEAPSEATS_PUBLIC_URL` is https or the proxy sends `X-Forwarded-Proto: https`.
 
 ## Backups
 
