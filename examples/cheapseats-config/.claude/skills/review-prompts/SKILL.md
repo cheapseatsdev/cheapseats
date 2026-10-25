@@ -62,8 +62,11 @@ should I choose for this task?" asks for selection.
 
 Separately identify open category discovery, competitor-aware alternatives, closed named
 shortlists and known-brand evaluation. "A vs B" can be useful competitor research, but
-omitting a third brand does not establish failed open discovery. These are review labels,
-not new TOML intent values. Recommend separate interpretation or grouping when needed.
+when both options exclude the tracked brand, keep it outside the scored prompt library.
+Every set still grades that brand and generates fixes for it; another set does not make
+its expected absence or missing own pages actionable. Open "alternatives to A" questions
+can discover other products and remain valid. A comparison including the tracked brand
+can measure known-brand fit. These are review labels, not new TOML intent values.
 
 ### 3. Buyer realism
 
@@ -100,6 +103,8 @@ Flag semantic duplicates, overrepresented needs, and missing buying situations.
 Do not treat rewordings as independent coverage.
 Treat wording overlap as a duplicate candidate, not proof. Check whether different constraints
 change the buying decision; use supplied stored-answer evidence when available.
+Apply the same measurement review to suggestions from assistant search queries: a frequent
+closed comparison between other brands is not thereby a suitable scored buyer question.
 
 ## Assess the set and sampling
 

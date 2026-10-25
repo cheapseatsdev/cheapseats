@@ -180,16 +180,13 @@ func Build(s Site, competitors []string) Plan {
 	alt := Starter{
 		ID: "alternatives", Name: "Alternatives", Tier: sets.PLG,
 		Description: fmt.Sprintf("Buyers using or weighing another %s, looking for something else.", cat),
-		Note:        "TODO: one prompt per competitor buyers move away from. A closed comparison between competitors is research about that shortlist, not open discovery for the brand; group it separately when interpreting results. Comparisons with the brand go in head-to-heads.",
+		Note:        "TODO: one prompt per competitor buyers move away from. Keep closed comparisons between other products outside the scored library: expected brand absence is not a visibility gap. Comparisons with the brand go in head-to-heads.",
 	}
 	for i, c := range competitors {
 		if i == 5 {
 			break
 		}
 		alt.Prompts = append(alt.Prompts, pr("alternatives-to-"+slug(c), fmt.Sprintf("What are good alternatives to %s?", c), false))
-	}
-	if len(competitors) >= 2 {
-		alt.Prompts = append(alt.Prompts, pr(slug(competitors[0])+"-vs-"+slug(competitors[1]), fmt.Sprintf("%s vs %s: which is better?", competitors[0], competitors[1]), false))
 	}
 	alt.Prompts = append(alt.Prompts,
 		pr("alternatives-to-market-leader", fmt.Sprintf("What are the alternatives to the market leader in %s?", plural(cat)), false),

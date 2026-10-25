@@ -110,8 +110,10 @@ Each gap includes a buyer-worded `[[prompts]]` entry with no search operators an
 Review the wording before committing; ids are permanent.
 These are gaps in the observed answer/search coverage, not independent evidence that buyers ask
 the proposed questions. Validate the need and its weighting against buyer research when available.
-A named competitor shortlist can be useful research, but omission of a third brand there means
-something different from omission in open category discovery; interpret those questions separately.
+Keep closed comparisons between other brands outside the scored prompt library: every set
+still grades the configured brand and generates fixes for it, so expected absence is not an
+actionable visibility gap. Open requests for alternatives to a competitor remain useful discovery
+questions. Apply this review to search-derived suggestions too; query frequency is not validation.
 
 ## Proposed edits (optional, one analyst call)
 

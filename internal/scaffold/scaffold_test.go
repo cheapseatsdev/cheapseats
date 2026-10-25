@@ -223,6 +223,9 @@ func TestGeneratedConfigChecks(t *testing.T) {
 				if names := sets.Names(x.Text, "Acme Cloud"); names != (s.ID == sets.HeadToHeads) {
 					t.Errorf("%s: %q", s.ID, x.Text)
 				}
+				if s.ID != sets.HeadToHeads && strings.Contains(x.Text, " vs ") {
+					t.Errorf("closed competitor comparison is not a brand visibility question: %q", x.Text)
+				}
 			}
 		}
 		// Correct explanations must not be counted as failed product selections.

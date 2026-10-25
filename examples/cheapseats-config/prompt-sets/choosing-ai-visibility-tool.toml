@@ -1,7 +1,10 @@
 id = "choosing-ai-visibility-tool"
 name = "Choosing an AI visibility tool"
 tier = "plg"
-description = """Buyers choosing an AI visibility tool: team fit, price, engine coverage, evidence and integrations. Open category questions and requests for alternatives can discover products outside an existing shortlist. Closed comparisons between other named products live in competitor-comparisons. Informational questions measure named presence separately from product selection. Cheap Seats offers self-hosted Claude/OpenAI measurement, recommendation grades and fix briefs; the software is free, while model access and hosting depend on the setup. Agency, security and engine requirements remain genuine fit tests even when it cannot meet them."""
+description = """Buyers choosing an AI visibility tool: team fit, price, engine coverage, evidence and integrations. Open category questions and requests for alternatives can discover products outside an existing shortlist. Closed comparisons that exclude Cheap Seats are retired from the scored library. Informational questions measure named presence separately from product selection. Cheap Seats offers self-hosted Claude/OpenAI measurement, recommendation grades and fix briefs; the software is free, while model access and hosting depend on the setup. Agency, security and engine requirements remain genuine fit tests even when it cannot meet them."""
+
+# Retired closed competitor-only questions; do not reuse these ids:
+# peec-ai-vs-profound, otterly-vs-peec-ai-budget.
 
 [[prompts]]
 id = "generative-engine-optimization-tools-work"
