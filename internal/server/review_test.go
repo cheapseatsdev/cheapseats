@@ -74,7 +74,8 @@ func TestPromptReview(t *testing.T) {
 		h.ServeHTTP(rec, httptest.NewRequest("GET", path, nil))
 		return rec.Code, rec.Body.String()
 	}
-	// Only reading the page (or the CLI, or MCP) is a review: not the JSON, not a HEAD.
+	// Reading records nothing (the page, the JSON, a HEAD), so a link from another site can't quiet
+	// the reminder; the page's button (or the CLI, or MCP) records a review.
 	get("/api/sets/" + set.ID + "/review")
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest("HEAD", "/sets/"+set.ID+"/review", nil))
@@ -82,11 +83,30 @@ func TestPromptReview(t *testing.T) {
 		t.Errorf("the JSON or a HEAD recorded a review: %q %d", at, rec.Code)
 	}
 	// Three runs of one search and one recall answer a prompt: six answers, all absent.
-	if code, body := get("/sets/" + set.ID + "/review"); code != 200 || !strings.Contains(body, `<h2 id="flat">Flat`) || !strings.Contains(body, "always_absent") || !strings.Contains(body, "Propose rewrites") {
+	if code, body := get("/sets/" + set.ID + "/review"); code != 200 || !strings.Contains(body, `<h2 id="flat">Flat`) || !strings.Contains(body, "always_absent") || !strings.Contains(body, "Propose rewrites") ||
+		!strings.Contains(body, `action="/sets/`+set.ID+`/reviewed"`) || !strings.Contains(body, "Never marked reviewed") {
 		t.Errorf("page: %d %s", code, limit(body))
 	}
-	if a.LastReview(ctx, set.ID) == "" {
-		t.Error("reading the page didn't record a review")
+	if at := a.LastReview(ctx, set.ID); at != "" {
+		t.Errorf("opening the page recorded a review: %q", at)
+	}
+	forged := httptest.NewRequest("POST", "/sets/"+set.ID+"/reviewed", strings.NewReader("days=60"))
+	forged.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	forged.Header.Set("Origin", "https://evil.example")
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, forged)
+	if at := a.LastReview(ctx, set.ID); rec.Code != 403 || at != "" {
+		t.Errorf("a cross-site button press: %d, recorded %q", rec.Code, at)
+	}
+	mark := httptest.NewRequest("POST", "/sets/"+set.ID+"/reviewed", strings.NewReader("days=60"))
+	mark.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, mark)
+	if rec.Code != 303 || rec.Header().Get("location") != "/sets/"+set.ID+"/review?days=60" || a.LastReview(ctx, set.ID) == "" {
+		t.Errorf("the button: %d %s, recorded %q", rec.Code, rec.Header().Get("location"), a.LastReview(ctx, set.ID))
+	}
+	if _, body := get("/sets/" + set.ID + "/review"); !strings.Contains(body, "Last marked reviewed") {
+		t.Error("the page doesn't say when it was last marked reviewed")
 	}
 	if code, body := get("/sets/" + set.ID); code != 200 || !strings.Contains(body, `href="/sets/`+set.ID+`/review"`) {
 		t.Errorf("set page links the review: %d", code)

@@ -33,5 +33,6 @@
 
 <h2 id="prompts">Every prompt</h2>
 <div class="scroll"><table><thead><tr><th>Prompt</th><th class="num">Runs</th><th class="num">Answers</th><th class="num">Named</th><th class="num">Recommended</th><th class="num">From prompt</th><th>Flags</th></tr></thead><tbody>{{range .Prompts}}<tr><td>{{.Text}} <span class="muted mono">{{.ID}}</span>{{range .Notes}}<br><span class="muted small">{{.}}</span>{{end}}</td><td class="num">{{.Runs}}</td><td class="num">{{.Answers}}</td><td class="num nowrap">{{rate .Named}}</td><td class="num nowrap">{{if .Info}}<span class="muted" title="info prompt">–</span>{{else}}{{rate .Recommended}}{{end}}</td><td class="num">{{if .Searches}}{{pct .FromPrompt}}{{else}}<span class="muted">–</span>{{end}}</td><td>{{if not .Enough}}<span class="muted small">not enough data yet</span>{{end}}{{range .Flags}}<span class="chip">{{.}}</span> {{end}}</td></tr>{{end}}</tbody></table></div>
-<p class="muted small">Review monthly: it's free, and a month of runs is what the flags need.</p>
+<p class="muted small">Review monthly: it's free, and a month of runs is what the flags need. {{if .LastReview}}Last marked reviewed {{day .LastReview}} UTC.{{else}}Never marked reviewed.{{end}}</p>
+{{if not readonly}}<form method="post" action="/sets/{{.SetID}}/reviewed"><input type="hidden" name="days" value="{{.Days}}"><button class="ghost">{{icon "circle-check"}}Mark reviewed</button> <span class="muted small">Records this month's review, so get_started stops suggesting one for 30 days.</span></form>{{end}}
 {{end}}
