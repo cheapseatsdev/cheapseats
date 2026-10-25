@@ -74,10 +74,10 @@ const usage = `cheapseats: how AI assistants answer your buyers' questions.
 
 Config: CHEAPSEATS_CONFIG, else the example in examples/cheapseats-config; prompt sets beside it,
 data in ./data (CHEAPSEATS_DATA_DIR). Secrets from the environment or .env: ANTHROPIC_API_KEY
-(or CHEAPSEATS_ANTHROPIC_BASE_URL, a proxy that adds it), OPENAI_API_KEY, CHEAPSEATS_TOKENS,
-CHEAPSEATS_AUTH_HEADER and CHEAPSEATS_ALLOWED_EMAILS. Base URLs, proxies, certificate files,
-CHEAPSEATS_CLI_ENV and startup variables (LD_*, DYLD_*, NODE_OPTIONS...) from the real
-environment only: .env lines setting them are ignored with a warning.
+(or CHEAPSEATS_ANTHROPIC_BASE_URL, a proxy that adds it), OPENAI_API_KEY and CHEAPSEATS_TOKENS.
+From the real environment only (.env lines setting them are ignored with a warning): base URLs,
+proxies, certificate files, CHEAPSEATS_AUTH_HEADER, CHEAPSEATS_ALLOWED_EMAILS, CHEAPSEATS_CLI_ENV
+and startup variables (LD_*, DYLD_*, NODE_OPTIONS...).
 `
 
 func main() {
@@ -758,8 +758,8 @@ func serve(ctx context.Context, addr string) error {
 
 // loadDotEnv sets KEY=VALUE lines from a file without overriding the real environment. It is
 // the .env of whatever directory cheapseats runs in, a config checkout included, so it holds keys
-// and settings only: a variable that sends requests somewhere else or runs code (dotenvRefused)
-// is ignored with a warning, and must come from the real environment.
+// and settings only: a variable that sends requests somewhere else, runs code or decides who
+// signs in (dotenvRefused) is ignored with a warning, and must come from the real environment.
 func loadDotEnv(path string) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -770,16 +770,19 @@ func loadDotEnv(path string) {
 
 // dotenvRefused reports whether .env may not set the variable named k: a proxy or base URL would
 // send the real API keys in the environment to whoever runs it, a certificate file would let a
-// proxy read them, CHEAPSEATS_CLI_ENV picks what the CLIs inherit, and a startup variable
-// (env.LoadsCode) runs code in every program Cheap Seats starts.
+// proxy read them, CHEAPSEATS_CLI_ENV picks what the CLIs inherit, a startup variable
+// (env.LoadsCode) runs code in every program Cheap Seats starts, and CHEAPSEATS_AUTH_HEADER and
+// CHEAPSEATS_ALLOWED_EMAILS decide who is signed in by a header. CHEAPSEATS_TOKENS stays allowed:
+// it is the documented local setup (.env.example), and a token only lets in whoever holds it.
 func dotenvRefused(k string) bool {
 	u := strings.ToUpper(k)
 	switch {
-	case strings.HasSuffix(u, "_BASE_URL"), strings.HasSuffix(u, "_PROXY"), u == env.Prefix+"CLI_ENV", env.LoadsCode(u):
+	case strings.HasSuffix(u, "_BASE_URL"), strings.HasSuffix(u, "_PROXY"), env.LoadsCode(u):
 		return true
 	}
 	switch u {
-	case "SSL_CERT_FILE", "SSL_CERT_DIR", "NODE_EXTRA_CA_CERTS":
+	case env.Prefix + "CLI_ENV", env.Prefix + "AUTH_HEADER", env.Prefix + "ALLOWED_EMAILS",
+		"SSL_CERT_FILE", "SSL_CERT_DIR", "NODE_EXTRA_CA_CERTS":
 		return true
 	}
 	return false
@@ -802,7 +805,7 @@ func dotenvApply(path string, data []byte, w io.Writer) {
 			continue
 		}
 		if dotenvRefused(k) {
-			fmt.Fprintf(w, "cheapseats: WARNING: ignoring %s from %s: it would send requests elsewhere or run code, so it must be set in the real environment\n", k, path)
+			fmt.Fprintf(w, "cheapseats: WARNING: ignoring %s from %s: it would send requests elsewhere, run code or decide who signs in, so it must be set in the real environment\n", k, path)
 			continue
 		}
 		os.Setenv(k, v)
