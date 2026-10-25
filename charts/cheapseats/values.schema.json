@@ -116,6 +116,10 @@
           "items": {
             "type": "object"
           }
+        },
+        "externalTLS": {
+          "type": "boolean",
+          "description": "TLS ends in front of this Ingress, so ingress.tls may be empty."
         }
       }
     },

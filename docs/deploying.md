@@ -37,6 +37,10 @@ Mounting a checkout at `/config` instead of building an image works too, as in t
   connection. A body holds at most 1 MiB (4 KiB for `/login`), a fix attempt's link 2048 bytes and
   its note 4096. Responses aren't time-limited: MCP's `wait_for_run` holds a call open for up to ten
   minutes, so a proxy in front needs a read timeout longer than that.
+- **TLS in front.** Tokens travel as bearer headers, so serve Cheap Seats over HTTPS only. The
+  Helm chart refuses `ingress.enabled` without `ingress.tls`, unless `ingress.externalTLS: true`
+  says TLS ends before the Ingress (a cloud load balancer or CDN). It also refuses a key or token
+  as a literal value, in `env` or `extraEnv`: those come from a Secret.
 - **Share links:** `GET /share/<token>` answers without a token, serving only that link's run
   ([sharing](sharing.md)). Set `CHEAPSEATS_PUBLIC_URL` to the address people reach Cheap Seats at, so the
   links point there; a proxy that signs people in must let `/share/` through for them to work.

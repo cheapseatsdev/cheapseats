@@ -40,4 +40,17 @@ jobs:
         with:
           install_only: true
       - run: helm lint charts/cheapseats --set image.repository=x --set image.tag=y --set existingSecret=s
+      - name: The chart refuses secrets in values and a plain-HTTP ingress
+        run: |
+          base="--set image.repository=x --set image.tag=y --set existingSecret=s"
+          refuse() { if helm template t charts/cheapseats $base "$@" >/dev/null 2>&1; then echo "rendered, should have failed: $*"; exit 1; fi; }
+          accept() { helm template t charts/cheapseats $base "$@" >/dev/null; }
+          refuse --set env.OPENAI_API_KEY=sk-x
+          refuse --set 'extraEnv[0].name=OPENAI_API_KEY' --set 'extraEnv[0].value=sk-x'
+          refuse --set 'extraEnv[0].name=gh_token' --set 'extraEnv[0].value=x'
+          accept --set 'extraEnv[0].name=OPENAI_API_KEY' --set 'extraEnv[0].valueFrom.secretKeyRef.name=k' --set 'extraEnv[0].valueFrom.secretKeyRef.key=o'
+          accept --set 'extraEnv[0].name=CHEAPSEATS_DEBUG' --set 'extraEnv[0].value=1'
+          refuse --set ingress.enabled=true --set ingress.host=h.example
+          accept --set ingress.enabled=true --set ingress.host=h.example --set 'ingress.tls[0].secretName=t' --set 'ingress.tls[0].hosts[0]=h.example'
+          accept --set ingress.enabled=true --set ingress.host=h.example --set ingress.externalTLS=true
       - run: deploy/kind-smoke.sh

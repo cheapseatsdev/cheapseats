@@ -27,6 +27,8 @@ existingSecret: ""
 #          valueFrom: {secretKeyRef: {name: provider-keys, key: typesafe}}
 #      extraEnvFrom:
 #        - secretRef: {name: more-keys}
+#    An extraEnv entry named like a secret (_API_KEY, _TOKEN, _TOKENS) with a literal value fails
+#    the install, as in env below.
 extraEnv: []
 extraEnvFrom: []
 
@@ -52,7 +54,10 @@ ingress:
   className: ""
   annotations: {}
   host: ""
+  # Required when enabled: the UI and API take bearer tokens, which must not cross in plain HTTP.
   tls: []   # e.g. [{secretName: cheapseats-tls, hosts: [cheapseats.example.com]}]
+  # Or true when TLS ends in front of this Ingress (a cloud load balancer or CDN), not at it.
+  externalTLS: false
 
 resources:
   requests:
