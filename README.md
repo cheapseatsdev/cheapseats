@@ -272,6 +272,7 @@ cheapseats version                        version and database schema
   machine, set a token. A `CHEAPSEATS_TOKENS` that holds no token (`,`) refuses to start.
 - `CHEAPSEATS_TOKENS`: bearer tokens for the API and MCP; the UI asks for one once.
 - `CHEAPSEATS_AUTH_HEADER` (+ `CHEAPSEATS_ALLOWED_EMAILS`): trust a signing-in proxy's email header.
+  Both from the real environment only: a `.env` setting either is ignored with a warning.
 - `CHEAPSEATS_HOSTS`: host names a proxy on the same machine serves Cheap Seats as; MCP needs them,
   and so does an open (token-less) Cheap Seats behind such a proxy. A proxy that rewrites `Host` to
   the upstream address (nginx, unless told `proxy_set_header Host $host;`) needs them too, or forms
@@ -291,7 +292,9 @@ cheapseats version                        version and database schema
 - `CHEAPSEATS_CLI_USER`: run the `claude` and `codex` CLIs as this user through `sudo`. The CLIs
   are agents with tools the model drives; Cheap Seats switches off what it can (Claude's tool
   list, Codex's shell and image tools) and gives them only the environment they need either way
-  (never this process's keys or tokens; `CHEAPSEATS_CLI_ENV` names more to pass). A separate user
+  (never this process's keys or tokens; `CHEAPSEATS_CLI_ENV` names more to pass, from the real
+  environment only, never `.env`, and never a startup variable such as `LD_PRELOAD`, `DYLD_*` or
+  `NODE_OPTIONS`). A separate user
   keeps this user's files out of reach whatever a CLI update adds. `deploy/exe-dev.sh` sets one up.
   With or without it, a CLI call is stopped (TERM, then KILL) after ten minutes or once it has
   written 32 MB of output, and fails; of its stderr the last 4 KB is kept for the error.
