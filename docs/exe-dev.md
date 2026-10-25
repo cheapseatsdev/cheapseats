@@ -113,6 +113,7 @@ if Cheap Seats doesn't come up healthy. Runs in progress resume after the restar
 | secrets | `~/cheapseats/cheapseats.env` on the VM; restart after changing it |
 | database | `~/cheapseats/data`, with `cheapseats.db.bak-v<N>` copies from before schema changes |
 | backups | `~/cheapseats/backups`, nightly at 08:00 UTC; they undo mistakes, not the loss of the VM |
+| file modes | the service runs with `UMask=0077`: data and backups are `0700`, the database and every copy `0600` |
 | alerts | `deploy/exe-dev-ops.sh <vm> <email>` again to change who gets them |
 | who's in | `ssh exe.dev share show <vm>`, and `CHEAPSEATS_ALLOWED_EMAILS` |
 

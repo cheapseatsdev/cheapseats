@@ -150,7 +150,7 @@ func dispatch(ctx context.Context, cmd string, args []string) error {
 			return err
 		}
 		defer db.Close()
-		if _, err := db.ExecContext(ctx, `VACUUM INTO ?`, args[0]); err != nil {
+		if err := db.Backup(ctx, args[0]); err != nil {
 			return err
 		}
 		fmt.Println("backed up to", args[0])

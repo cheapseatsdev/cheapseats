@@ -57,7 +57,7 @@ say "upload"
 home=$(remote 'echo $HOME')
 user=$(remote whoami)
 dir="$home/cheapseats"
-remote "mkdir -p '$dir/bin' '$dir/data' && rm -rf '$dir/config.new' && mkdir '$dir/config.new'"
+remote "mkdir -p '$dir/bin' '$dir/data' && chmod 700 '$dir/data' && rm -rf '$dir/config.new' && mkdir '$dir/config.new'"
 scp -q -o BatchMode=yes "$work/cheapseats" "$host:$dir/bin/cheapseats.new"
 # rm first, so a REVISION the archive carried is replaced rather than written through.
 remote "tar -x -C '$dir/config.new' && rm -f '$dir/config.new/REVISION' && echo '$rev' > '$dir/config.new/REVISION'" <"$work/config.tar"
@@ -68,6 +68,7 @@ if [ -n "${SEED_DB:-}" ]; then
 	fi
 	sqlite3 "$SEED_DB" ".backup '$work/seed.db'"
 	scp -q -o BatchMode=yes "$work/seed.db" "$host:$dir/data/cheapseats.db"
+	remote "chmod 600 '$dir/data/cheapseats.db'"
 	echo "seeded the database from $SEED_DB"
 fi
 
@@ -171,6 +172,9 @@ RestartSec=5
 # Runs in progress record themselves as interrupted on SIGTERM and resume on the next start.
 KillSignal=SIGTERM
 TimeoutStopSec=40
+# What it writes (the database, its backups) is this user's alone; the CLI's working directory is
+# opened to the CLI user explicitly.
+UMask=0077
 
 [Install]
 WantedBy=multi-user.target"

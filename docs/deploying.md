@@ -56,6 +56,12 @@ Mounting a checkout at `/config` instead of building an image works too, as in t
 
 Cheap Seats also copies the database to `cheapseats.db.bak-v<N>` before any schema change.
 
+The database holds every answer, fix and share link, so it is private to the user Cheap Seats runs
+as: the data directory is `0700`, and the database, its `-wal` and `-shm`, the `bak-v<N>` copies and
+`cheapseats backup` files are `0600`. A data directory or database left more open by an earlier
+release, or copied in, is tightened at start; symlinks are left alone, and a mode it can't change
+(a mount owned by another user) is logged, not fatal.
+
 ## Releasing (maintainers)
 
 Push a tag `vX.Y.Z` on `main`. The release workflow tests, builds the image for linux/amd64 and

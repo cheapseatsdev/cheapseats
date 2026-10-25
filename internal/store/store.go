@@ -6,9 +6,13 @@ import (
 	"context"
 	"database/sql"
 	_ "embed"
+	"errors"
 	"fmt"
+	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"syscall"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -65,13 +69,22 @@ func Open(dataDir string) (*DB, error) { return open(dataDir, len(migrations)) }
 func OpenAt(dataDir string, n int) (*DB, error) { return open(dataDir, n) }
 
 func open(dataDir string, n int) (*DB, error) {
-	if err := os.MkdirAll(dataDir, 0o755); err != nil {
+	if err := os.MkdirAll(dataDir, 0o700); err != nil {
 		return nil, err
 	}
+	path := filepath.Join(dataDir, "cheapseats.db")
+	// The database holds every answer, fix and share token: only this user reads it. A new one
+	// starts as an empty file made 0600, and SQLite gives its -wal and -shm the database's mode.
+	// One made by an older release, or copied in, is tightened here.
+	if f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o600); err == nil {
+		f.Close()
+	} else if !errors.Is(err, fs.ErrExist) {
+		return nil, err
+	}
+	tighten(dataDir, path)
 	// _txlock=immediate: every transaction here reads and then writes, and a deferred one that read
 	// before another committed can't take the write lock (SQLITE_BUSY, which busy_timeout doesn't
 	// wait out). Taking it at BEGIN makes concurrent writers queue on busy_timeout instead.
-	path := filepath.Join(dataDir, "cheapseats.db")
 	dsn := "file:" + path + "?_pragma=journal_mode(WAL)&_pragma=busy_timeout(10000)&_pragma=foreign_keys(1)&_txlock=immediate"
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
@@ -99,7 +112,7 @@ func migrate(db *sql.DB, backup string, migrations []string) error {
 	if v > 0 && v < len(migrations) && backup != "" {
 		dst := fmt.Sprintf("%s.bak-v%d", backup, v)
 		if _, err := os.Stat(dst); os.IsNotExist(err) {
-			if _, err := db.Exec(`VACUUM INTO ?`, dst); err != nil {
+			if err := vacuumInto(context.Background(), db, dst); err != nil {
 				return fmt.Errorf("backing up before migrating: %w", err)
 			}
 		}
@@ -122,6 +135,63 @@ func migrate(db *sql.DB, backup string, migrations []string) error {
 		}
 	}
 	return nil
+}
+
+// Backup writes a consistent copy of the database to dst (SQLite's VACUUM INTO, safe while serve
+// runs), readable only by this user. dst must not exist.
+func (db *DB) Backup(ctx context.Context, dst string) error { return vacuumInto(ctx, db.DB, dst) }
+
+// vacuumInto copies the database into a new file at dst made 0600 first: VACUUM INTO accepts an
+// empty file, and would otherwise create it with the umask's mode.
+func vacuumInto(ctx context.Context, db *sql.DB, dst string) error {
+	f, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return err
+	}
+	f.Close()
+	if _, err := db.ExecContext(ctx, `VACUUM INTO ?`, dst); err != nil {
+		os.Remove(dst)
+		return err
+	}
+	return nil
+}
+
+// tighten makes the data directory 0700 and the database, its sidecars and its pre-migration
+// copies 0600, where an older release or a copy left them open to other users. It never follows
+// a symlink, and a mode it can't change (a mount owned by someone else) is logged, not fatal.
+func tighten(dataDir, path string) {
+	if fi, err := os.Lstat(dataDir); err == nil && fi.IsDir() && fi.Mode().Perm()&0o077 != 0 {
+		if err := os.Chmod(dataDir, 0o700); err != nil {
+			slog.Warn("can't make the data directory private", "dir", dataDir, "err", err)
+		}
+	}
+	baks, _ := filepath.Glob(path + ".bak-v*")
+	for _, p := range append([]string{path, path + "-wal", path + "-shm"}, baks...) {
+		if err := chmodNoFollow(p, 0o600); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			slog.Warn("can't make a database file private", "file", p, "err", err)
+		}
+	}
+}
+
+// chmodNoFollow sets a regular file's mode when it has any group or other bits, through a
+// descriptor opened with O_NOFOLLOW, so a symlink at p is refused rather than followed.
+func chmodNoFollow(p string, mode fs.FileMode) error {
+	f, err := os.OpenFile(p, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	fi, err := f.Stat()
+	if err != nil {
+		return err
+	}
+	if !fi.Mode().IsRegular() {
+		return fmt.Errorf("%s isn't a regular file", p)
+	}
+	if fi.Mode().Perm()&0o077 == 0 {
+		return nil
+	}
+	return f.Chmod(mode)
 }
 
 func Now() string { return time.Now().UTC().Format(time.RFC3339) }
