@@ -16,7 +16,8 @@ which signs people in by email. Because it's a whole VM, its answerers can be th
 
 2. **Write its secrets** to `~/cheapseats/cheapseats.env` on the VM, readable only by its user. The proxy
    passes a signed-in person's email as `X-ExeDev-Email`, and nothing reaches the VM except
-   through the proxy, so Cheap Seats trusts that header; `CHEAPSEATS_ALLOWED_EMAILS` narrows it further
+   through the proxy (and on the VM, the CLI user is kept off the port: step 3), so Cheap Seats
+   trusts that header; `CHEAPSEATS_ALLOWED_EMAILS` narrows it further
    (emails, or `@domain`). `CHEAPSEATS_HOSTS` names the host the proxy serves it as, which MCP needs (see step 7).
 
    ```bash
@@ -44,7 +45,11 @@ which signs people in by email. Because it's a whole VM, its answerers can be th
 3. **Deploy** (below), with `SEED_DB=path/to/cheapseats.db` the first time to start from an existing
    database. The deploy also makes a `cheapseats-cli` user for the `claude` and `codex` CLIs to run
    as: each is an agent with tools the model drives, and this keeps the VM's env file, database
-   and logins out of a prompt-injected answer's reach whatever a CLI update adds.
+   and logins out of a prompt-injected answer's reach whatever a CLI update adds. Since anything
+   on the VM that connects to Cheap Seats' port could send its own `X-ExeDev-Email`, an nftables
+   rule (`/etc/cheapseats/cli-firewall.nft`, loaded by `cheapseats-cli-firewall.service`, which
+   Cheap Seats won't start without) refuses that user's connections to the port, and the deploy
+   fails if the CLI user can still reach it.
 
 4. **Log the CLIs in** as that user, if your answerers use them. The subscription is whoever logs
    in. (Logins made before the CLI user existed move over on the first deploy.)

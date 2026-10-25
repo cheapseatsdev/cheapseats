@@ -75,10 +75,16 @@ say "CLI user"
 # database and logins. The service runs them through sudo (CHEAPSEATS_CLI_USER); the rule allows
 # just the two commands, with the environment Cheap Seats passes. Logins made as this user before
 # the CLI user existed move over, once.
+#
+# Nor may it connect to Cheap Seats' port. Cheap Seats believes the email the proxy names in
+# X-ExeDev-Email, so anything on the VM that reaches the port can claim to be anyone, and binding
+# loopback wouldn't stop a user on the same machine. An nftables rule refuses connections from
+# the CLI user's uid to the port, whatever the address; it loads from a unit cheapseats.service
+# requires, so Cheap Seats doesn't start without it.
 cliuser=cheapseats-cli
-remote bash -s "$user" "$cliuser" <<'EOF'
+remote bash -s "$user" "$cliuser" "$port" <<'EOF'
 set -euo pipefail
-user=$1 cliuser=$2
+user=$1 cliuser=$2 port=$3
 if ! id "$cliuser" >/dev/null 2>&1; then
 	sudo useradd --system --create-home --home-dir "/home/$cliuser" --shell /usr/sbin/nologin "$cliuser"
 	echo "made the $cliuser user"
@@ -102,13 +108,44 @@ for f in claude:.claude/.credentials.json codex:.codex/auth.json; do
 		echo "${f%%:*}: not logged in; if an answerer needs it: ssh -t $(hostname) sudo -H -u $cliuser ${f%%:*}"
 	fi
 done
+if ! command -v nft >/dev/null 2>&1; then
+	sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nftables >/dev/null
+fi
+nft=$(command -v nft)
+# Declaring the table, deleting it and declaring it again replaces it in one atomic load, so
+# running this again (or with another port) leaves exactly one rule.
+sudo mkdir -p /etc/cheapseats
+printf '%s\n' 'table inet cheapseats_cli' 'delete table inet cheapseats_cli' \
+	'table inet cheapseats_cli {' '	chain output {' '		type filter hook output priority 0; policy accept;' \
+	"		meta skuid $(id -u "$cliuser") tcp dport $port reject with tcp reset" '	}' '}' |
+	sudo tee /etc/cheapseats/cli-firewall.nft >/dev/null
+# PartOf: restarting nftables.service flushes the ruleset, and this unit reloads the table after
+# (restarting Cheap Seats with it); stopping nftables stops Cheap Seats rather than leave it open.
+printf '%s\n' '[Unit]' "Description=Keep $cliuser off Cheap Seats' port" \
+	'Before=cheapseats.service' 'After=nftables.service' 'PartOf=nftables.service' \
+	'[Service]' 'Type=oneshot' 'RemainAfterExit=yes' \
+	"ExecStart=$nft -f /etc/cheapseats/cli-firewall.nft" "ExecStop=$nft delete table inet cheapseats_cli" \
+	'[Install]' 'WantedBy=multi-user.target' |
+	sudo tee /etc/systemd/system/cheapseats-cli-firewall.service >/dev/null
+sudo systemctl daemon-reload
+sudo systemctl enable cheapseats-cli-firewall >/dev/null 2>&1
+# Start it if it isn't running, and load the rule directly: restarting the unit would restart
+# Cheap Seats, which requires it, before the new build is in place.
+sudo systemctl start cheapseats-cli-firewall
+sudo "$nft" -f /etc/cheapseats/cli-firewall.nft
+if ! sudo "$nft" list chain inet cheapseats_cli output | grep -q "dport $port reject"; then
+	echo "the rule keeping $cliuser off port $port didn't load" >&2
+	exit 1
+fi
+echo "$cliuser can't connect to port $port"
 EOF
 
 say "install"
 unit="[Unit]
 Description=Cheap Seats
-After=network-online.target
+After=network-online.target cheapseats-cli-firewall.service
 Wants=network-online.target
+Requires=cheapseats-cli-firewall.service
 
 [Service]
 User=$user
@@ -141,6 +178,12 @@ say "healthy?"
 for _ in $(seq 1 30); do
 	if remote "curl -fsS http://127.0.0.1:$port/healthz" >/dev/null 2>&1; then
 		echo "ok: https://$host serves cheapseats $version with config $rev"
+		# The rule's own proof: as the CLI user, the port refuses (curl prints 000).
+		code=$(remote "sudo -u $cliuser curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://127.0.0.1:$port/healthz || true")
+		if [ "$code" != "000" ]; then
+			echo "but $cliuser reached port $port (HTTP $code); the firewall rule isn't working" >&2
+			exit 1
+		fi
 		exit 0
 	fi
 	sleep 2
