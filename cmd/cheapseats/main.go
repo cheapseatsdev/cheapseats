@@ -724,8 +724,8 @@ func serve(ctx context.Context, addr string) error {
 	if err != nil {
 		return err
 	}
-	if !readOnly && env.Get("TOKENS") == "" && env.Get("AUTH_HEADER") == "" && !strings.HasPrefix(addr, "127.0.0.1") && !strings.HasPrefix(addr, "localhost") {
-		return errors.New("refusing to listen beyond localhost without CHEAPSEATS_TOKENS or CHEAPSEATS_AUTH_HEADER set")
+	if err := srv.CheckListen(addr); err != nil {
+		return err
 	}
 	// Runs get their own context, so shutdown can first mark them interrupted (to resume on the
 	// next start) rather than have the signal cancel them.

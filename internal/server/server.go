@@ -26,6 +26,7 @@ import (
 	"math"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"slices"
 	"strconv"
@@ -88,6 +89,13 @@ func New(a *app.App) (*Server, error) {
 		if t = strings.TrimSpace(t); t != "" {
 			s.tokens = append(s.tokens, t)
 		}
+	}
+	// A setting that's there but says nothing would leave Cheap Seats open while looking signed-in.
+	if len(s.tokens) == 0 && env.Get("TOKENS") != "" {
+		return nil, errors.New("CHEAPSEATS_TOKENS is set but holds no token (it's comma-separated; blank entries are ignored)")
+	}
+	if s.authHeader == "" && env.Get("AUTH_HEADER") != "" {
+		return nil, errors.New("CHEAPSEATS_AUTH_HEADER is set but blank")
 	}
 	for _, h := range strings.Split(env.Get("HOSTS"), ",") {
 		if h = strings.ToLower(strings.TrimSpace(h)); h != "" {
@@ -370,6 +378,24 @@ func (s *Server) refuseForeign(h http.Handler) http.Handler {
 		}
 		h.ServeHTTP(w, r)
 	})
+}
+
+// CheckListen refuses to serve on addr open to anyone: with no token and no signing-in proxy,
+// only a loopback address (127.0.0.1, ::1, localhost) is allowed, or a read-only copy, which
+// changes nothing. Open on loopback still trusts every user and program on the machine.
+func (s *Server) CheckListen(addr string) error {
+	if s.readOnly || len(s.tokens) > 0 || s.authHeader != "" {
+		return nil
+	}
+	if host, _, err := net.SplitHostPort(addr); err == nil && (strings.EqualFold(host, "localhost") || loopbackIP(host)) {
+		return nil
+	}
+	return fmt.Errorf("refusing to listen on %q, beyond localhost, without CHEAPSEATS_TOKENS or CHEAPSEATS_AUTH_HEADER set", addr)
+}
+
+func loopbackIP(host string) bool {
+	ip, err := netip.ParseAddr(host)
+	return err == nil && ip.IsLoopback()
 }
 
 // rebound reports whether a request reached loopback under a name that is neither local nor a

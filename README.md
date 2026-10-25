@@ -265,9 +265,11 @@ cheapseats version                        version and database schema
 
 ## Access
 
-- Unset `CHEAPSEATS_TOKENS`: listens on 127.0.0.1 only, open. A page on another site can't read it
-  (a request under a name rebound to loopback is refused) or change anything (a form or fetch
-  from another origin is refused).
+- Unset `CHEAPSEATS_TOKENS`: listens on loopback only (`127.0.0.1`, `::1` or `localhost`), open. A
+  page on another site can't read it (a request under a name rebound to loopback is refused) or
+  change anything (a form or fetch from another origin is refused), but every user and program on
+  the machine can: it starts runs that spend the budget and reads every answer. On a shared
+  machine, set a token. A `CHEAPSEATS_TOKENS` that holds no token (`,`) refuses to start.
 - `CHEAPSEATS_TOKENS`: bearer tokens for the API and MCP; the UI asks for one once.
 - `CHEAPSEATS_AUTH_HEADER` (+ `CHEAPSEATS_ALLOWED_EMAILS`): trust a signing-in proxy's email header.
 - `CHEAPSEATS_HOSTS`: host names a proxy on the same machine serves Cheap Seats as; MCP needs them,
