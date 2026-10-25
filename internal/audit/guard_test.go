@@ -16,6 +16,12 @@ func TestPublicAddr(t *testing.T) {
 		"169.254.169.254": false, "fe80::1": false, "fd00::1": false, "100.64.0.1": false, "0.0.0.0": false,
 		"::": false, "224.0.0.1": false, "ff02::1": false, "::ffff:127.0.0.1": false, "::ffff:10.0.0.1": false,
 		"64:ff9b::a00:1": false, "2002:a00:1::": false, "255.255.255.255": false,
+		// The rest of the IANA special-purpose registries that is not globally reachable.
+		"192.0.2.1": false, "198.51.100.7": false, "203.0.113.200": false, "192.88.99.1": false,
+		"::7f00:1": false, "::ffff:0:a00:1": false, "100:0:0:1::1": false, "2001::1": false,
+		"2001:2::1": false, "2001:1ff:ffff::1": false, "3fff::1": false, "5f00::1": false, "fec0::1": false,
+		// Just outside them: public.
+		"192.0.3.1": true, "198.51.101.1": true, "203.0.114.1": true, "2001:200::1": true, "4000::1": true,
 	} {
 		if got := publicAddr(netip.MustParseAddr(addr)); got != want {
 			t.Errorf("publicAddr(%s) = %v, want %v", addr, got, want)
