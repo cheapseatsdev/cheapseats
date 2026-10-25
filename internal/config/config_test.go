@@ -147,7 +147,7 @@ func TestSourcesAndCompetitorDomains(t *testing.T) {
 	}
 }
 
-func TestThemesAndSampling(t *testing.T) {
+func TestThemesSamplingAndLimits(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "cheapseats.toml")
 	load := func(body string) (*Config, error) {
 		t.Helper()
@@ -162,10 +162,15 @@ func TestThemesAndSampling(t *testing.T) {
 		t.Fatalf("%+v %v", c, err)
 	}
 	for body, want := range map[string]string{
-		"[analyst]\nthemes = true\n":       "belongs in [grader]",
-		"[sampling]\nadaptive = true\n":    "needs max_extra",
-		"[sampling]\nmax_extra = -1\n":     "0..1000",
-		"[sampling]\nmax_extra = 100000\n": "0..1000",
+		"[analyst]\nthemes = true\n":                    "belongs in [grader]",
+		"[sampling]\nadaptive = true\n":                 "needs max_extra",
+		"[sampling]\nmax_extra = -1\n":                  "0..1000",
+		"[sampling]\nmax_extra = 100000\n":              "0..1000",
+		"[budget]\nconcurrency = 65\n":                  "concurrency must be 1..64",
+		"[budget]\nconcurrency = 9223372036854775807\n": "concurrency must be 1..64",
+		"[tiers.plg]\nmax_samples = 21\n":               "max_samples must be 1..20",
+		"[[answerers]]\nid = \"a\"\nprovider = \"anthropic\"\nmodel = \"m\"\nsamples = { search = 21, recall = 1 }\n":                                    "samples must be 0..20",
+		"[[answerers]]\nid = \"a\"\nprovider = \"anthropic\"\nmodel = \"m\"\nsamples = { search = 9223372036854775807, recall = 9223372036854775807 }\n": "samples must be 0..20",
 	} {
 		if _, err := load(body); err == nil || !strings.Contains(err.Error(), want) {
 			t.Errorf("%q: want %q, got %v", body, want, err)

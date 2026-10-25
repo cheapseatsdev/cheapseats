@@ -279,7 +279,7 @@ func (e *Engine) regradeRun(ctx context.Context, r Run, set sets.Set) (int, floa
 	errs := make([]error, len(gs))
 	work := make(chan int)
 	var wg sync.WaitGroup
-	for w := 0; w < max(1, e.Cfg.Budget.Concurrency); w++ {
+	for w := 0; w < min(max(1, e.Cfg.Budget.Concurrency), len(gs)); w++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

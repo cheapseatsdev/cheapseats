@@ -59,6 +59,8 @@ kind = "code"
 # claude-code | codex run a local `claude` or `codex` CLI on its logged-in subscription, which
 # only works on your own machine (the Docker image has neither; `cheapseats check` says so).
 #
+# samples: answers per prompt on each track, 0..20 (at least one in all).
+#
 # One flagship from each lab: they're trained differently, so they disagree in useful ways.
 [[answerers]]
 id = "claude-opus"
@@ -163,7 +165,7 @@ model = "claude-opus-5-5"
 # Admission budget across every provider attempt. In-flight operations can exceed reservations.
 daily_usd = 40.0
 reservation_usd = 0.60
-concurrency = 6
+concurrency = 6   # provider calls at once, 1..64 (default 4)
 
 # Adaptive sampling: before a core run, the prompts whose named rate has been least certain over the
 # last 28 days (same method) are asked twice over, up to max_extra extra answers and within today's
@@ -186,7 +188,7 @@ every_days = 2
 
 [tiers.plg]
 every_days = 7
-max_samples = 1
+max_samples = 1   # 1..20
 
 # Optional providers (docs/optional-providers.md); absent means off. [typesafe]: after each run,
 # TypeSafe's Jev decides whether product names the grader wrote differently are one product, and

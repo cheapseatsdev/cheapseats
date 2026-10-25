@@ -172,7 +172,8 @@ is unset.
   starts a trend over, and extras that fail are dropped rather than holding the run back. A prompt's
   rate means the same with or without them; totals pooled over all of a run's answers weigh a
   doubled prompt twice.
-- `[budget]`: a daily cap on API spend
+- `[budget]`: a daily cap on API spend, and `concurrency`, the provider calls a run makes at once
+  (1..64, default 4). An answerer's `samples` are 0..20 per track.
 - `[schedule]`, `[tiers]`: when sets run (weekly is usually enough)
 - Prompt sets: one file per category of buyer question; every prompt has a permanent id
   ([format](examples/cheapseats-config/prompt-sets/README.md))
