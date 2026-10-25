@@ -4,14 +4,14 @@ for (const a of document.querySelectorAll("header nav a")) {
   if (href === "/" ? location.pathname === "/" : location.pathname.startsWith(href)) a.setAttribute("aria-current", "page");
 }
 
-// The theme: the system's until the toggle picks one, cycling system, light, dark. A pick is
-// remembered in this browser; back to system forgets it.
+// The theme: light until the toggle picks another, cycling light, dark, system. The layout's head
+// script applies a pick before the page paints; a pick is remembered in this browser, and back to
+// light forgets it.
 (function () {
   const button = document.querySelector(".theme-toggle");
   if (!button) return;
-  const modes = ["system", "light", "dark"];
-  let mode = "system";
-  try { const t = localStorage.getItem("cheapseats-theme"); if (t === "light" || t === "dark") mode = t; } catch {}
+  const modes = ["light", "dark", "system"];
+  let mode = document.documentElement.dataset.theme || "system";
   const show = () => {
     button.dataset.mode = mode;
     const next = modes[(modes.indexOf(mode) + 1) % modes.length];
@@ -24,7 +24,7 @@ for (const a of document.querySelectorAll("header nav a")) {
     if (mode === "system") delete document.documentElement.dataset.theme;
     else document.documentElement.dataset.theme = mode;
     try {
-      if (mode === "system") { localStorage.removeItem("cheapseats-theme"); }
+      if (mode === "light") { localStorage.removeItem("cheapseats-theme"); }
       else localStorage.setItem("cheapseats-theme", mode);
     } catch {}
     show();
