@@ -1,36 +1,139 @@
-/* GENERATED: synced from cheapseats-site brand/web/tokens.css at cb326a8; edit there, run deploy/sync-brand.sh. */
-/* Cheap Seats design tokens: the one source of truth for the brand's colors, type, radii and content
-   width. cheapseats.dev builds this file into its stylesheet and serves it at
+/* GENERATED: synced from cheapseats-site brand/web/tokens.css at 407afee; edit there, run deploy/sync-brand.sh. */
+/* Cheap Seats design tokens: the one source of truth for the brand's colors, type stacks, spacing,
+   radii, shadows and layout. cheapseats.dev builds this file into its stylesheet and serves it at
    https://cheapseats.dev/brand/tokens.css; the app copies it with deploy/sync-brand.sh into
-   internal/server/static/tokens.css. Edit it here, in cheapseats-site brand/web/tokens.css, then
-   run the sync; a test in the app fails when its copy is stale or uses a token this file lacks.
+   internal/server/static/tokens.css; brand/design-system/build.mjs turns it into the design
+   system's tokens.json. Edit it here, then run both syncs; a test in the app fails when its copy is
+   stale or uses a token this file lacks, and CI here fails when tokens.json is stale.
+
+   One token a line, its usage note in the comment after it: the design system shows those notes.
+   The light block lists every color with its note; the two dark blocks repeat the names with
+   their dark values only, and must stay identical to each other.
 
    Warm ivory / warm charcoal, cinema red for primary actions and the icon, gold for the occasional
    highlight. Status colors are separate from the brand colors. Every text pairing is at least
    4.5:1 on bg, surface and chip (muted, primary, gold-text, success, warning and error on their
-   backgrounds); control borders and the gold-strong in-flight fill are at least 3:1 on chip;
-   series is the one data hue, validated on both surfaces.
+   backgrounds); control borders and the gold-strong in-flight fill are at least 3:1 on chip; the
+   data colors are at least 3:1 on bg, surface and chip in both themes.
 
    Light by default; dark when the OS asks for it, until a toggle picks one by setting
    data-theme="light" or data-theme="dark" on <html>. */
 :root{color-scheme:light;
-  --cs-bg:#FAF8F5;--cs-surface:#FFFFFF;--cs-border:#E5DFD7;--cs-text:#252321;--cs-muted:#6E6862;
-  --cs-primary:#C73532;--cs-primary-hover:#A92B28;--cs-on-primary:#FFFFFF;
-  --cs-gold:#F2B544;--cs-gold-strong:#A87500;--cs-gold-bg:#FFF0CB;--cs-gold-text:#765000;
-  --cs-chip:#F2EEE8;--cs-control:#8C847B;--cs-series:#2a78d6;
-  --cs-success:#2D7A3E;--cs-success-bg:#E3F2E5;--cs-warning:#8F5B00;--cs-warning-bg:#FCEBD0;--cs-error:#B3261E;--cs-error-bg:#FCE4E1}
+  --cs-bg:#FAF8F5; /* Page background (warm ivory / warm charcoal). Keep large areas on bg, surface or chip. */
+  --cs-surface:#FFFFFF; /* Cards, menus, the masthead, footer and table panels. */
+  --cs-chip:#F2EEE8; /* Quiet fills: chips, code, progress tracks, hover rows, the active docs-nav item. */
+  --cs-border:#E5DFD7; /* Decorative hairlines and dividers only. Too faint for a control boundary: use cs-control. */
+  --cs-control:#8C847B; /* Control borders (inputs, ghost buttons) and link underlines; at least 3:1 on chip. */
+  --cs-text:#252321; /* Main text on bg, surface and chip. */
+  --cs-muted:#6E6862; /* Secondary text: captions, meta rows, table headings, inactive nav; 4.5:1 on bg, surface and chip. */
+  --cs-primary:#C73532; /* Cinema red: the one primary action per section, the brand mark, focus rings and the current-nav underline. Not for links or errors. */
+  --cs-primary-hover:#A92B28; /* Hover state of primary buttons. */
+  --cs-on-primary:#FFFFFF; /* Text and icons on cs-primary fills (dark text on coral in dark mode). */
+  --cs-gold:#F2B544; /* Occasional small accent: blockquote rules, progress-card top border, new-method markers. Never text on light grounds. */
+  --cs-gold-strong:#A87500; /* In-flight fill (running progress) and change marks on charts; 3:1 on chip. */
+  --cs-gold-bg:#FFF0CB; /* Highlight badge ground: live pill, step numbers, demo banner. */
+  --cs-gold-text:#765000; /* Text on cs-gold-bg, and running/queued status text. */
+  --cs-series:#2a78d6; /* Your brand's data: its line, bar and row tint in every chart. Same as cs-data-1. */
+  --cs-data-1:var(--cs-series); /* Chart series 1, always your brand. Series take cs-data-1 to 4 in order, never cycled; a fifth or later folds into Other in cs-muted. */
+  --cs-data-2:#c2488f; /* Chart series 2 (magenta). Adjacent pairs pass color-blind separation; in scatter plots and small multiples use only series 1 and 2. */
+  --cs-data-3:#6250d6; /* Chart series 3 (violet). */
+  --cs-data-4:#0d8c7f; /* Chart series 4 (teal). */
+  --cs-success:#2D7A3E; /* Recommended / top-pick verdicts, done runs, accepted fixes. */
+  --cs-success-bg:#E3F2E5; /* Ground for success badges (accepted fixes). */
+  --cs-warning:#8F5B00; /* Mentioned verdicts, partial or over-budget runs, high priority, proposed fixes, downward trends. */
+  --cs-warning-bg:#FCEBD0; /* Ground for warning badges and the warn callout. */
+  --cs-error:#B3261E; /* Failed runs, errors, urgent priority. Absent is NOT an error: it is muted. */
+  --cs-error-bg:#FCE4E1; /* Ground for urgent and error badges. */
+  --cs-seat-active:var(--cs-primary); /* Seat meter: filled seats and the baseline. */
+  --cs-seat-inactive:#81786F; /* Seat meter: outlined, unearned seats. */
+  --cs-seat-gold:var(--cs-gold); /* Seat meter: the third seat's fill for a top pick. */
+  --cs-seat-gold-stroke:#936000; /* Seat meter: outline of the gold top-pick seat, so it reads on light grounds. */
+}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark;
-  --cs-bg:#1B1917;--cs-surface:#24211E;--cs-border:#3B3631;--cs-text:#F5F1EB;--cs-muted:#ADA59C;
-  --cs-primary:#EF7770;--cs-primary-hover:#F38D87;--cs-on-primary:#1B1917;
-  --cs-gold:#F2B544;--cs-gold-strong:#F2B544;--cs-gold-bg:#3B2C14;--cs-gold-text:#F2B544;
-  --cs-chip:#302C28;--cs-control:#7D756C;--cs-series:#3987e5;
-  --cs-success:#7BC98A;--cs-success-bg:#1F3A25;--cs-warning:#F0A35E;--cs-warning-bg:#45301A;--cs-error:#FF9189;--cs-error-bg:#4A2220}}
+  --cs-bg:#1B1917;
+  --cs-surface:#24211E;
+  --cs-chip:#302C28;
+  --cs-border:#3B3631;
+  --cs-control:#7D756C;
+  --cs-text:#F5F1EB;
+  --cs-muted:#ADA59C;
+  --cs-primary:#EF7770;
+  --cs-primary-hover:#F38D87;
+  --cs-on-primary:#1B1917;
+  --cs-gold:#F2B544;
+  --cs-gold-strong:#F2B544;
+  --cs-gold-bg:#3B2C14;
+  --cs-gold-text:#F2B544;
+  --cs-series:#3987e5;
+  --cs-data-2:#d7569f;
+  --cs-data-3:#9085e9;
+  --cs-data-4:#14a38f;
+  --cs-success:#7BC98A;
+  --cs-success-bg:#1F3A25;
+  --cs-warning:#F0A35E;
+  --cs-warning-bg:#45301A;
+  --cs-error:#FF9189;
+  --cs-error-bg:#4A2220;
+  --cs-seat-inactive:#8F877E;
+  --cs-seat-gold-stroke:#F2B544;
+}}
 :root[data-theme="dark"]{color-scheme:dark;
-  --cs-bg:#1B1917;--cs-surface:#24211E;--cs-border:#3B3631;--cs-text:#F5F1EB;--cs-muted:#ADA59C;
-  --cs-primary:#EF7770;--cs-primary-hover:#F38D87;--cs-on-primary:#1B1917;
-  --cs-gold:#F2B544;--cs-gold-strong:#F2B544;--cs-gold-bg:#3B2C14;--cs-gold-text:#F2B544;
-  --cs-chip:#302C28;--cs-control:#7D756C;--cs-series:#3987e5;
-  --cs-success:#7BC98A;--cs-success-bg:#1F3A25;--cs-warning:#F0A35E;--cs-warning-bg:#45301A;--cs-error:#FF9189;--cs-error-bg:#4A2220}
-/* Type stacks (system fonts, no web fonts), the app's content width and corner radii. */
-:root{--cs-sans:-apple-system,BlinkMacSystemFont,"Inter",system-ui,sans-serif;--cs-mono:ui-monospace,SFMono-Regular,Menlo,monospace;
-  --cs-content:1180px;--cs-radius:10px;--cs-control-radius:8px}
+  --cs-bg:#1B1917;
+  --cs-surface:#24211E;
+  --cs-chip:#302C28;
+  --cs-border:#3B3631;
+  --cs-control:#7D756C;
+  --cs-text:#F5F1EB;
+  --cs-muted:#ADA59C;
+  --cs-primary:#EF7770;
+  --cs-primary-hover:#F38D87;
+  --cs-on-primary:#1B1917;
+  --cs-gold:#F2B544;
+  --cs-gold-strong:#F2B544;
+  --cs-gold-bg:#3B2C14;
+  --cs-gold-text:#F2B544;
+  --cs-series:#3987e5;
+  --cs-data-2:#d7569f;
+  --cs-data-3:#9085e9;
+  --cs-data-4:#14a38f;
+  --cs-success:#7BC98A;
+  --cs-success-bg:#1F3A25;
+  --cs-warning:#F0A35E;
+  --cs-warning-bg:#45301A;
+  --cs-error:#FF9189;
+  --cs-error-bg:#4A2220;
+  --cs-seat-inactive:#8F877E;
+  --cs-seat-gold-stroke:#F2B544;
+}
+/* The same in both themes: type stacks (system fonts, no web fonts), spacing, radii, shadows, layout. */
+:root{
+  --cs-sans:-apple-system,BlinkMacSystemFont,"Inter",system-ui,sans-serif; /* All UI and prose text. System fonts only: no web fonts are loaded. */
+  --cs-mono:ui-monospace,SFMono-Regular,Menlo,monospace; /* Code, ids, URLs and targets in fix rows. */
+  --cs-space-1:4px; /* Icon-to-text nudges, list item gaps, chip vertical padding. */
+  --cs-space-2:8px; /* Gaps between buttons and chips; table cell padding; button-row gap. */
+  --cs-space-3:12px; /* Compact gaps: meta rows, page-heading to lede. */
+  --cs-space-4:16px; /* Paragraph spacing, code block padding, small card padding. */
+  --cs-space-5:20px; /* App card padding; app page-heading margin. */
+  --cs-space-6:24px; /* Page gutters, list rows, section headings. */
+  --cs-space-8:32px; /* Between page sections; featured card padding. */
+  --cs-space-12:48px; /* Hero grid gap; metric row column gap. */
+  --cs-space-16:64px; /* Bottom of main. */
+  --cs-radius-sm:4px; /* Inline code, focus-ring corners, progress tracks. */
+  --cs-control-radius:8px; /* Buttons, inputs, menus, code blocks, screenshots. */
+  --cs-radius:10px; /* Cards, table panels, product previews. */
+  --cs-radius-pill:999px; /* Chips, the live pill, step-number discs. */
+  --cs-shadow-menu:0 8px 24px rgba(0,0,0,.08); /* Dropdown menus. Only floating layers get a shadow; cards use a border. */
+  --cs-shadow-tooltip:0 4px 14px rgba(0,0,0,.12); /* Chart tooltips. */
+  --cs-focus-width:2px; /* Width of the focus ring: a solid cs-primary outline on every focusable element. */
+  --cs-focus-offset:2px; /* Gap between an element and its focus ring. */
+  --cs-opacity-disabled:.55; /* Disabled buttons. */
+  --cs-opacity-noise:.7; /* A change within noise: muted text at this opacity. */
+  --cs-content:1180px; /* Max content width of the app and the masthead. */
+  --cs-prose:768px; /* Max width of site prose; docs prose is 720px. */
+  --cs-masthead:64px; /* Masthead min-height, shared by site and app. */
+  --cs-touch-target:44px; /* Min height of buttons, inputs and nav targets on coarse pointers. */
+  --cs-bp-sm:420px; /* Breakpoint: small phones (app nav icons hide; site under 400px). For scripts and reference: media queries repeat the literal. */
+  --cs-bp-md:700px; /* Breakpoint: phones (app nav wraps to its own row; site menu collapses at 720px). */
+  --cs-bp-lg:800px; /* Breakpoint: tablets (fix facts wrap; hero tightens). */
+  --cs-bp-xl:900px; /* Breakpoint: small laptops (app header drops the brand name and live pill). */
+}
