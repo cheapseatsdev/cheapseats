@@ -25,6 +25,10 @@ bash -n deploy/*.sh .claude/hooks/*.sh
 
 `internal/server` takes about eight seconds; the rest is under a second each.
 
+The hook and the weekly-cut fleet trust the checked-out branch: they run its tests, scripts and
+agent files with your credentials. Run them only on branches you or this repo's agents wrote,
+never on a branch from someone else's fork or PR.
+
 ## Pull requests
 
 - One idea per PR. The title is a sentence in plain words, the way the git log reads.
