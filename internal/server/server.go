@@ -1458,13 +1458,13 @@ func (s *Server) exportCSV(w http.ResponseWriter, r *http.Request) {
 				row[8] = strconv.Itoa(*g.Position)
 			}
 			if g.TopPick != nil {
-				row[9] = cell(*g.TopPick)
+				row[9] = *g.TopPick
 			}
-			row[10] = cell(strings.Join(g.Named, "; "))
+			row[10] = strings.Join(g.Named, "; ")
 			if g.WhyNotTop != nil {
-				row[11] = cell(*g.WhyNotTop)
+				row[11] = *g.WhyNotTop
 			}
-			row[12] = cell(strings.Join(g.Objections, "; "))
+			row[12] = strings.Join(g.Objections, "; ")
 		}
 		if a := x.Answer; a != nil {
 			var qs, cs []string
@@ -1474,14 +1474,19 @@ func (s *Server) exportCSV(w http.ResponseWriter, r *http.Request) {
 			for _, c := range a.Citations {
 				cs = append(cs, c.URL)
 			}
-			row[13], row[14], row[16] = cell(strings.Join(qs, "; ")), cell(strings.Join(cs, " ")), cell(a.Text)
+			row[13], row[14], row[16] = strings.Join(qs, "; "), strings.Join(cs, " "), a.Text
 		}
 		// New columns go at the end, so scripts that read the export by position keep working.
 		ev := ""
 		if x.Grade != nil {
-			ev = cell(x.Grade.Evidence)
+			ev = x.Grade.Evidence
 		}
 		row = append(row, x.PromptID, d.Run.ConfigRev, d.Run.AppVersion, strconv.FormatBool(branded[x.PromptIdx]), ev)
+		// Every cell, not only the model's words: the prompt and answerer come from a config repo,
+		// and the model name is whatever the provider said it was.
+		for i := range row {
+			row[i] = cell(row[i])
+		}
 		cw.Write(row)
 	}
 	cw.Flush()
