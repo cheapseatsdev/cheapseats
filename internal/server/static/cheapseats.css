@@ -245,11 +245,11 @@ article.fix-item,.fix-item>summary{display:grid;grid-template-columns:minmax(0,1
   article.fix-item,.fix-item>summary{grid-template-columns:minmax(0,1fr) 12px;gap:10px;padding:var(--cs-space-4) 0}
   article.fix-item .fix-title{grid-column:1/-1}.fix-item>summary .fix-title{grid-column:1/-1}
   .fix-facts{grid-column:1;grid-row:2;display:flex;flex-wrap:wrap;gap:var(--cs-space-2) var(--cs-space-4)}.fix-item>summary::after{grid-column:2;grid-row:2}
-  .fix-meta{display:block}.fix-meta>span{display:block;margin-top:3px}.fix-meta .mono{overflow-wrap:anywhere}
+  .fix-meta{display:block}.fix-meta>span{margin-top:3px}.fix-meta>span:not(.chip){display:block}.fix-meta .mono{overflow-wrap:anywhere}
   .runnav{gap:var(--cs-space-3) 18px;font-size:13px}.runnav .nav-more{position:static}.runnav .nav-menu{left:0;right:auto;max-width:100%}
   .filter-options{gap:var(--cs-space-1)}.filter-toolbar .filter-name{width:100%}
 }
-@media(max-width:420px){.primary-nav .icon{display:none}.primary-nav{gap:var(--cs-space-2)}.fix-meta .chip{display:inline-block}}
+@media(max-width:420px){.primary-nav .icon{display:none}.primary-nav{gap:var(--cs-space-2)}}
 @media(pointer:coarse){
   button,.btn,input,select{min-height:var(--cs-touch-target)}.theme-toggle{min-width:var(--cs-touch-target);min-height:var(--cs-touch-target)}
   .primary-nav a,.primary-nav summary,.nav-menu a,.filter-option{min-height:var(--cs-touch-target)}
