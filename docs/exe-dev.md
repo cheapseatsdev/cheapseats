@@ -94,7 +94,8 @@ From a checkout of this repo, with your config repo committed:
 deploy/exe-dev.sh <vm> ../your-config
 ```
 
-It builds a Linux binary, ships the config as committed (recording its commit on every run), runs
+It builds a Linux binary, ships the config as committed (recording its commit on every run, and
+refusing a config with committed symlinks, which would point outside it on the VM), runs
 `cheapseats check` on the VM, swaps both in, restarts, and rolls back to the previous binary and config
 if Cheap Seats doesn't come up healthy. Runs in progress resume after the restart.
 
