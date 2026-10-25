@@ -502,8 +502,12 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
+// setCookie signs the browser in. The cookie is the token itself, so it's Secure (sent only over
+// https) whenever people reach Cheap Seats over https: CHEAPSEATS_PUBLIC_URL says so, or the
+// request came over TLS or through a proxy that terminated it (X-Forwarded-Proto).
 func (s *Server) setCookie(w http.ResponseWriter, r *http.Request, token string) {
-	http.SetCookie(w, &http.Cookie{Name: s.cookie, Value: token, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: r.TLS != nil, MaxAge: 30 * 86400})
+	secure := strings.HasPrefix(strings.ToLower(s.publicURL), "https://") || requestScheme(r) == "https"
+	http.SetCookie(w, &http.Cookie{Name: s.cookie, Value: token, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: secure, MaxAge: 30 * 86400})
 }
 
 func (s *Server) render(w http.ResponseWriter, page string, data any) {

@@ -268,7 +268,9 @@ cheapseats version                        version and database schema
 - Unset `CHEAPSEATS_TOKENS`: listens on 127.0.0.1 only, open. A page on another site can't read it
   (a request under a name rebound to loopback is refused) or change anything (a form or fetch
   from another origin is refused).
-- `CHEAPSEATS_TOKENS`: bearer tokens for the API and MCP; the UI asks for one once.
+- `CHEAPSEATS_TOKENS`: bearer tokens for the API and MCP; the UI asks for one once. Its cookie is
+  `Secure` when the request came over https (`X-Forwarded-Proto: https` from a proxy counts) or
+  `CHEAPSEATS_PUBLIC_URL` is https.
 - `CHEAPSEATS_AUTH_HEADER` (+ `CHEAPSEATS_ALLOWED_EMAILS`): trust a signing-in proxy's email header.
 - `CHEAPSEATS_HOSTS`: host names a proxy on the same machine serves Cheap Seats as; MCP needs them,
   and so does an open (token-less) Cheap Seats behind such a proxy. A proxy that rewrites `Host` to
