@@ -2,6 +2,8 @@
 # internal/grade/testdata/golden with the real grader and fails below the agreement threshold.
 # It calls the Anthropic API, so it never runs with ci.yml; run it by hand on a grader change.
 # It needs the repository secret ANTHROPIC_API_KEY; without it the run fails, it doesn't pass.
+# The job runs in the golden environment, so required reviewers set on that environment (repo
+# settings) approve each run before it can spend the key.
 name: golden
 
 on:
@@ -19,6 +21,7 @@ permissions:
 
 jobs:
   golden:
+    environment: golden
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
@@ -37,4 +40,17 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CHEAPSEATS_GOLDEN: "1"
-        run: go test ./internal/grade/... -run Golden -v -golden.threshold="${{ inputs.threshold }}" -golden.set="${{ inputs.set }}"
+          # Inputs reach the script as variables, never spliced into it, and are checked first:
+          # the threshold is a share from 0 to 1, the set a prompt set id (internal/sets idRe).
+          THRESHOLD: ${{ inputs.threshold }}
+          SET: ${{ inputs.set }}
+        run: |
+          if ! [[ "$THRESHOLD" =~ ^(0(\.[0-9]+)?|1(\.0+)?)$ ]]; then
+            echo "::error::threshold must be a number from 0 to 1, like 0.90"
+            exit 1
+          fi
+          if [ -n "$SET" ] && ! [[ "$SET" =~ ^[a-z0-9][a-z0-9-]*$ ]]; then
+            echo "::error::set must be a prompt set id: lowercase letters, digits and hyphens"
+            exit 1
+          fi
+          go test ./internal/grade/... -run Golden -v -golden.threshold="$THRESHOLD" -golden.set="$SET"

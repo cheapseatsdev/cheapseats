@@ -149,4 +149,7 @@ already allows for.
 
 In GitHub, the manual workflow **golden** (`.github/workflows/golden.yml`, *Run workflow*) runs
 the same with the repository secret `ANTHROPIC_API_KEY`; without the secret it fails with a
-message, never passes. It is deliberately not part of `ci.yml`, which has no network.
+message, never passes. It is deliberately not part of `ci.yml`, which has no network. The job
+runs in the `golden` environment, so reviewers required on that environment approve each run
+before it can spend the key, and it refuses a threshold that is not a number from 0 to 1 or a set
+that is not a prompt set id.
