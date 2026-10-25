@@ -736,7 +736,11 @@ func serve(ctx context.Context, addr string) error {
 			a.Schedule(runs)
 		}()
 	}
-	hs := &http.Server{Addr: addr, Handler: srv.Handler(), ReadHeaderTimeout: 10 * time.Second}
+	// A client gets a minute to send its whole request and two to send the next on a kept-alive
+	// connection. Nothing limits writing the response: wait_for_run holds an MCP call open for up to
+	// ten minutes, and MCP's event stream stays open. (Go clears the read deadline once a body is
+	// read, so the read limit doesn't cut those short either.)
+	hs := &http.Server{Addr: addr, Handler: srv.Handler(), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: time.Minute, IdleTimeout: 2 * time.Minute}
 	go func() {
 		<-ctx.Done()
 		slog.Info("shutting down; runs in progress resume on the next start")
