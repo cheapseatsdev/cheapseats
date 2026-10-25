@@ -140,7 +140,8 @@ func (s *Server) apiCitationCheck(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, c)
 }
 
-// apiRunCitationCheck checks a run's most-cited pages (?n=, default 25) and waits for it.
+// apiRunCitationCheck checks a run's most-cited pages (?n=, default 25, at most
+// app.MaxCitationChecks) and waits for it.
 func (s *Server) apiRunCitationCheck(w http.ResponseWriter, r *http.Request) {
 	n, _ := strconv.Atoi(r.URL.Query().Get("n"))
 	c, err := s.App.CheckCitations(r.Context(), r.PathValue("id"), n, audit.CiteOptions{})
