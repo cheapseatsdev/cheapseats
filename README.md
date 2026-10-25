@@ -3,6 +3,7 @@
 Cheap Seats is an AI visibility tracker for Claude and OpenAI models. It asks your buyers'
 questions, grades whether answers recommend your product, and ranks pages to improve. It is free
 MIT-licensed software you run yourself, with SQLite storage and a web UI, CLI, JSON API and MCP server.
+Use Docker with API keys, or run locally with Go to use your Claude subscription (ChatGPT optional).
 
 It measures direct model responses, not consumer apps. Model access, hosting and optional services
 have their own costs. [Docs](https://cheapseats.dev/docs/) · [Live demo](https://demo.cheapseats.dev/)
@@ -10,53 +11,78 @@ have their own costs. [Docs](https://cheapseats.dev/docs/) · [Live demo](https:
 
 ## Quick start
 
-From a checkout, with **Go 1.27 or later**:
+**Use Go with subscriptions, or Docker for the quickest setup with API keys.**
 
-- **Claude is required:** an installed, logged-in `claude` CLI on a Claude subscription, or an
-  Anthropic API key.
-- **OpenAI is optional:** an installed, logged-in `codex` CLI on a ChatGPT subscription, or an
-  OpenAI API key. Unavailable answerers are skipped.
+| How you access models | Setup | What you need |
+| --- | --- | --- |
+| API keys | [Docker](#docker-with-api-keys) | Docker, Git and `ANTHROPIC_API_KEY`; `OPENAI_API_KEY` is optional. No Go installation. |
+| Claude subscription (ChatGPT optional) | [Go](#go-with-subscriptions) | Go 1.27 or later, an app checkout and an installed, logged-in `claude` CLI; `codex` is optional. |
 
-**Use your subscriptions:**
+### Docker with API keys
+
+Clone the config template; the published image supplies the app:
+
+```bash
+git clone https://github.com/cheapseatsdev/cheapseats-config-template cheapseats-config
+cd cheapseats-config
+umask 077
+printf 'CHEAPSEATS_TOKENS=%s\n' "$(openssl rand -hex 32)" > .env
+"${EDITOR:-vi}" .env
+```
+
+Keep the generated token and add `ANTHROPIC_API_KEY=<your key>` in the editor.
+Add `OPENAI_API_KEY=<your key>` for OpenAI answers; otherwise that answerer is skipped.
+The template ignores `.env` in git. Then start the container:
+
+```bash
+docker run --rm --name cheapseats --stop-timeout 30 \
+  -p 127.0.0.1:3000:3000 \
+  --env-file .env \
+  -v "$PWD:/config:ro" \
+  -v cheapseats-data:/data \
+  ghcr.io/cheapseatsdev/cheapseats:0.5.3
+```
+
+Open <http://127.0.0.1:3000> and sign in with the token from `.env`. The named volume keeps
+your results after the container stops. The image includes neither subscription CLI.
+**API runs cost money:** review model IDs, prices and budget before starting a set. The budget
+admits calls against estimated reservations; actual charges can exceed them. See
+[cost and budget](https://cheapseats.dev/docs/cost-and-budget/).
+
+### Go with subscriptions
+
+From an app checkout, with Go 1.27 or later and the `claude` CLI installed and logged in:
 
 ```bash
 CHEAPSEATS_CONFIG=examples/cheapseats-config/cheapseats.subscriptions.toml go run ./cmd/cheapseats serve
 ```
 
-These calls incur no API spend and share your subscription allowance. The container image has
-neither CLI; use API providers there.
+Open <http://127.0.0.1:3000>, choose a set and run it. Claude handles answers, grading and
+analysis; an installed, logged-in `codex` CLI adds OpenAI answers. These calls share your
+subscription allowances, with no API key or API spend.
 
-**Or use the APIs:**
+This Go setup listens on loopback without authentication: every local user or program can read
+results and start runs. Set `CHEAPSEATS_TOKENS` on shared machines; see [Access](#access).
 
-```bash
-cp .env.example .env          # fill in ANTHROPIC_API_KEY; OPENAI_API_KEY is optional
-go run ./cmd/cheapseats serve
-```
+### Measure your own brand
 
-Open <http://127.0.0.1:3000>, choose a set and run it. Both examples measure Cheap Seats itself.
-For API runs, review the example's model IDs and prices before spending. The daily budget admits
-calls against estimated reservations; **it is not a hard billing ceiling**. Actual charges can
-exceed reservations. See [cost and budget](https://cheapseats.dev/docs/cost-and-budget/).
+Both quickstarts measure Cheap Seats itself. **Docker/API users:** edit `cheapseats.toml` and
+`prompt-sets/` in the template you cloned, then restart the container. Keep its API providers;
+[Docker setup and validation](docs/deploying.md#try-docker-with-api-keys) need no Go.
 
-These defaults listen on loopback without authentication: every local user or program can
-start paid runs. Set `CHEAPSEATS_TOKENS` on shared machines; see [Access](#access).
-
-To measure your brand, generate a config repo:
+**Go/subscription users:** generate a config from your website, then review its TODOs, brand,
+audience, facts and buyer questions before checking and serving it:
 
 ```bash
 go run ./cmd/cheapseats init https://yoursite.com ../your-config
-```
-
-This reads public pages and writes starter prompts without model calls unless you add `-suggest`.
-Review the TODOs, brand description, audience, facts and questions before running. Or use the
-[config template](https://github.com/cheapseatsdev/cheapseats-config-template). Then:
-
-```bash
+# Review ../your-config before continuing; add -dry-run to init to preview it first.
 CHEAPSEATS_CONFIG=../your-config/cheapseats.toml go run ./cmd/cheapseats check
 CHEAPSEATS_CONFIG=../your-config/cheapseats.toml go run ./cmd/cheapseats serve
 ```
 
-[Config generation details](docs/init.md).
+`init` reads public pages and writes starter prompts without model calls unless you add `-suggest`.
+See [config generation](docs/init.md) for what it reads and writes, and
+[Getting started](https://cheapseats.dev/docs/getting-started/) for the full walkthrough.
 
 ## What a run gives you
 

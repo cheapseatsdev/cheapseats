@@ -1,5 +1,58 @@
 # Deploying Cheap Seats
 
+**Use Docker for the quickest setup with API keys. Use Go for your subscriptions.**
+
+- **API keys:** the released Docker image needs no Go installation or app compilation.
+  `ANTHROPIC_API_KEY` is required for Claude answers, grading and the fix list;
+  `OPENAI_API_KEY` adds OpenAI answers.
+- **Subscriptions:** run locally with Go 1.27 or later and a logged-in `claude` CLI. A logged-in
+  `codex` CLI is optional. See the [quick start](../README.md#quick-start). The Docker image
+  contains neither subscription CLI.
+
+## Try Docker with API keys
+
+Start with the [config template](https://github.com/cheapseatsdev/cheapseats-config-template).
+It uses API providers and measures Cheap Seats as a working example:
+
+```bash
+git clone https://github.com/cheapseatsdev/cheapseats-config-template cheapseats-config
+cd cheapseats-config
+umask 077
+printf 'CHEAPSEATS_TOKENS=%s\n' "$(openssl rand -hex 32)" > .env
+"${EDITOR:-vi}" .env
+```
+
+Keep the generated `CHEAPSEATS_TOKENS` line and add `ANTHROPIC_API_KEY=<your key>` in the editor.
+Add `OPENAI_API_KEY=<your key>` for OpenAI answers; without it, that answerer is skipped.
+The template ignores `.env` in git.
+
+```bash
+docker run --rm --name cheapseats --stop-timeout 30 \
+  -p 127.0.0.1:3000:3000 \
+  --env-file .env \
+  -v "$PWD:/config:ro" \
+  -v cheapseats-data:/data \
+  ghcr.io/cheapseatsdev/cheapseats:0.5.3
+```
+
+Open <http://127.0.0.1:3000> and sign in with the token from `.env`. The container listens on
+`0.0.0.0`, so it requires a token even though the host port is bound to loopback. Press Ctrl+C
+to stop it; the `cheapseats-data` volume keeps your results.
+
+Edit the brand in `cheapseats.toml` and the questions in `prompt-sets/` on your machine; the
+container mounts them read-only. Validate changes before restarting the container:
+
+```bash
+docker run --rm --env-file .env -v "$PWD:/config:ro" \
+  ghcr.io/cheapseatsdev/cheapseats:0.5.3 check
+```
+
+API runs cost money. Check the model IDs, prices and budget in `cheapseats.toml` before running
+a set. The budget admits calls against reservations; actual charges can exceed them. See
+[Cost and budget](https://cheapseats.dev/docs/cost-and-budget/).
+
+## Build a deployable image
+
 Start with the [config template](https://github.com/cheapseatsdev/cheapseats-config-template): its
 workflows check and plan pull requests and deploy merges. Its
 [deployment guides](https://github.com/cheapseatsdev/cheapseats-config-template/blob/main/deploy/README.md)
@@ -9,7 +62,7 @@ Cheap Seats releases an image, `ghcr.io/cheapseatsdev/cheapseats:<version>`, and
 `oci://ghcr.io/cheapseatsdev/charts/cheapseats`. Build your config into a deployment image:
 
 ```dockerfile
-FROM ghcr.io/cheapseatsdev/cheapseats:0.1.0
+FROM ghcr.io/cheapseatsdev/cheapseats:0.5.3
 COPY cheapseats.toml /config/cheapseats.toml
 COPY prompt-sets /config/prompt-sets
 ARG REVISION=""
@@ -17,15 +70,15 @@ ENV CHEAPSEATS_CONFIG_REV=$REVISION
 ```
 
 Use one tag per config commit on either host. Roll back by deploying the previous tag; upgrade
-Cheap Seats by reviewing the `FROM` change. You can also mount a checkout at `/config`, as in the
-README.
+Cheap Seats by reviewing the `FROM` change. For a local trial,
+[mount the config checkout](#try-docker-with-api-keys) instead of building an image.
 
 ## What any deployment needs
 
 - **One instance, one volume.** Run progress lives in the process and the database is SQLite on
   `/data`; never run two against the same data. The Helm chart runs one replica and replaces it
   rather than rolling.
-- **Secrets in the environment:** `CHEAPSEATS_TOKENS`, `ANTHROPIC_API_KEY` (grading),
+- **Secrets in the environment:** `CHEAPSEATS_TOKENS`, `ANTHROPIC_API_KEY` for `anthropic` roles,
   `OPENAI_API_KEY` for OpenAI answerers, and `TYPESAFE_API_KEY` or `EXA_API_KEY` only with
   `[typesafe]` or `[exa]` in the config. Key-adding `CHEAPSEATS_*_BASE_URL` proxies can replace provider
   keys; see [Optional providers](optional-providers.md). The image has no Claude Code or Codex CLI;
@@ -39,8 +92,9 @@ README.
   Bodies are at most 1 MiB (4 KiB for `/login`); a fix attempt's link is at most 2048 bytes and its
   note 4096. Responses have no timeout: allow more than ten minutes at the proxy for MCP's
   `wait_for_run`, and support its open event stream.
-- **TLS in front.** Tokens travel as bearer headers, so serve Cheap Seats over HTTPS only. The
-  Helm chart refuses `ingress.enabled` without `ingress.tls`, unless `ingress.externalTLS: true`
+- **TLS in front for remote access.** Tokens travel as bearer headers, so serve Cheap Seats over HTTPS
+  when it is reachable beyond your machine. The Helm chart refuses `ingress.enabled` without
+  `ingress.tls`, unless `ingress.externalTLS: true`
   says TLS ends before the Ingress (a cloud load balancer or CDN). It also refuses a key or token
   as a literal value, in `env` or `extraEnv`: those come from a Secret.
 - **Share links:** `GET /share/<token>` answers without a token, serving only that link's run
