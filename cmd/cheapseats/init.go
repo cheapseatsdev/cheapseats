@@ -110,6 +110,11 @@ func initCmd(ctx context.Context, args []string) error {
 		fmt.Printf("  %s\n", f.Path)
 	}
 	toml := filepath.Join(dir, "cheapseats.toml")
+	// Stage the files init wrote, by name: "git add ." would take a .env made in the meantime.
+	var paths []string
+	for _, f := range files {
+		paths = append(paths, f.Path)
+	}
 	fmt.Printf(`
 Next:
   1. Review the TODOs: grep -rn TODO %[1]s
@@ -118,8 +123,8 @@ Next:
   4. CHEAPSEATS_CONFIG=%[2]s cheapseats run discovery
      (%[4]d prompts x 3 answers on your Claude subscription, no API spend. cheapseats run has no dry
      run: it asks for real, so read the prompts first.)
-  5. cd %[1]s && git init && git add . && git commit -m "Cheap Seats config for %[3]s"
-`, dir, toml, site.Name, len(p.Sets[0].Prompts))
+  5. cd %[1]s && git init && git add %[5]s && git commit -m "Cheap Seats config for %[3]s"
+`, dir, toml, site.Name, len(p.Sets[0].Prompts), strings.Join(paths, " "))
 	return nil
 }
 

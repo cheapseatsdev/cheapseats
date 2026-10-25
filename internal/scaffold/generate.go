@@ -311,9 +311,17 @@ func (p *Plan) Suggest(ctx context.Context, cfg *config.Config, n int) error {
 	return nil
 }
 
-// Files is the config repo: cheapseats.toml and one file per starter set.
+// gitignore keeps secrets out of the config repo: cheapseats.toml says keys may live in a .env
+// beside it, and the next step commits the directory.
+const gitignore = `# Secrets: API keys and tokens never go in the config repo.
+.env
+.env.*
+!.env.example
+`
+
+// Files is the config repo: a .gitignore, cheapseats.toml and one file per starter set.
 func (p Plan) Files() []File {
-	out := []File{{Path: "cheapseats.toml", Body: p.config()}}
+	out := []File{{Path: ".gitignore", Body: gitignore}, {Path: "cheapseats.toml", Body: p.config()}}
 	for _, s := range p.Sets {
 		out = append(out, File{Path: filepath.Join("prompt-sets", s.ID+".toml"), Body: s.toml()})
 	}

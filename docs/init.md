@@ -40,6 +40,7 @@ sitemaps). No model is called unless you pass `-suggest`.
 
 ```
 <brand>-cheapseats-config/
+  .gitignore                        .env and .env.* (keys may live there), not .env.example
   cheapseats.toml                   brand, sites, competitors; claude-code answerer, grader and
                                  analyst (codex commented out); budget; schedule off
   prompt-sets/
@@ -55,4 +56,5 @@ The generated files pass `cheapseats check` before they're written. Review every
 (`grep -rn TODO`): `audience` and `facts` are left for you, and `about` and the category are
 guesses. Settle `about` and `audience` before the first run, since changing them restarts every
 trend. Then `cheapseats check`, `cheapseats audit`, `cheapseats run discovery`, and commit the directory as
-its own git repo.
+its own git repo. The commit init prints stages the files it wrote by name, not `git add .`, so a
+`.env` made in the meantime stays out even before the `.gitignore` is committed.
