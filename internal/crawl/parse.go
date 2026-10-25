@@ -1,7 +1,8 @@
 // Package crawl imports web server and CDN access logs and counts what matters to AI visibility:
-// fetches by AI crawlers (by user agent: assistant, search, training, search engine), and visits
-// from people who followed a link in an assistant's answer (by Referer or utm_source). It keeps
-// daily counts per page, not the log lines.
+// fetches by AI crawlers (by user agent: assistant, search, training, search engine), visits
+// from people who followed a link in an assistant's answer (by Referer or utm_source), and other
+// people's visits (by a browser's user agent), the denominator for those. It keeps daily counts
+// per page, not the log lines.
 //
 // A crawler is known only by the user agent it sends, which anyone can copy, so every count is
 // "unverified (UA only)". Checking a fetch's IP against the operator's published ranges is left

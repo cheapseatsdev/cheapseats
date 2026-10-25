@@ -368,7 +368,7 @@ func (s *Server) mcpHandler() http.Handler {
 			c, err := s.App.CheckCitations(ctx, a.Run, a.Limit, audit.CiteOptions{})
 			return c, err
 		})
-	addTool(srv, "get_crawlers", "AI crawler fetches and AI-referred visits per page of the brand's, from imported access logs (by user agent only, unverified), beside how often the latest runs cited and surfaced each page. Flags pages crawled but never cited, and cited but never fetched by an assistant or AI search crawler.",
+	addTool(srv, "get_crawlers", "AI crawler fetches, AI-referred visits and all people's visits (visits, the AI referrals among them; 0 when the logs counted none) per page of the brand's, from imported access logs (by user agent only, unverified), beside how often the latest runs cited and surfaced each page. Flags pages crawled but never cited, and cited but never fetched by an assistant or AI search crawler.",
 		func(ctx context.Context, a struct {
 			LastDays int    `json:"last_days,omitempty" jsonschema:"default 30"`
 			Flag     string `json:"flag,omitempty" jsonschema:"only pages flagged crawled-not-cited or cited-not-crawled"`

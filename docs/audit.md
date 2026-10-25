@@ -152,9 +152,21 @@ Each request is classed by its user agent:
 - **engine**: Googlebot, Bingbot
 - **AI referral**: a person, with a Referer from chatgpt.com, chat.openai.com, claude.ai,
   perplexity.ai, copilot.microsoft.com or gemini.google.com, or `utm_source=chatgpt.com` (or another of those hosts)
+- **visit**: any other person: a user agent that starts `Mozilla/` and carries none of the words
+  tools and bots send (`bot`, `crawl`, `spider`, `http`, `compatible;`, `headless`, `curl` and the
+  like), asking for a page (a path with no extension, or `.html`, `.php` and the other page types).
+  Redirects other than 304 are left out: the page they lead to counts when the browser gets there.
 
-**Unverified (UA only):** anyone can send a crawler's user agent, and nothing here checks the IP
-against the operator's published ranges.
+**Visits** are the AI referrals plus these: every person's page view, so `AI referrals of N visits`
+says what share of the people reading came from an assistant. It's a count from logs, not
+analytics: no sessions, unique visitors, time on page or trends, and a bot dressed as a browser
+counts as a visit. Visits show only once an import has counted some; counts from an import by an
+earlier release had none, and importing the same logs again adds them without counting anything
+else twice. Visit counts can be private where crawler counts aren't: a copy of the database you
+publish can drop them with `DELETE FROM crawl_daily WHERE class = 'visit'`.
+
+**Unverified (UA only):** anyone can send a crawler's or a browser's user agent, and nothing here
+checks the IP against the operator's published ranges.
 
 Stored data is daily counts per host, page, class and bot, plus request hashes for deduplication;
 raw log lines are not kept. Counts and hashes expire after 400 days. Older lines and dates after
@@ -162,7 +174,7 @@ tomorrow (UTC) are ignored. All 4xx requests share the host's `/(errors)` row, w
 flagged; 5xx requests stay on their page. Each import accepts at most a million new requests;
 repeat it to process the remainder. Lines over 1 MiB are marked unreadable without stopping import.
 
-The page lists each page's fetches by class and AI referrals beside how often the latest finished
+The page lists each page's fetches by class, AI referrals and visits beside how often the latest finished
 run of each set cited and surfaced it, and flags:
 
 - **crawled, never cited**: AI crawlers fetched it, but no answer in the latest runs cited it.

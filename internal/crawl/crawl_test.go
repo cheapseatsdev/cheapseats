@@ -73,8 +73,15 @@ func TestClassify(t *testing.T) {
 		{Hit{Target: "/p", UA: "Mozilla/5.0", Referer: "https://www.perplexity.ai/search?q=x"}, bots.Referral, "Perplexity", "cheapseats.dev", "/p", true, false},
 		{Hit{Target: "/p?utm_source=chatgpt.com", UA: "Mozilla/5.0"}, bots.Referral, "ChatGPT", "cheapseats.dev", "/p", true, false},
 		{Hit{Target: "https://other.example/x", UA: "Perplexity-User/1.0"}, bots.Assistant, "Perplexity-User", "other.example", "/x", true, false},
-		{Hit{Target: "/app.js", UA: "GPTBot/1.0"}, "", "", "", "", false, false},                            // an asset, not a page
-		{Hit{Target: "/", UA: "Mozilla/5.0", Referer: "https://google.com/"}, "", "", "", "", false, false}, // a person from elsewhere
+		{Hit{Target: "/app.js", UA: "GPTBot/1.0"}, "", "", "", "", false, false},                                                               // an asset, not a page
+		{Hit{Target: "/", UA: "Mozilla/5.0", Referer: "https://google.com/", Status: 200}, bots.Visit, "", "cheapseats.dev", "/", true, false}, // a person from elsewhere
+		{Hit{Target: "/docs/x.html", UA: "Mozilla/5.0 (iPhone)", Status: 304}, bots.Visit, "", "cheapseats.dev", "/docs/x.html", true, false},
+		{Hit{Target: "/wp-login.php", UA: "Mozilla/5.0", Status: 404}, bots.Visit, "", "cheapseats.dev", ErrorPath, true, true},
+		{Hit{Target: "/old", UA: "Mozilla/5.0", Status: 301}, "", "", "", "", false, false},                                                     // a redirect: the page it leads to counts
+		{Hit{Target: "/index.xml", UA: "Mozilla/5.0", Status: 200}, "", "", "", "", false, false},                                               // a feed, not a page
+		{Hit{Target: "/", UA: "Mozilla/5.0 (compatible; AhrefsBot/7.0; +http://ahrefs.com/robot/)", Status: 200}, "", "", "", "", false, false}, // an SEO crawler
+		{Hit{Target: "/", UA: "Mozilla/5.0 (X11) HeadlessChrome/120.0", Status: 200}, "", "", "", "", false, false},
+		{Hit{Target: "/", UA: "curl/8.4.0", Status: 200}, "", "", "", "", false, false},
 	} {
 		e, ok := Classify(c.hit, "cheapseats.dev")
 		if ok != c.ok || ok && (e.Class != c.class || e.Bot != c.bot || e.Host != c.host || e.Path != c.path || e.Error != c.errorCount || e.Hash == "") {
@@ -103,12 +110,12 @@ func TestImportAndReport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if st.Lines != 7 || st.Unread != 1 || st.Counted != 4 || st.ByClass[bots.Assistant] != 1 || st.ByClass[bots.Training] != 2 || st.ByClass[bots.Referral] != 1 {
+	if st.Lines != 7 || st.Unread != 1 || st.Counted != 5 || st.ByClass[bots.Assistant] != 1 || st.ByClass[bots.Training] != 2 || st.ByClass[bots.Referral] != 1 || st.ByClass[bots.Visit] != 1 {
 		t.Errorf("first import: %+v", st)
 	}
 	// Again, as when a rotated log is imported with the one before it: nothing counts twice.
 	st, err = Import(ctx, db.DB, strings.NewReader(log), "cheapseats.dev")
-	if err != nil || st.Counted != 0 || st.Duplicate != 4 {
+	if err != nil || st.Counted != 0 || st.Duplicate != 5 {
 		t.Errorf("second import: %+v %v", st, err)
 	}
 	if _, err := Import(ctx, db.DB, strings.NewReader("junk\nmore junk\n"), ""); err == nil {
@@ -128,11 +135,14 @@ func TestImportAndReport(t *testing.T) {
 	for _, p := range rep.Pages {
 		byPath[p.Host+p.Path] = p
 	}
-	if len(rep.Pages) != 3 || rep.Pages[0].Path != "/docs/start" {
+	if len(rep.Pages) != 4 || rep.Pages[0].Path != "/docs/start" {
 		t.Fatalf("pages: %+v", rep.Pages)
 	}
-	if p := byPath["cheapseats.dev/docs/start"]; p.Assistant != 1 || p.Training != 1 || p.Referrals != 1 || p.Cited != 3 || p.Flag != "" || p.Last == "" {
+	if p := byPath["cheapseats.dev/docs/start"]; p.Assistant != 1 || p.Training != 1 || p.Referrals != 1 || p.Visits != 1 || p.Cited != 3 || p.Flag != "" || p.Last == "" {
 		t.Errorf("docs/start: %+v", p)
+	}
+	if p := byPath["cheapseats.dev/"]; p.Visits != 1 || p.Flag != "" || p.Last != "" {
+		t.Errorf("/, only visited: %+v", p)
 	}
 	if p := byPath["cheapseats.dev/blog/old"]; p.Flag != "crawled-not-cited" {
 		t.Errorf("blog/old: %+v", p)
@@ -140,7 +150,7 @@ func TestImportAndReport(t *testing.T) {
 	if p := byPath["cheapseats.dev/compare"]; p.Flag != "cited-not-crawled" {
 		t.Errorf("compare: %+v", p)
 	}
-	if rep.Totals.Training != 2 || len(rep.Hosts) != 1 || len(rep.Bots) != 3 || rep.Bots[0].Bot != "ChatGPT-User" || rep.Bots[1].Bot != "GPTBot" || rep.Bots[1].Pages != 2 {
+	if rep.Totals.Training != 2 || rep.Totals.Visits != 2 || len(rep.Hosts) != 1 || len(rep.Bots) != 3 || rep.Bots[0].Bot != "ChatGPT-User" || rep.Bots[1].Bot != "GPTBot" || rep.Bots[1].Pages != 2 {
 		t.Errorf("totals %+v, hosts %v, bots %+v", rep.Totals, rep.Hosts, rep.Bots)
 	}
 }

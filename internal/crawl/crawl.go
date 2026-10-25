@@ -18,13 +18,14 @@ import (
 	"github.com/cheapseatsdev/cheapseats/internal/bots"
 )
 
-// Event is a hit worth counting: an AI crawler's fetch of a page, or a visit an assistant referred.
+// Event is a hit worth counting: an AI crawler's fetch of a page, a visit an assistant referred, or
+// another person's visit to a page.
 type Event struct {
 	Day   string // UTC
 	Host  string
 	Path  string
 	Class bots.Class
-	Bot   string // the crawler's token, or the referring assistant
+	Bot   string // the crawler's token, or the referring assistant; empty for a visit
 	Error bool   // answered 4xx or 5xx
 	Hash  string // identifies the request, so a log imported twice counts once
 }
@@ -40,8 +41,13 @@ var assets = map[string]bool{".css": true, ".js": true, ".mjs": true, ".map": tr
 	".webp": true, ".avif": true, ".svg": true, ".ico": true, ".woff": true, ".woff2": true, ".ttf": true, ".otf": true, ".eot": true,
 	".mp4": true, ".webm": true, ".mp3": true, ".json": true, ".wasm": true}
 
+// visitPages are the file types a person's visit can be to: a page's path ends in one of these or
+// has none. A browser fetching robots.txt, a feed or a download isn't visiting a page.
+var visitPages = map[string]bool{"": true, ".html": true, ".htm": true, ".shtml": true, ".php": true, ".asp": true, ".aspx": true, ".jsp": true, ".cfm": true}
+
 // Classify says what a hit was: an AI crawler (by its user agent), a person an assistant sent (by
-// the Referer or a utm_source naming one), or neither. Host is used when the log line has none.
+// the Referer or a utm_source naming one), another person's visit to a page (by a browser's user
+// agent), or none of these. Host is used when the log line has none.
 func Classify(h Hit, host string) (Event, bool) {
 	th, p, q := split(h.Target)
 	if h.Host != "" {
@@ -61,6 +67,9 @@ func Classify(h Hit, host string) (Event, bool) {
 		e.Class, e.Bot = b.Class, b.Token
 	} else if name, ok := referrer(h.Referer, q); ok {
 		e.Class, e.Bot = bots.Referral, name
+	} else if bots.Browser(h.UA) && visitPages[strings.ToLower(path.Ext(p))] && (h.Status < 300 || h.Status == 304 || h.Status >= 400) {
+		// A redirect isn't a visit: the page it leads to is counted when the browser gets there.
+		e.Class = bots.Visit
 	} else {
 		return Event{}, false
 	}
@@ -115,7 +124,7 @@ func Key(raw string) (host, p string) {
 type Stats struct {
 	Lines     int                `json:"lines"`
 	Unread    int                `json:"unread"`     // in no format Parse knows, or too long to be a request
-	Counted   int                `json:"counted"`    // new AI crawler fetches and referred visits
+	Counted   int                `json:"counted"`    // new AI crawler fetches, referred visits and other visits
 	Duplicate int                `json:"duplicate"`  // counted by an earlier import
 	TooOld    int                `json:"too_old"`    // from more than keepDays ago: not counted
 	Future    int                `json:"future"`     // dated after tomorrow (UTC): not counted
@@ -124,7 +133,7 @@ type Stats struct {
 	NoHost    bool               `json:"no_host"` // lines had no host, and none was given
 }
 
-// Import counts a log's AI crawler fetches and referred visits into crawl_daily, each request
+// Import counts a log's AI crawler fetches, referred visits and other visits into crawl_daily, each request
 // once however often the log is imported. Host is the site for lines that don't say (common and
 // combined logs).
 func Import(ctx context.Context, db *sql.DB, r io.Reader, host string) (Stats, error) {
@@ -243,8 +252,8 @@ func readLine(br *bufio.Reader) (line string, long bool, err error) {
 // Use is how answers drew on one of the brand's pages, from the latest runs.
 type Use struct{ Cited, Surfaced int }
 
-// PageRow is one page: its fetches by class and referred visits in the window, and how the latest
-// runs used it.
+// PageRow is one page: its fetches by class, visits and referred visits in the window, and how the
+// latest runs used it.
 type PageRow struct {
 	Host      string `json:"host"`
 	Path      string `json:"path"`
@@ -253,8 +262,12 @@ type PageRow struct {
 	Training  int    `json:"training"`
 	Engine    int    `json:"engine"`
 	Referrals int    `json:"referrals"`
-	Errors    int    `json:"errors"` // crawler fetches answered 4xx or 5xx
-	Last      string `json:"last_fetched,omitempty"`
+	// Visits is people's visits, the AI referrals among them. Zero everywhere when the window has
+	// no visits counted but referrals (imported by a release that didn't count visits, or
+	// removed): referrals alone aren't every visit.
+	Visits int    `json:"visits"`
+	Errors int    `json:"errors"` // crawler fetches answered 4xx or 5xx
+	Last   string `json:"last_fetched,omitempty"`
 	Use
 	// crawled-not-cited: AI crawlers fetched it, but no answer in the latest runs cited it.
 	// cited-not-crawled: answers cite it, but no assistant or search crawler fetched it in the
@@ -295,6 +308,7 @@ func Build(ctx context.Context, db *sql.DB, days int, cited map[[2]string]Use) (
 	byBot := map[bk]*BotRow{}
 	botPages := map[bk]map[[2]string]bool{}
 	hosts := map[string]bool{}
+	visits := false
 	for rows.Next() {
 		var day, host, p, class, bot string
 		var hits, errs int
@@ -325,12 +339,19 @@ func Build(ctx context.Context, db *sql.DB, days int, cited map[[2]string]Use) (
 			row.Engine += hits
 		case bots.Referral:
 			row.Referrals += hits
+			row.Visits += hits
+		case bots.Visit:
+			row.Visits += hits
+			visits = true
 		}
-		if bots.Class(class) != bots.Referral {
+		if c := bots.Class(class); c != bots.Referral && c != bots.Visit {
 			row.Errors += errs
 			if day > row.Last {
 				row.Last = day
 			}
+		}
+		if bots.Class(class) == bots.Visit {
+			continue // people, not a crawler: no row in Bots
 		}
 		b := bk{class, bot}
 		if byBot[b] == nil {
@@ -353,6 +374,9 @@ func Build(ctx context.Context, db *sql.DB, days int, cited map[[2]string]Use) (
 	}
 	for k, row := range pages {
 		row.Use = cited[k]
+		if !visits {
+			row.Visits = 0
+		}
 		ai := row.Assistant + row.Search + row.Training
 		switch {
 		case row.Path == ErrorPath: // not a page: nothing to cite
@@ -367,6 +391,7 @@ func Build(ctx context.Context, db *sql.DB, days int, cited map[[2]string]Use) (
 		rep.Totals.Training += row.Training
 		rep.Totals.Engine += row.Engine
 		rep.Totals.Referrals += row.Referrals
+		rep.Totals.Visits += row.Visits
 		rep.Totals.Errors += row.Errors
 	}
 	sort.Slice(rep.Pages, func(i, j int) bool {
@@ -379,6 +404,9 @@ func Build(ctx context.Context, db *sql.DB, days int, cited map[[2]string]Use) (
 		}
 		if x.Referrals != y.Referrals {
 			return x.Referrals > y.Referrals
+		}
+		if x.Visits != y.Visits {
+			return x.Visits > y.Visits
 		}
 		return x.Host+x.Path < y.Host+y.Path
 	})
