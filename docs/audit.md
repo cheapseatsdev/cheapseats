@@ -19,7 +19,9 @@ Also **Site audit** in the web UI (`/audit`, "Audit now"), `POST /api/audit` and
 sites; another site takes the CLI.
 
 Every fetch, here and in the citation check, goes to public addresses only: loopback, private,
-link-local (cloud metadata included), CGNAT, ULA and multicast addresses are refused, checked on
+link-local (cloud metadata included), CGNAT, ULA and multicast addresses are refused, and so is
+every other range in IANA's special-purpose registries that is not globally reachable
+(documentation, benchmarking, 6to4, NAT64, Teredo, site-local and the like), checked on
 the address dialed, so a redirect or a DNS name pointing at one is refused too. At most 5
 redirects, http and https only, never through a proxy.
 
