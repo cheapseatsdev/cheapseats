@@ -55,6 +55,12 @@ spec:
             - name: {{ $k }}
               value: {{ $v | quote }}
             {{- end }}
+            {{- range .Values.extraEnv }}
+            {{- $n := upper (toString .name) }}
+            {{- if and (hasKey . "value") (or (hasSuffix "_API_KEY" $n) (hasSuffix "_TOKEN" $n) (hasSuffix "_TOKENS" $n)) }}
+            {{- fail (printf "extraEnv %s has a literal value and looks like a secret: use valueFrom.secretKeyRef, or existingSecret" .name) }}
+            {{- end }}
+            {{- end }}
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
