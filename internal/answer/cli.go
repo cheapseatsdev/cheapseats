@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -69,6 +70,52 @@ var cliSlots = map[string]chan struct{}{
 }
 
 const cliTimeout = 10 * time.Minute
+
+// cliMaxOutput is the most of a CLI's stdout kept. A search answer's stream-json, with the pages
+// it fetched, runs to a few MB; a CLI that writes past this is stopped, and the call fails.
+var cliMaxOutput = 32 << 20
+
+// cliStderrTail is the most of a CLI's stderr kept: the end, where the reason it failed is.
+const cliStderrTail = 4 << 10
+
+// errCLIOutput is a CLI that wrote more than cliMaxOutput to stdout.
+var errCLIOutput = errors.New("output over the limit")
+
+// cliCapped keeps the first max bytes written and calls stop once, the first time a write would
+// pass max; what comes after is discarded, so the CLI never blocks on a full pipe while it stops.
+type cliCapped struct {
+	buf  bytes.Buffer
+	max  int
+	over bool
+	stop func()
+}
+
+func (w *cliCapped) Write(p []byte) (int, error) {
+	if w.over {
+		return len(p), nil
+	}
+	if room := w.max - w.buf.Len(); len(p) > room {
+		w.buf.Write(p[:room])
+		w.over = true
+		w.stop()
+		return len(p), nil
+	}
+	return w.buf.Write(p)
+}
+
+// cliTail keeps the last max bytes written.
+type cliTail struct {
+	buf []byte
+	max int
+}
+
+func (w *cliTail) Write(p []byte) (int, error) {
+	w.buf = append(w.buf, p...)
+	if len(w.buf) > w.max {
+		w.buf = append(w.buf[:0], w.buf[len(w.buf)-w.max:]...)
+	}
+	return len(p), nil
+}
 
 // runCLI runs one command in a throwaway directory and returns its stdout.
 func runCLI(ctx context.Context, provider, unsetKey string, name string, args ...string) ([]byte, error) {
@@ -120,16 +167,22 @@ func runCLIInput(ctx context.Context, provider, unsetKey string, stdin []byte, n
 	// On timeout, a TERM the CLI (or sudo, which passes it on) can act on; a KILL soon after.
 	cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }
 	cmd.WaitDelay = 10 * time.Second
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &stdout, &stderr
-	if err := cmd.Run(); err != nil {
-		msg := strings.TrimSpace(stderr.String())
+	// Past cliMaxOutput the CLI is stopped as on a timeout: TERM, then KILL.
+	stdout := &cliCapped{max: cliMaxOutput, stop: cancel}
+	stderr := &cliTail{max: cliStderrTail}
+	cmd.Stdout, cmd.Stderr = stdout, stderr
+	err = cmd.Run()
+	if stdout.over {
+		return stdout.buf.Bytes(), fmt.Errorf("%s: %w of %d bytes", name, errCLIOutput, cliMaxOutput)
+	}
+	if err != nil {
+		msg := strings.TrimSpace(string(stderr.buf))
 		if len(msg) > 400 {
 			msg = msg[len(msg)-400:]
 		}
-		return stdout.Bytes(), fmt.Errorf("%s: %w: %s", name, err, msg)
+		return stdout.buf.Bytes(), fmt.Errorf("%s: %w: %s", name, err, msg)
 	}
-	return stdout.Bytes(), nil
+	return stdout.buf.Bytes(), nil
 }
 
 func askClaudeCode(ctx context.Context, model string, track Track, sys, prompt string, insist bool) (Answer, error) {

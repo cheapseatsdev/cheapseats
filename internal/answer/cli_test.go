@@ -2,6 +2,7 @@ package answer
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -213,5 +214,41 @@ func TestClaudeStructuredRunsOnTheSubscription(t *testing.T) {
 		if err := parseClaudeStructured([]byte(body), &out); err == nil {
 			t.Errorf("%s: want an error", name)
 		}
+	}
+}
+
+// cliCapFake puts a fake claude that runs script on the PATH.
+func cliCapFake(t *testing.T, script string) {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "claude"), []byte("#!/bin/sh\n"+script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+":"+os.Getenv("PATH"))
+	t.Setenv("CHEAPSEATS_CLI_USER", "")
+}
+
+// A CLI that never stops writing is stopped at the cap, and the call fails rather than holding
+// the whole stream in memory.
+func TestCLIOutputPastTheCapStopsTheCLI(t *testing.T) {
+	old := cliMaxOutput
+	cliMaxOutput = 1 << 20
+	t.Cleanup(func() { cliMaxOutput = old })
+	cliCapFake(t, "exec yes cheapseats\n")
+	out, err := runCLI(context.Background(), config.ClaudeCode, "ANTHROPIC_API_KEY", "claude")
+	if !errors.Is(err, errCLIOutput) {
+		t.Fatalf("err %v", err)
+	}
+	if len(out) != cliMaxOutput {
+		t.Errorf("kept %d bytes of stdout; want the first %d", len(out), cliMaxOutput)
+	}
+}
+
+// Of a long stderr the end is kept, since that is where a CLI says why it failed.
+func TestCLIErrorKeepsTheEndOfStderr(t *testing.T) {
+	cliCapFake(t, "i=0; while [ $i -lt 2000 ]; do echo noise >&2; i=$((i+1)); done; echo 'the real reason' >&2; exit 3\n")
+	_, err := runCLI(context.Background(), config.ClaudeCode, "ANTHROPIC_API_KEY", "claude")
+	if err == nil || !strings.HasSuffix(err.Error(), "the real reason") {
+		t.Fatalf("err %v", err)
 	}
 }

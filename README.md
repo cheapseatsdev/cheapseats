@@ -286,6 +286,8 @@ cheapseats version                        version and database schema
   list, Codex's shell and image tools) and gives them only the environment they need either way
   (never this process's keys or tokens; `CHEAPSEATS_CLI_ENV` names more to pass). A separate user
   keeps this user's files out of reach whatever a CLI update adds. `deploy/exe-dev.sh` sets one up.
+  With or without it, a CLI call is stopped (TERM, then KILL) after ten minutes or once it has
+  written 32 MB of output, and fails; of its stderr the last 4 KB is kept for the error.
 
 ## Deploying
 
