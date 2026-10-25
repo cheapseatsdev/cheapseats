@@ -1,5 +1,5 @@
 {{define "title"}}Site audit · {{end}}{{define "body"}}
-<h1>Site audit</h1><p class="sub">What AI assistants' crawlers can read on {{brand}}'s sites, checked over plain HTTP the way a crawler that runs no JavaScript sees them: robots.txt rules and firewall blocks for each AI crawler, llms.txt, the sitemap, and each page's title, description, headings, structured data and text. Free: no model calls (with [exa] on, a page that is empty without JavaScript is read through Exa, and marked <span class="chip">via Exa</span>). Its errors and warnings go to the analyst with the next fix list.</p>
+<h1>Site audit</h1><p class="sub">Find access and content problems on {{brand}}'s sites: crawler rules, firewall responses, llms.txt, sitemaps and page metadata. Checks use plain HTTP without JavaScript and feed the next fix list. No model calls; with Exa enabled, empty pages may use its paid reader, marked <span class="chip">via Exa</span>.</p>
 <form method="post" action="/audit"><button{{if .Running}} disabled{{end}}>{{icon "refresh-cw"}}{{if .Running}}Auditing…{{else}}Audit now{{end}}</button> <span class="muted small">{{range $i, $s := .Sites}}{{if $i}}, {{end}}<span class="mono">{{$s}}</span>{{else}}No sites listed: add [[brand.sites]] to cheapseats.toml.{{end}}</span></form>
 {{with .Error}}<p class="err">{{.}}</p>{{end}}
 {{with .Audit}}<p class="muted">Last audit {{day .At}} · <span class="err">{{.Errors}} errors</span> · {{.Warnings}} warnings · {{.Infos}} info</p>
@@ -14,7 +14,7 @@
 {{end}}{{else}}<p class="muted">No audit yet.</p>{{end}}
 
 <h2 id="citations">Pages the answers cite</h2>
-<p class="sub">The third-party pages a run's answers cited (then surfaced) most, fetched as Cheap Seats where their robots.txt allows, to see whether they name {{brand}} and which competitors. One that names competitors but not {{brand}} is an outreach target. Each page is fetched at most once a day; free, unless [exa] is on and a page is empty without JavaScript, when it is read through Exa and marked <span class="chip">via Exa</span>.</p>
+<p class="sub">Check whether third-party pages name {{brand}} or competitors; competitor-only pages are outreach targets. Pages are prioritized by citations, then retrieval, and fetched as Cheap Seats where robots.txt allows, at most daily. HTTP checks are free; Exa's paid reader may handle empty pages, marked <span class="chip">via Exa</span>.</p>
 {{if .Runs}}<form method="post" action="/audit/citations" class="row"><select name="run" aria-label="Run">{{range .Runs}}<option value="{{.ID}}"{{if eq .ID $.RunID}} selected{{end}}>{{.Name}} · {{day .CreatedAt}}</option>{{end}}</select> <button class="ghost" formmethod="get" formaction="/audit#citations">Show</button> <button{{if .Checking}} disabled{{end}}>{{icon "search"}}{{if .Checking}}Checking…{{else}}Check citations{{end}}</button></form>
 {{with .Check}}<p class="muted">Checked {{day .At}} · {{.Outreach}} of {{len .Pages}} pages name competitors but not {{brand}}</p>
 <div class="scroll"><table><tr><th>Page</th><th class="num">Cited</th><th class="num">Surfaced</th><th>Names {{brand}}</th><th>Competitors named</th></tr>

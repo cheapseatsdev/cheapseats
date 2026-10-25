@@ -1,6 +1,6 @@
 {{define "title"}}Search probe · {{end}}{{define "body"}}
 <h1>Search probe</h1>
-<p class="sub">Run one query through the web search tool the answerers use{{with .Model}} (<span class="mono">{{.}}</span>){{end}}, and see the result exactly as the model receives it: the links in order, before it writes anything. Each probe costs a few cents.{{if .Exa}} Exa, a neutral index, is the second engine: run both to see whether a result is the assistant's or the web's.{{end}}</p>
+<p class="sub">See the ordered links a query returns before an answer is written{{with .Model}} (<span class="mono">{{.}}</span>){{end}}. Each probe costs a few cents.{{if .Exa}} Choose both engines to compare Claude's search with Exa's neutral index.{{end}}</p>
 <form method="post" action="/search">
 <label>Query <input name="query" required class="full" value="{{with .Form}}{{index . "query" | first}}{{end}}" placeholder="a question a buyer would type"></label>
 <label>Domains (optional, comma-separated) <input name="domains" class="full" value="{{with .Form}}{{index . "domains" | first}}{{end}}" placeholder="{{domains}}"></label>
