@@ -1,5 +1,6 @@
-# Dependabot keeps the Go modules and the GitHub Actions current, one grouped pull request per
-# ecosystem a week, so updates arrive as one reviewable change rather than a dozen.
+# Dependabot keeps the Go modules, the GitHub Actions and the Dockerfile base images current, one
+# grouped pull request per ecosystem a week, so updates arrive as one reviewable change rather
+# than a dozen.
 version: 2
 updates:
   - package-ecosystem: gomod
@@ -22,3 +23,13 @@ updates:
         patterns: ["*"]
     commit-message:
       prefix: "ci"
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      images:
+        patterns: ["*"]
+    commit-message:
+      prefix: "deps"
