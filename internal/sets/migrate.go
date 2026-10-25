@@ -2,6 +2,7 @@ package sets
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -14,6 +15,9 @@ import (
 // Migrate rewrites every set in dir that still lists prompts as plain strings into [[prompts]]
 // tables, giving each prompt an id made from its words. The rest of each file is left as it was.
 // Ids are unique across the directory; review them before merging, since they're permanent.
+// Only regular files are read or written: a set that is a symlink (or anything else) is an error,
+// so a checkout cannot point the rewrite at a file outside dir. Each rewrite goes to a temporary
+// file beside the set and is renamed over it, so a failed write leaves the set as it was.
 // Returns the files it changed.
 func Migrate(dir string) ([]string, error) {
 	files, err := filepath.Glob(filepath.Join(dir, "*.toml"))
@@ -24,12 +28,13 @@ func Migrate(dir string) ([]string, error) {
 	taken := map[string]bool{}
 	type pending struct {
 		file    string
+		mode    os.FileMode
 		src     string
 		prompts []string
 	}
 	var todo []pending
 	for _, f := range files {
-		b, err := os.ReadFile(f)
+		b, mode, err := readRegular(f)
 		if err != nil {
 			return nil, err
 		}
@@ -57,7 +62,7 @@ func Migrate(dir string) ([]string, error) {
 				texts = append(texts, strings.TrimSpace(t))
 			}
 		}
-		todo = append(todo, pending{f, string(b), texts})
+		todo = append(todo, pending{f, mode, string(b), texts})
 	}
 	var changed []string
 	for _, p := range todo {
@@ -68,12 +73,57 @@ func Migrate(dir string) ([]string, error) {
 		if _, err := toml.Decode(out, &Set{}); err != nil {
 			return changed, fmt.Errorf("%s: the rewrite doesn't parse: %w", filepath.Base(p.file), err)
 		}
-		if err := os.WriteFile(p.file, []byte(out), 0o644); err != nil {
+		if err := replace(p.file, []byte(out), p.mode); err != nil {
 			return changed, err
 		}
 		changed = append(changed, p.file)
 	}
 	return changed, nil
+}
+
+// readRegular reads f only if it is a regular file, checked without following a symlink and
+// again on the open file, so a swap between the check and the open is caught too.
+func readRegular(f string) ([]byte, os.FileMode, error) {
+	st, err := os.Lstat(f)
+	if err != nil {
+		return nil, 0, err
+	}
+	if !st.Mode().IsRegular() {
+		return nil, 0, fmt.Errorf("%s: not a regular file (%s); migrate-config only rewrites plain files", filepath.Base(f), st.Mode().Type())
+	}
+	h, err := os.Open(f)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer h.Close()
+	if hs, err := h.Stat(); err != nil || !os.SameFile(st, hs) {
+		return nil, 0, fmt.Errorf("%s: changed while it was being read", filepath.Base(f))
+	}
+	b, err := io.ReadAll(h)
+	return b, st.Mode().Perm(), err
+}
+
+// replace writes b to a new file beside f and renames it over f. The rename replaces the path
+// itself, never what a symlink there would point to.
+func replace(f string, b []byte, mode os.FileMode) error {
+	tmp, err := os.CreateTemp(filepath.Dir(f), "."+filepath.Base(f)+".*.tmp")
+	if err != nil {
+		return err
+	}
+	_, err = tmp.Write(b)
+	if err == nil {
+		err = tmp.Chmod(mode)
+	}
+	if cerr := tmp.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil {
+		err = os.Rename(tmp.Name(), f)
+	}
+	if err != nil {
+		os.Remove(tmp.Name())
+	}
+	return err
 }
 
 var promptsKey = regexp.MustCompile(`(?m)^prompts\s*=\s*\[`)
