@@ -29,6 +29,14 @@ if [ -n "$(git -C "$cfg" status --porcelain)" ]; then
 	exit 1
 fi
 rev=$(git -C "$cfg" rev-parse HEAD)
+# A config is files. A committed symlink would land on the VM pointing wherever it says: a REVISION
+# link to ../data/cheapseats.db would have the write below truncate the database, and a prompt set
+# linked to ../cheapseats.env would hand the secrets to the answerers.
+links=$(git -C "$cfg" ls-tree -r HEAD | awk -F '\t' '$1 ~ /^120000 / { print $2 }')
+if [ -n "$links" ]; then
+	printf '%s has committed symlinks; commit the files instead:\n%s\n' "$cfg" "$links" >&2
+	exit 1
+fi
 git -C "$cfg" archive --format=tar -o "$work/config.tar" HEAD
 echo "commit $rev"
 
@@ -51,7 +59,8 @@ user=$(remote whoami)
 dir="$home/cheapseats"
 remote "mkdir -p '$dir/bin' '$dir/data' && rm -rf '$dir/config.new' && mkdir '$dir/config.new'"
 scp -q -o BatchMode=yes "$work/cheapseats" "$host:$dir/bin/cheapseats.new"
-remote "tar -x -C '$dir/config.new' && echo '$rev' > '$dir/config.new/REVISION'" <"$work/config.tar"
+# rm first, so a REVISION the archive carried is replaced rather than written through.
+remote "tar -x -C '$dir/config.new' && rm -f '$dir/config.new/REVISION' && echo '$rev' > '$dir/config.new/REVISION'" <"$work/config.tar"
 if [ -n "${SEED_DB:-}" ]; then
 	if remote "test -e '$dir/data/cheapseats.db'"; then
 		echo "the VM already has a database; not overwriting it with SEED_DB" >&2
