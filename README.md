@@ -284,7 +284,9 @@ cheapseats version                        version and database schema
 - `CHEAPSEATS_CLI_USER`: run the `claude` and `codex` CLIs as this user through `sudo`. The CLIs
   are agents with tools the model drives; Cheap Seats switches off what it can (Claude's tool
   list, Codex's shell and image tools) and gives them only the environment they need either way
-  (never this process's keys or tokens; `CHEAPSEATS_CLI_ENV` names more to pass). A separate user
+  (never this process's keys or tokens; `CHEAPSEATS_CLI_ENV` names more to pass, from the real
+  environment only, never `.env`, and never a startup variable such as `LD_PRELOAD`, `DYLD_*` or
+  `NODE_OPTIONS`). A separate user
   keeps this user's files out of reach whatever a CLI update adds. `deploy/exe-dev.sh` sets one up.
 
 ## Deploying

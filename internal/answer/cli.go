@@ -46,12 +46,13 @@ var cliEnv = []string{"HOME", "USER", "LOGNAME", "PATH", "SHELL", "TMPDIR", "TER
 var sudoSets = []string{"HOME", "USER", "LOGNAME", "PATH", "SHELL", "TMPDIR"}
 
 // cliVars is the environment for a CLI call: cliEnv and CHEAPSEATS_CLI_ENV, as set here, less the
-// provider's API key.
+// provider's API key and anything that would load code into the CLI as it starts (LD_PRELOAD,
+// NODE_OPTIONS and the like), whoever named it.
 func cliVars(unsetKey string) []string {
 	names := append(slices.Clone(cliEnv), strings.Split(env.Get("CLI_ENV"), ",")...)
 	var out []string
 	for _, n := range names {
-		if n = strings.TrimSpace(n); n == "" || n == unsetKey {
+		if n = strings.TrimSpace(n); n == "" || n == unsetKey || env.LoadsCode(n) {
 			continue
 		}
 		if v, ok := os.LookupEnv(n); ok {
