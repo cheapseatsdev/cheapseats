@@ -8,13 +8,13 @@ site repo's `brand/` directory; the dashboard vendors a copy.
 
 ## Method
 
-1. Diff the token blocks: the `:root` custom properties in the site's `assets/css/site.css` and
-   `brand/web/brand.css` against `internal/server/static/cheapseats.css`. Same names, same
-   values, same light and dark pairs.
+1. Compare the site's `brand/web/tokens.css` with the generated copy at
+   `internal/server/static/tokens.css` (ignoring its generated header). Check names, values and
+   light/dark pairs; component styles consume those tokens.
 2. Diff the shared components by rendering both: masthead height and spacing, the mark, nav
    underline, theme toggle states, focus rings, link treatment, the seat-meter marks.
-3. Run the sync script the design-tokens project added (see its docs) and see whether it
-   changes anything. If it does, that is the drift.
+3. From the app repo, run `deploy/sync-brand.sh <site-checkout>` against a clean token source.
+   The script records the source commit; review any diff for drift.
 4. One PR per repo that drifted, re-syncing toward the source of truth. If the drift was a
    deliberate improvement on one side, port it to the source first.
 

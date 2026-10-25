@@ -25,8 +25,9 @@ nothing leaves the terminal. Never close or label an issue; that is the user's c
    - config: `internal/config/config.go`, set files in `internal/sets/sets.go`
    - what a run already computes: `internal/report/report.go` (a "join" claim is true only if
      one loop already sees both sides)
-   - method boundary: `internal/run/regrade.go` `GradeInputs`; `grade.System` in
-     `internal/grade/grade.go`; the golden set in `internal/grade/testdata/golden`
+   - method boundary: `internal/run/run.go` `Method`; grading inputs: `internal/run/regrade.go`
+     `GradeInputs`; `grade.System` in `internal/grade/grade.go`; the golden set in
+     `internal/grade/testdata/golden`
    - spend: `internal/budget`, `spend_events`
    - fetching and its cache: `internal/audit/citations.go` (`page_fetches`, robots, text cap)
    - statistics the app already has: `internal/app/stats.go`, `docs/statistics.md`
@@ -44,12 +45,15 @@ nothing leaves the terminal. Never close or label an issue; that is the user's c
    Report the count. Four or more new surfaces is a product, not a feature.
 
 4. **The costly flags.** Say yes or no to each, with the reason:
-   - **Method change**: touches `GradeInputs`, the grader or answer prompt, or the search
-     policy. Breaks trends and open attempts; needs the golden set, release notes, a regrade.
+   - **Method change**: changes `run.Method` (answer prompt, search policy, grader prompt/model,
+     brand name/about/aliases). Needs the golden set and release notes; grading changes can be
+     re-graded, but differently asked answers need a new baseline. Competitor edits affect
+     `GradeInputs` and can require re-grading without starting a new method.
    - **Migration**: needs `internal/app/upgrade_test.go`, a compare on a real-data copy, and
      the monthly `upgrade-real-data` agent carries it forever.
    - **Spend**: new model or search calls per run or per action; needs a budget kind, a cost
-     column in the product ledger, and a cap in config.
+     column in the product ledger, and an admission budget in config. Settled charges can exceed
+     reserved estimates.
    - **English-assuming**: a heuristic over text (folding, whole-word matching, page-type rules,
      source kinds) that an idea about language or markets turns into a per-language bug.
    - **Fetching**: new pages fetched, so robots, caps, user agent and politeness apply.

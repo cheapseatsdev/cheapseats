@@ -1,54 +1,47 @@
 # Re-grading
 
-A change to what the grader reads (its prompt or model, the brand's name, aliases or `about`, a
-set's competitors) starts a new method, and trends start over with it. Re-grading grades the
-answers older runs already have again, as they would be graded today, so those runs join the new
-method's trend from their own dates on. Answers are never asked again. What the grader decides,
-and how a grader change is measured before it ships, is in [grading](grading.md).
+Update grading without asking the assistants again. [Rubric and tests](grading.md).
 
 ```bash
-cheapseats regrade <set-id|run-id> [-since 28d]          # a dry run: what it would do and cost
+cheapseats regrade <set-id|run-id>                     # dry run: work and estimated cost
 cheapseats regrade <set-id|run-id> -since 90d -dry-run=false
 ```
 
-- **What's re-graded**: a set's finished runs from the last `-since` (`28d`, `72h`, or `all`;
-  default 28 days), or the one run named. A run whose grading inputs already match today's is
-  skipped: each run is fingerprinted by the grader prompt and model, the brand's name, aliases and
-  about, and the competitors' names and aliases (`run.GradeInputs`). Unfinished and running runs
-  are left alone, and so are runs asked under another answer prompt or search policy: those are
-  part of the method too, and a re-grade can't change them, so it couldn't join them to today's
-  trend.
-- **Cost**: one grader call per answer. On `provider = "claude-code"` it's $0, on your
-  subscription. Through the API the dry run estimates it from token counts (about four characters
-  a token, plus the grader's thinking) and `[pricing]`; the real calls go through the same budget
-  as runs, and a run the day's remaining budget can't cover isn't started.
-- **All or nothing per run**: every answer of a run is graded first, then the new grades are
-  written together, only over the run as it was read: if something else changed it meanwhile
-  (another `cheapseats regrade`, a retry), nothing is written. A run whose grading fails, or is cut
-  off, is left exactly as it was.
-- **History stays honest**: the run's snapshot takes today's grading inputs (how its answers were
-  asked stays as it was), so its method is recomputed from it like any run's and it trends with
-  today's runs. Each replaced grade is kept with its answer (`results.grade_history`), and each
-  re-grade with the run (`regrades` in `/api/runs/<id>`): when, how many answers, the cost, and
-  the method and grader it had before. The run page says "re-graded <date> (was method X)".
-  Re-grading only some of a set's runs moves the trend's break to before the oldest re-graded run.
-- **Fix attempts come back**: an attempt's [outcome](statistics.md#fix-outcomes) only compares
-  runs of one method, so after a method change every open attempt reads **needs regrade** until
-  its runs are graded under today's method: the fix's run, the runs pooled before it, and any run
-  since on an older method. The outcome names them (`regrade_runs`) and how far back a re-grade of
-  the set must reach (`regrade_since_days`); the attempt on the run and quick-wins pages links to
-  the set's re-grade page with that range filled in, and `get_started`'s next_steps carries the
-  `regrade` call per set. Once re-graded, the attempt is measured from the next listing on; there
-  is nothing else to do. Only an attempt whose set has run since with another answer prompt or
-  search policy stays **not comparable**: a re-grade changes grades, never answers. Re-grading is
-  not run for you yet: a method change still means re-grading the sets with open attempts, by hand
-  or through the MCP tool.
-- **Not rebuilt**: the run's fix list and themes stay as they were; rebuild them with
-  `cheapseats fixes <run-id> -rebuild` and `cheapseats themes <run-id> -rebuild` if you want them to
-  follow the new grades. The [fact check](misstatements.md) isn't rerun either (the answers
-  didn't change); `cheapseats misstatements <run-id>` reruns it.
+```mermaid
+flowchart LR
+    accTitle: Re-grading keeps answers and replaces grades atomically
+    accDescr: Stored answers are graded with today's inputs. All new grades must succeed and the run must remain unchanged before writing. Original answers, dates and replaced grades are retained.
+    answers["Stored answers<br/>Today's grading inputs"] --> grade["Grade every answer<br/>Check run is unchanged"]
+    grade -->|Success| write["Write grades + snapshot together<br/>Recompute method; keep grade history"]
+    grade -->|Failure or conflict| keep["Keep existing grades"]
+```
 
-In the web UI, a set's page links to **Re-grade stored answers**, which shows the dry run (runs,
-answers, method change, estimated cost) and a button to start it in the background. Over MCP,
-`regrade` takes a set or run as `target`, `since_days` (default 28, 0 for all; negative is an error) and `dry_run`,
-which is true unless set to false.
+Original answers and dates stay intact. Re-graded runs can join today's trend when only grading
+changed; a different answer prompt or search policy needs a new baseline.
+
+- **Scope:** a set's finished runs within `-since` (`28d`, `72h` or `all`; default 28 days),
+  or one named run. Running and unfinished runs are skipped, as are runs whose grading inputs
+  already match today's or whose answer prompt or search policy differs.
+- **Inputs:** `run.GradeInputs` fingerprints grader prompt/model, brand name/aliases/`about`,
+  and competitor names/aliases. Competitor edits can require re-grading without changing
+  `run.Method`. The method also covers how answers were asked; re-grading cannot change that.
+- **Cost:** one grader call per answer. `claude-code` records $0 API spend on your subscription.
+  API dry runs estimate tokens (about four characters per token, plus thinking) using `[pricing]`.
+  A run whose estimate exceeds the remaining daily admission budget is not started; actual
+  calls also reserve against it. This is not a hard provider billing ceiling.
+- **History:** replaced grades stay in `results.grade_history`. The API's
+  `regrades` records date, answer count, cost, previous method and grader; the run page labels
+  the re-grade. Re-grading only some runs moves the trend break to before the oldest one.
+- **Fix outcomes:** run the re-grade yourself, through the CLI, UI or MCP. An outcome marked
+  **needs regrade** names the required runs (`regrade_runs`) and lookback (`regrade_since_days`):
+  the fix's run, its pooled baseline and later runs on older grading methods. Run and quick-win
+  links prefill that range; `get_started.next_steps` supplies the per-set call. The next listing
+  measures the outcome once comparable grades are available. A different answer prompt or search
+  policy leaves it **not comparable**. See [fix outcomes](statistics.md#fix-outcomes).
+- **Not rebuilt:** fix lists, themes and [fact checks](misstatements.md) stay as they were.
+  To refresh them, use `cheapseats fixes -rebuild <run-id>`,
+  `cheapseats themes -rebuild <run-id>` and `cheapseats misstatements <run-id>`.
+
+The set page's **Re-grade stored answers** shows runs, answers, method changes and estimated
+cost before starting work in the background. MCP `regrade` takes `target` (set or run),
+`since_days` (default 28, 0 for all; negatives fail) and `dry_run` (true unless explicitly false).
