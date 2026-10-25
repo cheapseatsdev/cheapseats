@@ -355,7 +355,7 @@ func (s *Server) mcpHandler() http.Handler {
 	addTool(srv, "check_citations", "For a run, fetch the third-party pages its answers cited most (plain HTTP; each page at most once a day) and say which name the brand and which competitors. Free by default; with [exa] contents_fallback on, a page that is empty without JavaScript, or behind a bot challenge, is read through Exa's contents API instead, priced per page under [pricing.exa-contents], and carries via: exa. Pages naming competitors but not the brand are outreach targets.",
 		func(ctx context.Context, a struct {
 			Run    string `json:"run" jsonschema:"run id, from list_runs"`
-			Limit  int    `json:"limit,omitempty" jsonschema:"how many of the most-cited pages (default 25)"`
+			Limit  int    `json:"limit,omitempty" jsonschema:"how many of the most-cited pages (default 25, max 100)"`
 			Cached bool   `json:"cached,omitempty" jsonschema:"return the run's latest check instead of running one"`
 		}) (any, error) {
 			if a.Cached {

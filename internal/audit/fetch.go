@@ -24,6 +24,15 @@ func UA() string {
 // Token is Cheap Seats' robots.txt product token.
 const Token = "CheapSeats-Audit"
 
+// fetchSlots caps the requests in flight across every Fetcher in the process: each audit and each
+// citation check makes its own Fetcher of four, and several can run at once (for different runs,
+// from the API, MCP and the CLI), so without it the total had no bound.
+var fetchSlots = make(chan struct{}, 16)
+
+// eachWorkers is the most goroutines each runs at once: enough to keep the fetch slots busy while
+// some of them read the day's cache or wait on robots.txt.
+const eachWorkers = 8
+
 // Fetcher makes polite requests: one user agent, a timeout, a size cap and a few at a time.
 type Fetcher struct {
 	Client *http.Client
@@ -67,6 +76,12 @@ func (f *Fetcher) Get(ctx context.Context, url string, ua ...string) (*Response,
 		return nil, ctx.Err()
 	}
 	defer func() { <-f.limit }()
+	select {
+	case fetchSlots <- struct{}{}:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	defer func() { <-fetchSlots }()
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, err
@@ -96,15 +111,23 @@ func (f *Fetcher) Get(ctx context.Context, url string, ua ...string) (*Response,
 	return out, nil
 }
 
-// each runs f for every index, all at once: the Fetcher limits how many requests are in flight.
+// each runs f for every index, on at most eachWorkers goroutines; the Fetcher and fetchSlots limit
+// how many requests are in flight.
 func each(n int, f func(i int)) {
+	next := make(chan int)
 	var wg sync.WaitGroup
-	for i := 0; i < n; i++ {
+	for w := 0; w < min(n, eachWorkers); w++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			f(i)
+			for i := range next {
+				f(i)
+			}
 		}()
 	}
+	for i := 0; i < n; i++ {
+		next <- i
+	}
+	close(next)
 	wg.Wait()
 }

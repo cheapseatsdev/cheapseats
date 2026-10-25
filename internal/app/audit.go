@@ -121,12 +121,17 @@ func CitationTargets(s report.Summary, n int) []audit.Target {
 	return out
 }
 
-// CheckCitations fetches the n third-party pages a run's answers drew on most (25 when n <= 0) and
-// keeps which name the brand and which competitors. Free: plain HTTP, no model calls.
+// MaxCitationChecks is the most pages one citation check fetches, whatever n asks for.
+const MaxCitationChecks = 100
+
+// CheckCitations fetches the n third-party pages a run's answers drew on most (25 when n <= 0, at
+// most MaxCitationChecks) and keeps which name the brand and which competitors. Free: plain HTTP,
+// no model calls.
 func (a *App) CheckCitations(ctx context.Context, runID string, n int, o audit.CiteOptions) (audit.CitationCheck, error) {
 	if n <= 0 {
 		n = 25
 	}
+	n = min(n, MaxCitationChecks)
 	r, err := a.Runs.Get(ctx, runID)
 	if err != nil {
 		return audit.CitationCheck{}, err
