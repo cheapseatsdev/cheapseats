@@ -273,7 +273,9 @@ cheapseats version                        version and database schema
 - `CHEAPSEATS_HOSTS`: host names a proxy on the same machine serves Cheap Seats as; MCP needs them,
   and so does an open (token-less) Cheap Seats behind such a proxy. A proxy that rewrites `Host` to
   the upstream address (nginx, unless told `proxy_set_header Host $host;`) needs them too, or forms
-  from the page are refused as cross-site.
+  from the page are refused as cross-site. A form counts as the listed host's only from its whole
+  origin: https (or http when the proxy doesn't say `X-Forwarded-Proto: https`), on the scheme's
+  default port or the one the entry names (`seats.example:8443`).
 - `CHEAPSEATS_PUBLIC_URL`: the address share links use (`https://cheapseats.example.com`). Unset, they
   use the first of `CHEAPSEATS_HOSTS` over https, else the host the request came in on
   (`X-Forwarded-Host` first).

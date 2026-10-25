@@ -624,6 +624,9 @@ func TestForeignRequestsRefused(t *testing.T) {
 		{"https://evil.example", "", 403}, {"null", "", 403}, {"", "cross-site", 403}, {"", "same-site", 403},
 		{"http://localhost:8000", "", 200}, {"http://LOCALHOST:8000", "", 200}, {"https://seats.example", "cross-site", 200},
 		{"http://localhost:9000", "", 403}, {"http://127.0.0.1:8000", "", 403}, // another local app's page
+		// A listed host's whole origin: another port or another name on it is another site.
+		{"https://seats.example:443", "", 200}, {"https://seats.example:8443", "", 403}, {"http://seats.example:8443", "", 403},
+		{"https://evil.seats.example", "", 403}, {"https://seats.example.evil", "", 403}, {"ftp://seats.example", "", 403},
 		{"", "", 200}, {"", "same-origin", 200}, {"", "none", 200},
 	} {
 		calls = 0
@@ -640,6 +643,27 @@ func TestForeignRequestsRefused(t *testing.T) {
 		h.ServeHTTP(rec, req)
 		if rec.Code != c.code || (c.code == 403) == (calls > 0) {
 			t.Errorf("POST /search from %q (%s): %d, want %d; %d provider calls", c.origin, c.site, rec.Code, c.code, calls)
+		}
+	}
+	// Plain http on a listed host passes only when the proxy wasn't asked over https, and a port
+	// a CHEAPSEATS_HOSTS entry names is the one its origin must have.
+	t.Setenv("CHEAPSEATS_HOSTS", "seats.example, seats.example:8443")
+	sp, _ := New(newApp(t, testConfig(t), d))
+	for _, c := range []struct {
+		origin, proto string
+		code          int
+	}{{"http://seats.example", "", 200}, {"http://seats.example", "https", 403}, {"https://seats.example:8443", "https", 200}, {"https://seats.example:9443", "https", 403}} {
+		req := httptest.NewRequest("POST", "/search", strings.NewReader("query=x"))
+		req.Host = "localhost:8000"
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.Header.Set("Origin", c.origin)
+		if c.proto != "" {
+			req.Header.Set("X-Forwarded-Proto", c.proto)
+		}
+		rec := httptest.NewRecorder()
+		sp.Handler().ServeHTTP(rec, req)
+		if (rec.Code == 403) != (c.code == 403) {
+			t.Errorf("POST /search from %s (proto %q): %d, want %d", c.origin, c.proto, rec.Code, c.code)
 		}
 	}
 	// A GET is a read, whatever its origin.
