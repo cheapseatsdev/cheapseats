@@ -1,4 +1,4 @@
-/* GENERATED: synced from cheapseats-site brand/web/tokens.css at 407afee; edit there, run deploy/sync-brand.sh. */
+/* GENERATED: synced from cheapseats-site brand/web/tokens.css at d246fd5; edit there, run deploy/sync-brand.sh. */
 /* Cheap Seats design tokens: the one source of truth for the brand's colors, type stacks, spacing,
    radii, shadows and layout. cheapseats.dev builds this file into its stylesheet and serves it at
    https://cheapseats.dev/brand/tokens.css; the app copies it with deploy/sync-brand.sh into
@@ -132,8 +132,8 @@
   --cs-prose:768px; /* Max width of site prose; docs prose is 720px. */
   --cs-masthead:64px; /* Masthead min-height, shared by site and app. */
   --cs-touch-target:44px; /* Min height of buttons, inputs and nav targets on coarse pointers. */
-  --cs-bp-sm:420px; /* Breakpoint: small phones (app nav icons hide; site under 400px). For scripts and reference: media queries repeat the literal. */
-  --cs-bp-md:700px; /* Breakpoint: phones (app nav wraps to its own row; site menu collapses at 720px). */
-  --cs-bp-lg:800px; /* Breakpoint: tablets (fix facts wrap; hero tightens). */
-  --cs-bp-xl:900px; /* Breakpoint: small laptops (app header drops the brand name and live pill). */
+  --cs-app-bp-sm:420px; /* App breakpoint: small phones (nav icons hide). The site's own queries are 400, 720 and 800px. Media queries repeat the literal; the custom properties are for scripts and reference. */
+  --cs-app-bp-md:700px; /* App breakpoint: phones (nav wraps to its own row; fix meta stacks). */
+  --cs-app-bp-lg:800px; /* App breakpoint: tablets (fix facts wrap). */
+  --cs-app-bp-xl:900px; /* App breakpoint: small laptops (header drops the brand name and live pill). */
 }
