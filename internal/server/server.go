@@ -381,7 +381,7 @@ func (s *Server) rebound(r *http.Request) bool {
 
 // crossSite reports whether a browser sent the request from another origin: a page whose host and
 // port aren't the ones the request came to (so another local app's page can't post here either),
-// nor a listed proxy host. A browser names its origin in Origin (and the site relation in
+// nor a listed proxy host's. A browser names its origin in Origin (and the site relation in
 // Sec-Fetch-Site); other clients send neither.
 func (s *Server) crossSite(r *http.Request) bool {
 	if o := r.Header.Get("Origin"); o != "" {
@@ -390,13 +390,39 @@ func (s *Server) crossSite(r *http.Request) bool {
 			return true // "null" (a sandboxed page), or not an origin at all
 		}
 		oh := strings.ToLower(u.Host)
-		return oh != strings.ToLower(requestHost(r)) && oh != strings.ToLower(r.Host) && !slices.Contains(s.hosts, hostOnly(oh))
+		return oh != strings.ToLower(requestHost(r)) && oh != strings.ToLower(r.Host) && !s.proxyOrigin(r, u)
 	}
 	switch strings.ToLower(r.Header.Get("Sec-Fetch-Site")) {
 	case "", "same-origin", "none":
 		return false
 	}
 	return true
+}
+
+// proxyOrigin reports whether origin is the whole origin a listed proxy host serves Cheap Seats
+// at, scheme and port included, so another site on the same name (another port, or plain http)
+// can't post here. A proxy serves https, or the scheme it says it was asked over; the port is the
+// one the CHEAPSEATS_HOSTS entry names, else the scheme's default.
+func (s *Server) proxyOrigin(r *http.Request, origin *url.URL) bool {
+	scheme := strings.ToLower(origin.Scheme)
+	if scheme != "https" && scheme != requestScheme(r) {
+		return false
+	}
+	defaultPort := map[string]string{"https": "443", "http": "80"}[scheme]
+	port := origin.Port()
+	if port == "" {
+		port = defaultPort
+	}
+	for _, h := range s.hosts {
+		name, want, err := net.SplitHostPort(h)
+		if err != nil {
+			name, want = h, defaultPort
+		}
+		if strings.Trim(name, "[]") == strings.ToLower(origin.Hostname()) && port == want {
+			return true
+		}
+	}
+	return false
 }
 
 // refuseChanges, on a read-only copy, answers 403 to anything but reading: every form and API call
