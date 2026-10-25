@@ -8,9 +8,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cheapseatsdev/cheapseats/internal/answer"
 	"github.com/cheapseatsdev/cheapseats/internal/config"
+	"github.com/cheapseatsdev/cheapseats/internal/crawl"
 	"github.com/cheapseatsdev/cheapseats/internal/grade"
 	"github.com/cheapseatsdev/cheapseats/internal/sets"
 	"github.com/cheapseatsdev/cheapseats/internal/store"
@@ -197,5 +199,38 @@ func TestEveryDaysByTier(t *testing.T) {
 	a := &App{Cfg: cfg}
 	if a.everyDays(sets.Set{Tier: sets.Core}) != 7 || a.everyDays(sets.Set{Tier: sets.PLG}) != 14 {
 		t.Fatal("wrong interval")
+	}
+}
+
+// Crawl counts from before 4xx responses were pooled under crawl.ErrorPath keep their own rows and
+// still count: a 404 counted under its path by an older release reads beside the pooled row new
+// imports write, a new 5xx still lands on its own page, and the totals hold all of them.
+func TestUpgradeKeepsCrawlErrorsCountedByPath(t *testing.T) {
+	db, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	now := time.Now().UTC()
+	if _, err := db.Exec(`INSERT INTO crawl_daily (day, host, path, class, bot, hits, errors) VALUES (?, 'cheapseats.dev', '/gone', 'training', 'GPTBot', 3, 3)`, now.Format("2006-01-02")); err != nil {
+		t.Fatal(err)
+	}
+	clf := now.Format("02/Jan/2006:15:04:05 -0700")
+	line := `203.0.113.7 - - [` + clf + `] "GET /gone-too HTTP/1.1" 404 0 "-" "GPTBot/1.0"` + "\n" +
+		`203.0.113.7 - - [` + clf + `] "GET /gone HTTP/1.1" 502 0 "-" "GPTBot/1.0"`
+	ctx := context.Background()
+	if _, err := crawl.Import(ctx, db.DB, strings.NewReader(line), "cheapseats.dev"); err != nil {
+		t.Fatal(err)
+	}
+	rep, err := crawl.Build(ctx, db.DB, 30, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	errs := map[string]int{}
+	for _, p := range rep.Pages {
+		errs[p.Path] = p.Errors
+	}
+	if errs["/gone"] != 4 || errs[crawl.ErrorPath] != 1 || rep.Totals.Errors != 5 || rep.Totals.Training != 5 {
+		t.Errorf("errors by path %v, totals %+v", errs, rep.Totals)
 	}
 }
