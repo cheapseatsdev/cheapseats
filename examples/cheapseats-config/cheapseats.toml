@@ -24,7 +24,7 @@ facts = [
   "Every run builds a ranked fix list: the exact page to create or change, what it must say, the prompts it should flip, which of the brand's sites it belongs on, and its owner.",
   "Rankings track each prompt set's share-of-voice rank and rates day by day, and every answer, search result and citation behind them is kept.",
   "Cheap Seats has a web UI, a CLI, a JSON API and an MCP server, and deploys with Docker, a Helm chart for Kubernetes, or on an exe.dev VM.",
-  "A daily budget caps spend on API calls; prompts and answers go only to the model providers you configure.",
+  "An admission budget reserves estimated API spend before calls; settled costs can exceed reservations. Configured model and optional providers receive the inputs needed for their passes.",
 ]
 
 # The brand's websites. Pages on them count as its own; the fix list puts each fix on the site that
@@ -179,10 +179,10 @@ concurrency = 6   # provider calls at once, 1..64 (default 4)
 # UTC hour for the daily runs. Leave unset on a dev machine so it doesn't spend money.
 # daily_hour_utc = 13
 
-# How often the schedule runs each tier, in days. Recall only moves when models change and search
-# moves with the web over days to weeks, so weekly is usually enough. Every other day for the core
-# sets buys a smoother trend line at about three and a half times the answers; daily rarely adds
-# more than noise.
+# How often the schedule runs each tier, in days. Both recall and search can vary between runs,
+# even without a model release. Weekly runs can find gaps; a shorter interval provides more
+# observations within a rolling window. Read uncertainty from completed comparable runs rather
+# than treating cadence or repeated same-day samples as a precision guarantee.
 [tiers.core]
 every_days = 2
 

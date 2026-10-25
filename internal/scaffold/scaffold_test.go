@@ -215,12 +215,20 @@ func TestGeneratedConfigChecks(t *testing.T) {
 			t.Errorf("not subscription-first: %+v %+v %+v", cfg.Answerers, cfg.Grader, cfg.Analyst)
 		}
 		ids := map[string]bool{}
+		infoIDs := map[string]bool{}
 		for _, s := range p.Sets {
 			ids[s.ID] = true
 			for _, x := range s.Prompts {
+				infoIDs[x.ID] = x.Info()
 				if names := sets.Names(x.Text, "Acme Cloud"); names != (s.ID == sets.HeadToHeads) {
 					t.Errorf("%s: %q", s.ID, x.Text)
 				}
+			}
+		}
+		// Correct explanations must not be counted as failed product selections.
+		for _, id := range []string{"how-to-choose", "what-to-look-for", "typical-cost", "acme-cloud-downsides"} {
+			if !infoIDs[id] {
+				t.Errorf("explanation prompt %s must be informational", id)
 			}
 		}
 		for _, id := range []string{"discovery", "use-cases", "alternatives", "pricing", sets.HeadToHeads} {

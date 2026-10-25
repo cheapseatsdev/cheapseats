@@ -1,7 +1,7 @@
 id = "head-to-heads"
 name = "Cheap Seats head to heads"
 tier = "plg"
-description = """The only set that names the brand: buyers who already know Cheap Seats and are comparing it with the alternatives, or asking whether it fits their team."""
+description = """The only set that names the brand: buyers who already know Cheap Seats and are comparing it with alternatives or asking whether it fits their team. This measures considered-stage fit and substantive named presence, not unprompted discovery. A name echoed only to disclaim knowledge remains absent; named presence alone does not establish that an explanation is accurate."""
 
 # Cheap Seats against each major alternative
 
@@ -53,3 +53,12 @@ text = "Is Cheap Seats a good fit for a developer-tools company checking whether
 id = "cheapseats-daily-running-cost"
 text = "What does it cost to run Cheap Seats every day, and how do I keep the spend under control?"
 intent = "info"
+
+# Exploratory comparisons with configured open-source peers; buyer demand is not yet validated.
+[[prompts]]
+id = "cheapseats-vs-elmo"
+text = "Cheap Seats or Elmo for a team that can self-host its AI visibility tracker?"
+
+[[prompts]]
+id = "cheapseats-vs-limelit-open"
+text = "Cheap Seats or Limelit Open for a team that can self-host its AI visibility tracker?"

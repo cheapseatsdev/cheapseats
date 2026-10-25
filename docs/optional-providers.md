@@ -298,8 +298,13 @@ Jev judges wording before a set has enough answers for statistical review:
 | --- | --- |
 | `duplicate` | Could one good answer serve two same-intent prompts sharing a meaningful word? |
 | `off_target` | Is the prompt outside `brand.category`, considering audience? Not asked without a category. |
-| `intent` | Does a useful answer name category products (`selection`) or explain without them (`info`)? A how-to about a job those products do can be selection. |
+| `intent` | Does the useful answer point to category products (`selection`) or explain without them (`info`)? The current criterion includes how-to jobs the category serves even when no product was requested. |
 | `branded` | Does it name the brand, its maker's product or domain in any spelling? Skipped for `head-to-heads`. |
+
+Intent judgments are suggestions. For ambiguous how-tos, check whether a complete answer
+requires product selection; a useful product-free explanation belongs under `intent = "info"`.
+An optional tool example does not require recommendation scoring. See
+[reviewing Jev's intent flags](prompt-review.md#jevs-flags) before changing a label.
 
 Each request asks one question. `prompt_judgments` keys decisions by prompt text (or pair), the
 relevant category/audience or brand context, and question type/instructions/criteria. Rewording
