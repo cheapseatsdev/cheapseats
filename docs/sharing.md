@@ -44,7 +44,8 @@ loopback address gets a warning on the run page and in `share_run`'s result.
 - `/share/<token>` is the only page open without a sign-in besides `/login`, `/healthz` and
   static files, and only for `GET` with a well-formed token.
 - The page is sent with `X-Robots-Tag: noindex, nofollow`, `Referrer-Policy: no-referrer` (so the
-  token doesn't leak to sites it links to), `Cache-Control: no-store` and `X-Frame-Options: DENY`.
+  token doesn't leak to sites it links to), `Cache-Control: no-store`, and, like every page,
+  `X-Frame-Options: DENY` and a `Content-Security-Policy` that refuses frames and outside images.
 - A client asking for 20 unknown tokens in a minute gets 429 for unknown tokens until the minute is
   up. A token is looked up before the limit is checked, so a link that works always opens, even
   behind a proxy where every client shares the proxy's address.

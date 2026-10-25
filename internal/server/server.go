@@ -46,6 +46,9 @@ import (
 	"github.com/cheapseatsdev/cheapseats/internal/store"
 	"github.com/cheapseatsdev/cheapseats/internal/version"
 	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/renderer"
+	"github.com/yuin/goldmark/util"
 )
 
 //go:embed templates/*.html static/*
@@ -191,13 +194,7 @@ func New(a *app.App) (*Server, error) {
 			}
 			return fmt.Sprintf("#%d", n)
 		},
-		"markdown": func(md string) template.HTML {
-			var b strings.Builder
-			if goldmark.Convert([]byte(md), &b) != nil {
-				return template.HTML(template.HTMLEscapeString(md))
-			}
-			return template.HTML(b.String()) // goldmark escapes raw HTML unless told otherwise
-		},
+		"markdown": analystMarkdown,
 		// An answer split around its grade's evidence, to highlight it (see grade.Mark).
 		"mark": grade.Mark,
 		"evidence": func(x run.Result) string {
@@ -327,7 +324,45 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/competitors/suggestions", s.apiCompetitorSuggestions)
 	mux.HandleFunc("POST /api/competitors/suggestions/{host}/dismiss", s.apiDismissSuggestion)
 	mux.Handle("/api/mcp", s.mcpHandler())
-	return s.refuseForeign(s.auth(logRequests(s.refuseChanges(mux))))
+	return secureHeaders(s.refuseForeign(s.auth(logRequests(s.refuseChanges(mux)))))
+}
+
+// contentPolicy is every response's Content-Security-Policy. No page may frame Cheap Seats, so
+// another site can't overlay its buttons (Run now, Cancel, Make a link) and trick a click. Images
+// load only from Cheap Seats itself (the icons are inline SVG), so nothing on a page can fetch an
+// outside URL that carries data off. Scripts and styles aren't limited: the layout has an inline
+// theme script and the templates use style attributes, and every page is escaped.
+const contentPolicy = "frame-ancestors 'none'; img-src 'self'; object-src 'none'; base-uri 'self'"
+
+// secureHeaders sets the headers that say what a browser may do with a response.
+func secureHeaders(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Security-Policy", contentPolicy)
+		w.Header().Set("X-Frame-Options", "DENY") // frame-ancestors, for browsers without it
+		h.ServeHTTP(w, r)
+	})
+}
+
+// markdownRenderer renders the analyst's Markdown. goldmark escapes raw HTML unless told
+// otherwise, and an image is rendered as its alt text: the analyst read pages and answers anyone
+// can write, and an image that loads fetches whatever URL they put in it.
+var markdownRenderer = goldmark.New(goldmark.WithRendererOptions(renderer.WithNodeRenderers(util.Prioritized(altTextImages{}, 500))))
+
+func analystMarkdown(md string) template.HTML {
+	var b strings.Builder
+	if markdownRenderer.Convert([]byte(md), &b) != nil {
+		return template.HTML(template.HTMLEscapeString(md))
+	}
+	return template.HTML(b.String())
+}
+
+// altTextImages renders an image as nothing but its children, the alt text.
+type altTextImages struct{}
+
+func (altTextImages) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
+	reg.Register(ast.KindImage, func(util.BufWriter, []byte, ast.Node, bool) (ast.WalkStatus, error) {
+		return ast.WalkContinue, nil
+	})
 }
 
 // refuseForeign refuses what a page on another site can make a browser send here, which the

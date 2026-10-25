@@ -278,6 +278,9 @@ cheapseats version                        version and database schema
   use the first of `CHEAPSEATS_HOSTS` over https, else the host the request came in on
   (`X-Forwarded-Host` first).
 - `/share/<token>` is open without a sign-in; it serves only that link's run ([docs](docs/sharing.md)).
+- No page can be framed by another site or load an image from one (`Content-Security-Policy:
+  frame-ancestors 'none'; img-src 'self'`, and `X-Frame-Options: DENY`). An image in the analyst's
+  Markdown shows as its alt text.
 - `CHEAPSEATS_READONLY=1`: a read-only copy, such as a public demo of a database another Cheap Seats
   writes. It serves the pages and JSON API to anyone, may listen beyond localhost with no tokens,
   refuses every change and MCP, hides the controls, and runs and schedules nothing.
