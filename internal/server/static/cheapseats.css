@@ -28,9 +28,9 @@ a:hover{color:var(--cs-primary);text-decoration-color:currentColor}
 .nav-menu{position:absolute;top:100%;right:0;z-index:10;min-width:190px;padding:var(--cs-space-2);border:1px solid var(--cs-border);border-radius:var(--cs-control-radius);background:var(--cs-surface);box-shadow:var(--cs-shadow-menu)}
 .nav-menu a{display:flex;gap:var(--cs-space-2);align-items:center;padding:9px 10px;text-decoration:none;color:var(--cs-muted);border-radius:5px;font-size:14px}
 .nav-menu a:hover,.nav-menu a[aria-current]{background:var(--cs-chip);color:var(--cs-text)}
-/* The toggle shows the theme it's on: system (a monitor), light (a sun) or dark (a moon). */
+/* The toggle shows the theme it's on: light (a sun), dark (a moon) or system (a monitor). */
 .theme-toggle span{display:none}
-.theme-toggle:not([data-mode]) .t-system,.theme-toggle[data-mode="system"] .t-system,.theme-toggle[data-mode="light"] .t-light,.theme-toggle[data-mode="dark"] .t-dark{display:inline-flex}
+.theme-toggle:not([data-mode]) .t-light,.theme-toggle[data-mode="system"] .t-system,.theme-toggle[data-mode="light"] .t-light,.theme-toggle[data-mode="dark"] .t-dark{display:inline-flex}
 
 main{max-width:var(--cs-content);margin:0 auto;padding:var(--cs-space-8) var(--cs-space-6) 80px;min-width:0}
 h1{font-size:28px;line-height:1.2;letter-spacing:-.025em;margin:0 0 var(--cs-space-2);font-weight:600}h2{font-size:18px;letter-spacing:-.015em;font-weight:600;margin:var(--cs-space-8) 0 var(--cs-space-3)}h3{font-size:15px;font-weight:600;margin:0 0 6px}
