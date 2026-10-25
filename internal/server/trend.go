@@ -111,11 +111,12 @@ func trend(r app.Ranking, key string) template.HTML {
 	}
 	for i, d := range days {
 		if i > 0 && (d.Change != nil || d.NewMethod) {
-			note := strings.Join(d.Change.Notes(), "; ")
+			notes := d.Change.Notes()
 			if d.NewMethod {
 				restarts = append(restarts, d.Date)
-				note = "answers were asked or graded differently; line restarts"
+				notes = append(notes, "answers were asked or graded differently; line restarts")
 			}
+			note := strings.Join(notes, "; ")
 			fmt.Fprintf(&b, `<line class="mark%s" x1="%.1f" x2="%.1f" y1="%.1f" y2="%.1f"><title>%s</title></line>`, map[bool]string{true: " method"}[d.NewMethod], x(d), x(d), padTop, padTop+plotH, template.HTMLEscapeString(d.Date+": "+note))
 		}
 	}

@@ -23,6 +23,7 @@ func TestTrend(t *testing.T) {
 	d3.Window = 3
 	d3.Change = &app.Change{Added: []string{"p"}, Models: []app.ModelChange{{Answerer: "a", From: "</script>", To: "m2"}}}
 	d4.NewMethod = true
+	d4.Change = &app.Change{Removed: []string{"q"}} // a set change on the same day as the new method
 	d3.Compare = &app.Compare{Common: 3, Of: 3, Visible: .1, VisibleMargin: .2, WithinNoise: true}
 	marks := []app.AttemptMark{{Date: "2026-10-02", State: "proposed", Title: "Write <the> guide", URL: "https://github.com/x/y/pull/1"}, {Date: "2025-01-01", State: "proposed", Title: "too early", URL: "https://x"}}
 	rk := app.Ranking{Track: "search", Days: []app.Day{d4, d3, day("2026-10-02", .3), day("2026-10-01", .2)}, Attempts: marks}
@@ -36,7 +37,7 @@ func TestTrend(t *testing.T) {
 		`"label":"named, 7-day window · 1 measured day"`,
 		`Latest average: 1 measured day in the 7-day window.`,
 		`Line restarts on 2026-10-04: answers were asked or graded differently.`,
-		`<title>2026-10-04: answers were asked or graded differently; line restarts</title>`,
+		`<title>2026-10-04: −1 prompt; answers were asked or graded differently; line restarts</title>`,
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %s in:\n%s", want, got)
