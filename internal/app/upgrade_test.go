@@ -202,9 +202,9 @@ func TestEveryDaysByTier(t *testing.T) {
 	}
 }
 
-// Crawl counts from before errors were pooled under crawl.ErrorPath keep their own rows and still
-// count: a 404 counted under its path by an older release reads beside the pooled row new imports
-// write, and the totals hold both.
+// Crawl counts from before 4xx responses were pooled under crawl.ErrorPath keep their own rows and
+// still count: a 404 counted under its path by an older release reads beside the pooled row new
+// imports write, a new 5xx still lands on its own page, and the totals hold all of them.
 func TestUpgradeKeepsCrawlErrorsCountedByPath(t *testing.T) {
 	db, err := store.Open(t.TempDir())
 	if err != nil {
@@ -215,7 +215,9 @@ func TestUpgradeKeepsCrawlErrorsCountedByPath(t *testing.T) {
 	if _, err := db.Exec(`INSERT INTO crawl_daily (day, host, path, class, bot, hits, errors) VALUES (?, 'cheapseats.dev', '/gone', 'training', 'GPTBot', 3, 3)`, now.Format("2006-01-02")); err != nil {
 		t.Fatal(err)
 	}
-	line := `203.0.113.7 - - [` + now.Format("02/Jan/2006:15:04:05 -0700") + `] "GET /gone-too HTTP/1.1" 404 0 "-" "GPTBot/1.0"`
+	clf := now.Format("02/Jan/2006:15:04:05 -0700")
+	line := `203.0.113.7 - - [` + clf + `] "GET /gone-too HTTP/1.1" 404 0 "-" "GPTBot/1.0"` + "\n" +
+		`203.0.113.7 - - [` + clf + `] "GET /gone HTTP/1.1" 502 0 "-" "GPTBot/1.0"`
 	ctx := context.Background()
 	if _, err := crawl.Import(ctx, db.DB, strings.NewReader(line), "cheapseats.dev"); err != nil {
 		t.Fatal(err)
@@ -228,7 +230,7 @@ func TestUpgradeKeepsCrawlErrorsCountedByPath(t *testing.T) {
 	for _, p := range rep.Pages {
 		errs[p.Path] = p.Errors
 	}
-	if errs["/gone"] != 3 || errs[crawl.ErrorPath] != 1 || rep.Totals.Errors != 4 || rep.Totals.Training != 4 {
+	if errs["/gone"] != 4 || errs[crawl.ErrorPath] != 1 || rep.Totals.Errors != 5 || rep.Totals.Training != 5 {
 		t.Errorf("errors by path %v, totals %+v", errs, rep.Totals)
 	}
 }

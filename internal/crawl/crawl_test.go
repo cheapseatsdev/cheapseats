@@ -68,6 +68,7 @@ func TestClassify(t *testing.T) {
 	}{
 		{Hit{Target: "/docs/", UA: "Mozilla/5.0; compatible; OAI-SearchBot/1.0"}, bots.Search, "OAI-SearchBot", "cheapseats.dev", "/docs", true, false},
 		{Hit{Target: "/made-up", UA: "ClaudeBot/1.0", Status: 404}, bots.Training, "ClaudeBot", "cheapseats.dev", ErrorPath, true, true},
+		{Hit{Target: "/pricing/", UA: "ClaudeBot/1.0", Status: 503}, bots.Training, "ClaudeBot", "cheapseats.dev", "/pricing", true, true},
 		{Hit{Host: "WWW.CheapSeats.Dev:443", Target: "/a?b=1", UA: "Mozilla/5.0 (compatible; bingbot/2.0)"}, bots.Engine, "Bingbot", "cheapseats.dev", "/a", true, false},
 		{Hit{Target: "/p", UA: "Mozilla/5.0", Referer: "https://www.perplexity.ai/search?q=x"}, bots.Referral, "Perplexity", "cheapseats.dev", "/p", true, false},
 		{Hit{Target: "/p?utm_source=chatgpt.com", UA: "Mozilla/5.0"}, bots.Referral, "ChatGPT", "cheapseats.dev", "/p", true, false},
@@ -190,11 +191,12 @@ func TestImportBoundsWhatAForgedLogCanAdd(t *testing.T) {
 	}
 	lines = append(lines,
 		`203.0.113.7 - - [`+clf+`] "GET /real HTTP/1.1" 200 1 "-" "GPTBot/1.0"`,
+		`203.0.113.9 - - [`+clf+`] "GET /real HTTP/1.1" 500 1 "-" "GPTBot/1.0"`,
 		`203.0.113.7 - - [`+future+`] "GET /future HTTP/1.1" 200 1 "-" "GPTBot/1.0"`)
 	db.Exec(`INSERT INTO crawl_daily (day, host, path, class, bot, hits, errors) VALUES (?, 'cheapseats.dev', '/stale', 'training', 'GPTBot', 1, 0)`,
 		today.AddDate(0, 0, -keepDays-1).Format("2006-01-02"))
 	st, err := Import(ctx, db.DB, strings.NewReader(strings.Join(lines, "\n")), "cheapseats.dev")
-	if err != nil || st.Counted != 51 || st.Future != 1 {
+	if err != nil || st.Counted != 52 || st.Future != 1 {
 		t.Fatalf("%+v %v", st, err)
 	}
 	var paths []string
@@ -205,8 +207,8 @@ func TestImportBoundsWhatAForgedLogCanAdd(t *testing.T) {
 		paths = append(paths, p)
 	}
 	rows.Close()
-	if strings.Join(paths, " ") != ErrorPath+":50:50 /real:1:0" {
-		t.Errorf("crawl_daily: %v; want the 404s in one row, the real page, nothing stale or future", paths)
+	if strings.Join(paths, " ") != ErrorPath+":50:50 /real:2:1" {
+		t.Errorf("crawl_daily: %v; want the 404s in one row, the real page with its 500, nothing stale or future", paths)
 	}
 	rep, err := Build(ctx, db.DB, 30, nil)
 	if err != nil {

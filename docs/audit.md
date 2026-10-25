@@ -160,9 +160,10 @@ against the operator's published ranges.
 Only daily counts per host, page, class and bot are kept, not log lines, plus a hash of each
 counted request so importing the same log, or one that overlaps it, counts nothing twice. Counts
 and hashes are kept 400 days, and lines older than that aren't counted; nor are lines dated after
-tomorrow (UTC), which a wrong clock or a forged line would be. A request answered 4xx or 5xx is
-counted under one row per host, `/(errors)`, rather than under its path, so a stream of made-up
-URLs sent with a crawler's user agent adds no rows of its own; that row is never flagged. One
+tomorrow (UTC), which a wrong clock or a forged line would be. A request answered 4xx is counted
+under one row per host, `/(errors)`, rather than under its path, so a stream of made-up URLs sent
+with a crawler's user agent adds no rows of its own; that row is never flagged. A 5xx stays on its
+page, so a crawler's server error on a real page still shows there. One
 import counts at most a million new requests; importing the same log again counts the rest. A
 line over 1 MB counts as unreadable and the import carries on.
 

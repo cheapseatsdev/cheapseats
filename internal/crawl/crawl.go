@@ -29,9 +29,10 @@ type Event struct {
 	Hash  string // identifies the request, so a log imported twice counts once
 }
 
-// ErrorPath is the one path every request answered 4xx or 5xx is counted under, per host, day,
-// class and bot. Anyone can send a crawler's user agent for any path, and a 404 for each made-up
-// one would otherwise be a row of its own: errors are counted, but not by page.
+// ErrorPath is the one path every request answered 4xx is counted under, per host, day, class and
+// bot. Anyone can send a crawler's user agent for any path, and a 404 for each made-up one would
+// otherwise be a row of its own: client errors are counted, but not by page. A 5xx stays on its
+// page, since a server error there is a finding about that page.
 const ErrorPath = "/(errors)"
 
 // assets are file types that aren't pages: a crawler fetching them says nothing about a page.
@@ -53,7 +54,7 @@ func Classify(h Hit, host string) (Event, bool) {
 		return Event{}, false
 	}
 	e := Event{Day: h.Time.UTC().Format("2006-01-02"), Host: host, Path: NormPath(p), Error: h.Status >= 400}
-	if e.Error {
+	if h.Status >= 400 && h.Status < 500 {
 		e.Path = ErrorPath
 	}
 	if b, ok := bots.Match(h.UA); ok {
