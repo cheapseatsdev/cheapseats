@@ -227,8 +227,8 @@ deploy/kind-smoke.sh    # optional: Helm chart on a local kind cluster
 Tests use fake providers and make no paid calls. Migrations are append-only; stored JSON decodes
 leniently, and config format changes ship with `migrate-config`.
 
-`run.Method` covers the answer prompt, search policy, grader prompt/model, and the brand's name,
-aliases and `about`.
+`run.Method` covers the answer prompt, search policy, CLI answerers' arguments, grader
+prompt/model, and the brand's name, aliases and `about`.
 Competitor changes affect grading inputs without themselves changing `Method`. Re-grading preserves
 answers, original dates and replaced grades; it cannot repair a different answer prompt or search
 policy, and does not rebuild fixes or themes automatically. [Re-grading](https://cheapseats.dev/docs/regrading/).
