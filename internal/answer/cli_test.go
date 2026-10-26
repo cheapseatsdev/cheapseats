@@ -87,13 +87,14 @@ func TestCodexDisablesLocalTools(t *testing.T) {
 			t.Fatal(err)
 		}
 		args := string(got)
-		wantPrefix := "--disable\nview_image\n--disable\nshell_tool\n--ask-for-approval\nnever\n"
-		if track == Search {
-			wantPrefix += "--search\n"
-		}
-		wantPrefix += "exec\n"
+		wantPrefix := "--disable\nview_image\n--disable\nshell_tool\n--ask-for-approval\nnever\nexec\n"
 		if !strings.HasPrefix(args, wantPrefix) {
 			t.Errorf("%s codex arguments lack enforced tool policy:\n%s", track, args)
+		}
+		// Live search must follow exec: before it, codex 0.163 drops --search and -c alike.
+		_, afterExec, _ := strings.Cut(args, "\nexec\n")
+		if live := strings.Contains(afterExec, "\n-c\nweb_search=\"live\"\n"); live != (track == Search) {
+			t.Errorf("%s codex live search after exec = %v:\n%s", track, live, args)
 		}
 		for _, want := range []string{"\n--sandbox\nread-only\n", "\n-c\nshell_environment_policy.inherit=none\n", "\n-m\ngpt-5.6-sol\n"} {
 			if !strings.Contains(args, want) {
