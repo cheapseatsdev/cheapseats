@@ -6,7 +6,7 @@ package answer
 //   - claude-code: `claude -p` in safe mode (none of your CLAUDE.md, hooks, skills or MCP
 //     servers), with WebSearch and WebFetch on the search track and no tools on recall.
 //   - codex: `codex exec` with your config ignored, local read and shell tools disabled, a
-//     read-only sandbox, and live web search on the search track.
+//     read-only sandbox, and live web search on the search track and none on recall.
 //
 // Each call runs in an empty temp directory, keeps no session, and gets only the environment it
 // needs (cliEnv): not the provider's API key, so it can't fall back to billing the API, and not
@@ -349,6 +349,8 @@ func askCodex(ctx context.Context, model string, track Track, sys, prompt string
 		args = append(args, "-c", `web_search="live"`)
 	} else {
 		brief += " Answer from what you already know; do not look anything up."
+		// Recall has no tools: without this, codex still offers its cached web search (web.run).
+		args = append(args, "-c", `web_search="disabled"`)
 	}
 	args = append(args, "-m", model, brief+"\n\nQuestion: "+prompt)
 	out, err := runCLI(ctx, config.Codex, "OPENAI_API_KEY", "codex", args...)

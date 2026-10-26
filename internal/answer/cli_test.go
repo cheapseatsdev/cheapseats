@@ -91,10 +91,12 @@ func TestCodexDisablesLocalTools(t *testing.T) {
 		if !strings.HasPrefix(args, wantPrefix) {
 			t.Errorf("%s codex arguments lack enforced tool policy:\n%s", track, args)
 		}
-		// Live search must follow exec: before it, codex 0.163 drops --search and -c alike.
+		// The search mode must follow exec: before it, codex 0.163 drops --search and -c alike.
+		// Search is live; recall has none, not codex's default cached search.
 		_, afterExec, _ := strings.Cut(args, "\nexec\n")
-		if live := strings.Contains(afterExec, "\n-c\nweb_search=\"live\"\n"); live != (track == Search) {
-			t.Errorf("%s codex live search after exec = %v:\n%s", track, live, args)
+		want := map[Track]string{Search: "live", Recall: "disabled"}[track]
+		if !strings.Contains(afterExec, "\n-c\nweb_search=\""+want+"\"\n") || strings.Count(args, "web_search=") != 1 {
+			t.Errorf("%s codex call should set web_search=%q once, after exec:\n%s", track, want, args)
 		}
 		for _, want := range []string{"\n--sandbox\nread-only\n", "\n-c\nshell_environment_policy.inherit=none\n", "\n-m\ngpt-5.6-sol\n"} {
 			if !strings.Contains(args, want) {
