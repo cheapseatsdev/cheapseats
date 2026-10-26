@@ -642,7 +642,7 @@ func (b *reviewBuilder) finish() Review {
 	awaiting := map[string]int{}
 	tried := map[string]int{}
 	for _, at := range in.Attempts {
-		if at.State == Withdrawn {
+		if !at.State.Shipped() {
 			continue
 		}
 		st := at.Outcome.Status()

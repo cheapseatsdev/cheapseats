@@ -900,11 +900,11 @@ type shownFix struct {
 }
 
 // landings is what each submitted fix's target page said when last read, by "run/rank"; an open
-// fix has nothing to have landed.
+// or dismissed fix has nothing to have landed.
 func (s *Server) landings(ctx context.Context, fixes []shownFix) map[string]*audit.Landing {
 	out := map[string]*audit.Landing{}
 	for _, x := range fixes {
-		if x.Status == app.Open {
+		if !app.AttemptState(x.Status).Shipped() {
 			continue
 		}
 		if l := s.App.Landing(ctx, x.Fix); l != nil {
@@ -934,6 +934,7 @@ func (s *Server) spend(ctx context.Context) map[string]any {
 func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	qw, _ := s.App.QuickWins(ctx)
+	qw = s.App.FilterQuickWins(qw, app.QuickWinFilter{})
 	if len(qw) > 5 {
 		qw = qw[:5]
 	}
@@ -1242,7 +1243,7 @@ func (s *Server) quickWinsPage(w http.ResponseWriter, r *http.Request) {
 	for _, st := range s.App.Sets() {
 		setV, setL = append(setV, st.ID), append(setL, st.Name)
 	}
-	status := []string{app.Open, string(app.Proposed), string(app.Accepted)}
+	status := []string{app.Open, string(app.Proposed), string(app.Accepted), string(app.Dismissed)}
 	priority := []string{"urgent", "high", "medium", "low"}
 	rows := []filterRow{
 		row("Status", "status", f.Status, status, status, func(v string) app.QuickWinFilter { x := f; x.Status = v; return x }),

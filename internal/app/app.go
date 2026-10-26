@@ -120,7 +120,7 @@ func (a *App) BuildFixes(ctx context.Context, id string) error {
 	ctx = analysis.WithOpportunities(ctx, sum.Opportunities)
 	ctx = analysis.WithObjections(ctx, sum.Objections) // with the pages behind each
 	ctx = analysis.WithMisstatements(ctx, a.misstatementLines(ctx, id, results))
-	an, cost, err := analysis.Build(ctx, &cfg, r.Snapshot.Set, results, a.triedFor(ctx, r.SetID))
+	an, cost, err := analysis.Build(ctx, &cfg, r.Snapshot.Set, results, a.triedFor(ctx, r.SetID), a.dismissedFor(ctx))
 	if err != nil {
 		a.DB.ExecContext(ctx, `UPDATE runs SET fixes_error=?, analysis_cost_usd=analysis_cost_usd+? WHERE id=?`, err.Error(), cost, id)
 		return err
@@ -161,7 +161,7 @@ type QuickWin struct {
 	// Prompt ids reworded since the run, and how many of the fix's prompts the set no longer asks.
 	Reworded []string `json:"reworded,omitempty"`
 	Dropped  int      `json:"dropped,omitempty"`
-	// Open, proposed or accepted (FixAttempts.Status): from Attempts, the work submitted for this
+	// Open, proposed, accepted or dismissed (FixAttempts.Status): from Attempts, the work submitted for this
 	// fix, or from work on the same page the fix list didn't know about. Earlier is what was tried
 	// for the same target before, so a retry shows what didn't work.
 	Status   string    `json:"status"`
@@ -332,14 +332,16 @@ func (a *App) RunCompetitors(r *run.Run) []sets.Competitor {
 
 // QuickWinFilter narrows quick wins; empty fields match everything. Site is one of the brand's
 // sites by url or kind ("docs"), or "elsewhere" for fixes off its sites (outreach, product). Status
-// is open, proposed or accepted, and Priority urgent, high, medium or low.
+// is open, proposed, accepted or dismissed, and Priority urgent, high, medium or low. Dismissed
+// fixes are left out unless Status asks for them.
 type QuickWinFilter struct{ Gap, Set, Site, Status, Priority string }
 
 func (a *App) FilterQuickWins(qw []QuickWin, f QuickWinFilter) []QuickWin {
 	out := []QuickWin{}
 	for _, q := range qw {
 		if f.Gap != "" && string(q.Gap) != f.Gap || f.Set != "" && !q.InSet(f.Set) ||
-			f.Status != "" && q.Status != f.Status || f.Priority != "" && q.Priority != f.Priority {
+			f.Status != "" && q.Status != f.Status || f.Status == "" && q.Status == string(Dismissed) ||
+			f.Priority != "" && q.Priority != f.Priority {
 			continue
 		}
 		if f.Site != "" {

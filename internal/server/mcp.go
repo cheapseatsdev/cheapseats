@@ -134,12 +134,12 @@ func (s *Server) mcpHandler() http.Handler {
 			}
 			return nil, fmt.Errorf("run %s has no result %d", a.Run, a.Result)
 		})
-	addTool(srv, "get_quick_wins", "The ranked fixes from the latest run of every prompt set, fastest ranking gain first, each with a ready-to-paste prompt for Claude Code, its status (open, proposed or accepted) and the work submitted for it or earlier for the same page. A page that several sets' lists ask for is one card, with the other sets' fixes under also_in (each with the run_id and rank mark_fix takes).",
+	addTool(srv, "get_quick_wins", "The ranked fixes from the latest run of every prompt set, fastest ranking gain first, each with a ready-to-paste prompt for Claude Code, its status (open, proposed or accepted; dismissed fixes only when asked for) and the work submitted for it or earlier for the same page. A page that several sets' lists ask for is one card, with the other sets' fixes under also_in (each with the run_id and rank mark_fix takes).",
 		func(ctx context.Context, a struct {
 			Gap      string `json:"gap,omitempty" jsonschema:"documentation, positioning, third-party or product"`
 			Set      string `json:"set,omitempty" jsonschema:"only fixes from this prompt set"`
 			Site     string `json:"site,omitempty" jsonschema:"only fixes on this site of the brand's, by url or kind (docs, blog, marketing...), or elsewhere for fixes off its sites"`
-			Status   string `json:"status,omitempty" jsonschema:"open (nothing submitted yet), proposed or accepted"`
+			Status   string `json:"status,omitempty" jsonschema:"open (nothing submitted yet), proposed, accepted or dismissed"`
 			Priority string `json:"priority,omitempty" jsonschema:"urgent, high, medium or low"`
 			Limit    int    `json:"limit,omitempty" jsonschema:"at most this many, from the top"`
 			Brief    bool   `json:"brief,omitempty" jsonschema:"leave out each fix's Claude Code prompt, the bulk of the result; get it again with a limit when you take a fix on"`
@@ -160,13 +160,13 @@ func (s *Server) mcpHandler() http.Handler {
 			}
 			return out, nil
 		})
-	addTool(srv, "mark_fix", "Record work submitted for a fix: the commit or pull request, as proposed (open PR) or accepted (merged). The fix then leaves the open quick wins; a later fix for the same page stays open and shows this attempt and its outcome.",
+	addTool(srv, "mark_fix", "Record work submitted for a fix: the commit or pull request, as proposed (open PR) or accepted (merged). The fix then leaves the open quick wins; a later fix for the same page stays open and shows this attempt and its outcome. Or dismiss a fix the team won't do: state dismissed, no url, and the reason as the note. The analyst is told every dismissal's reason and stops proposing fixes that rest on it.",
 		func(ctx context.Context, a struct {
 			Run   string `json:"run" jsonschema:"the run the fix is from (run_id on a quick win)"`
 			Rank  int    `json:"rank" jsonschema:"the fix's rank in that run"`
-			URL   string `json:"url" jsonschema:"the commit or pull request URL"`
-			State string `json:"state,omitempty" jsonschema:"proposed (default) or accepted"`
-			Note  string `json:"note,omitempty" jsonschema:"what was done, briefly"`
+			URL   string `json:"url,omitempty" jsonschema:"the commit or pull request URL; not needed to dismiss"`
+			State string `json:"state,omitempty" jsonschema:"proposed (default), accepted or dismissed"`
+			Note  string `json:"note,omitempty" jsonschema:"what was done, briefly; for a dismissal, why (required)"`
 		}) (any, error) {
 			at, err := s.App.MarkFix(ctx, a.Run, a.Rank, a.URL, a.State, a.Note, "mcp")
 			if err != nil {
@@ -174,10 +174,10 @@ func (s *Server) mcpHandler() http.Handler {
 			}
 			return briefAttempts([]app.Attempt{at})[0], nil
 		})
-	addTool(srv, "set_attempt_state", "Move work submitted for a fix on: accepted when its pull request merges, withdrawn when it's closed (which reopens the fix).",
+	addTool(srv, "set_attempt_state", "Move work submitted for a fix on: accepted when its pull request merges, withdrawn when it's closed (which reopens the fix). Withdrawing a dismissal undoes it.",
 		func(ctx context.Context, a struct {
 			ID    int64  `json:"id" jsonschema:"the attempt id, from mark_fix or list_attempts"`
-			State string `json:"state" jsonschema:"proposed, accepted or withdrawn"`
+			State string `json:"state" jsonschema:"proposed, accepted, withdrawn or dismissed"`
 		}) (any, error) {
 			if err := s.App.SetAttemptState(ctx, a.ID, a.State); err != nil {
 				return nil, err

@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -302,6 +303,89 @@ func TestTheFixLoopOverMCP(t *testing.T) {
 	res, _ = cs.CallTool(ctx, &mcp.CallToolParams{Name: "set_attempt_state", Arguments: map[string]any{"id": at.ID, "state": "merged"}})
 	if !res.IsError {
 		t.Error("an unknown state should be a tool error")
+	}
+}
+
+// A fix the team won't do is dismissed with its reason and no link: it leaves quick wins (unless
+// asked for), measures nothing, keeps a later fix for the same page dismissed, reaches the
+// analyst with its reason, and withdrawing it undoes it.
+func TestDismissingAFix(t *testing.T) {
+	a, _, execute, analyst := fixFixture(t)
+	first := execute()
+	s, err := New(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := s.Handler()
+	get := func(path string) string {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest("GET", path, nil))
+		if rec.Code != 200 {
+			t.Fatalf("%s: %d", path, rec.Code)
+		}
+		return rec.Body.String()
+	}
+	send := func(method, path, ctype, body string) int {
+		req := httptest.NewRequest(method, path, strings.NewReader(body))
+		req.Header.Set("content-type", ctype)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Code
+	}
+	dismiss := func(note string) int {
+		return send("POST", "/runs/"+first+"/fixes/1/attempts", "application/x-www-form-urlencoded", url.Values{"state": {"dismissed"}, "note": {note}}.Encode())
+	}
+	if body := get("/quick-wins"); !strings.Contains(body, ">Dismiss</button>") {
+		t.Fatalf("an open fix offers no dismissal:\n%s", limit(body))
+	}
+	if code := dismiss(""); code != 400 {
+		t.Errorf("a dismissal without its reason: %d", code)
+	}
+	reason := "the old host was up for hours; its pages already moved"
+	if code := dismiss(reason); code != 303 {
+		t.Fatalf("dismiss: %d", code)
+	}
+	for _, path := range []string{"/api/quick-wins", "/api/quick-wins?status=open"} {
+		if body := get(path); body != "[]\n" {
+			t.Errorf("%s still lists the dismissed fix:\n%s", path, limit(body))
+		}
+	}
+	if body := get("/"); strings.Contains(body, "credential-gateway") {
+		t.Errorf("the dashboard still shows the dismissed fix:\n%s", limit(body))
+	}
+	if body := get("/quick-wins?status=dismissed"); !strings.Contains(body, `class="chip st-dismissed">dismissed`) || !strings.Contains(body, reason) ||
+		!strings.Contains(body, "Undo dismissal") || strings.Contains(body, "pending: the set hasn") || strings.Contains(body, ">Mark</button>") {
+		t.Errorf("dismissed list:\n%s", limit(body))
+	}
+	var attempts []app.Attempt
+	json.Unmarshal([]byte(get("/api/attempts")), &attempts)
+	if len(attempts) != 1 || attempts[0].State != app.Dismissed || attempts[0].URL != "" || attempts[0].Outcome.Status() != app.OutcomeDismissed {
+		t.Fatalf("attempts: %+v", attempts)
+	}
+	id := strconv.FormatInt(attempts[0].ID, 10)
+	if code := send("POST", "/api/attempts/"+id, "application/json", `{"state":"accepted"}`); code != 400 {
+		t.Errorf("a dismissal with no link became accepted: %d", code)
+	}
+
+	// The analyst hears the reason, apart from the work tried, and its new fix for the same page
+	// stays dismissed.
+	second := execute()
+	last := analyst()[len(analyst())-1]
+	if !strings.Contains(last, "Dismissed by the Cheap Seats team") || !strings.Contains(last, reason) || strings.Contains(last, "Already tried") {
+		t.Errorf("the analyst wasn't told of the dismissal:\n%s", limit(last))
+	}
+	var dismissed []app.QuickWin
+	json.Unmarshal([]byte(get("/api/quick-wins?status=dismissed")), &dismissed)
+	if len(dismissed) != 1 || dismissed[0].RunID != second || len(dismissed[0].Earlier) != 1 {
+		t.Fatalf("a later fix for the dismissed page: %+v", dismissed)
+	}
+
+	// Withdrawing the dismissal undoes it.
+	if code := send("POST", "/api/attempts/"+id, "application/json", `{"state":"withdrawn"}`); code != 200 {
+		t.Fatalf("undo: %d", code)
+	}
+	if body := get("/api/quick-wins?status=open"); !strings.Contains(body, second) {
+		t.Errorf("an undone dismissal left its fix closed:\n%s", limit(body))
 	}
 }
 

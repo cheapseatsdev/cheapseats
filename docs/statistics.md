@@ -179,6 +179,7 @@ these statuses:
 
 | Status | When |
 |---|---|
+| dismissed | the team decided not to do the fix; nothing shipped, so nothing is measured |
 | pending | the set hasn't run since the attempt |
 | needs regrade | it has, but only under another grading method. The outcome names the runs to re-grade (the fix's run, the runs pooled before it, and runs since on older methods); once they are graded under today's method (`cheapseats regrade <set> -since <regrade_since_days>d`, the set page's **Re-grade stored answers**, or the MCP `regrade` tool) the attempt is measured as below. See [re-grading](regrading.md) |
 | not comparable | it has, but only with answers asked differently (another answer prompt or search policy), which no re-grade can change |

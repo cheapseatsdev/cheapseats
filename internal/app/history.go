@@ -782,10 +782,10 @@ func (a *App) Rankings(ctx context.Context, lastDays, window int, only string) (
 }
 
 // attemptMarks is the set's attempts as days on its trend: the day each was proposed and, once
-// accepted, the day it was (its last update). Withdrawn ones are left out. Read straight from the
-// table: a chart doesn't need their outcomes.
+// accepted, the day it was (its last update). Withdrawn and dismissed ones are left out: nothing
+// shipped. Read straight from the table: a chart doesn't need their outcomes.
 func (a *App) attemptMarks(ctx context.Context, setID string) []AttemptMark {
-	rows, err := a.DB.QueryContext(ctx, `SELECT fix, url, state, created_at, updated_at FROM fix_attempts WHERE set_id=? AND state<>? ORDER BY created_at, id`, setID, Withdrawn)
+	rows, err := a.DB.QueryContext(ctx, `SELECT fix, url, state, created_at, updated_at FROM fix_attempts WHERE set_id=? AND state IN (?,?) ORDER BY created_at, id`, setID, Proposed, Accepted)
 	if err != nil {
 		return nil
 	}

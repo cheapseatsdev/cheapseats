@@ -200,12 +200,32 @@ func triedText(brand string, tried []Tried) string {
 	return b.String()
 }
 
+// Dismissed is a fix the team decided not to do, and why.
+type Dismissed struct {
+	Title, Target, Reason string
+}
+
+// dismissedText lists dismissed fixes for the analyst, or "" when there are none.
+func dismissedText(brand string, dismissed []Dismissed) string {
+	if len(dismissed) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "\nDismissed by the %s team, newest first (the fix, its target, and why). The reasons are the team's own knowledge of %s and outrank what the results and the attempts above suggest:\n", brand, brand)
+	for _, d := range dismissed {
+		fmt.Fprintf(&b, "- %s | %s | %s\n", d.Title, d.Target, d.Reason)
+	}
+	b.WriteString("Don't propose these again, or any other fix that rests on a premise a reason says is wrong.\n")
+	return b.String()
+}
+
 // structuredCLI writes the fix list through the claude CLI when the analyst's provider is
 // claude-code; a test swaps it for a fake.
 var structuredCLI = answer.ClaudeStructured
 
-// Build runs the analyst over a finished run's results, with the fixes already tried in the set.
-func Build(ctx context.Context, cfg *config.Config, set sets.Set, results []run.Result, tried []Tried) (Analysis, float64, error) {
+// Build runs the analyst over a finished run's results, with the fixes already tried in the set and
+// those the team dismissed.
+func Build(ctx context.Context, cfg *config.Config, set sets.Set, results []run.Result, tried []Tried, dismissed []Dismissed) (Analysis, float64, error) {
 	brand := cfg.Brand.Name
 	all := cfg.Brand.AllSites()
 	domain := brand
@@ -257,7 +277,7 @@ Every field must be executable by someone who hasn't read the data:
 - displaces: the third-party or competitor URL currently owning that question, or null.
 Don't propose generic marketing, brand campaigns, or anything you can't point at a prompt for.
 %[9]s
-%[7]s`, brand, domain, cfg.Brand.About, facts, len(set.Prompts), set.Name, body, sites, triedText(brand, tried))
+%[7]s`, brand, domain, cfg.Brand.About, facts, len(set.Prompts), set.Name, body, sites, triedText(brand, tried)+dismissedText(brand, dismissed))
 	prompt += siteFindingsText(ctx, brand)
 	prompt += opportunitiesText(ctx, brand)
 	prompt += objectionsText(ctx, brand)
