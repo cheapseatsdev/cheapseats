@@ -87,9 +87,12 @@ func TestCodexDisablesLocalTools(t *testing.T) {
 			t.Fatal(err)
 		}
 		args := string(got)
-		wantPrefix := "--disable\nview_image\n--disable\nshell_tool\n--ask-for-approval\nnever\nexec\n"
+		wantPrefix := "--disable\nview_image\n--disable\nshell_tool\n--disable\nplugins\n--disable\nremote_plugin\n--disable\napps\n--ask-for-approval\nnever\nexec\n"
 		if !strings.HasPrefix(args, wantPrefix) {
 			t.Errorf("%s codex arguments lack enforced tool policy:\n%s", track, args)
+		}
+		if _, afterExec, _ := strings.Cut(args, "\nexec\n"); !strings.Contains(afterExec, "\n-c\nanalytics.enabled=false\n") {
+			t.Errorf("%s codex call should turn analytics off after exec:\n%s", track, args)
 		}
 		// The search mode must follow exec: before it, codex 0.163 drops --search and -c alike.
 		// Search is live; recall has none, not codex's default cached search.

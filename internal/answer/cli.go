@@ -5,8 +5,9 @@ package answer
 //
 //   - claude-code: `claude -p` in safe mode (none of your CLAUDE.md, hooks, skills or MCP
 //     servers), with WebSearch and WebFetch on the search track and no tools on recall.
-//   - codex: `codex exec` with your config ignored, local read and shell tools disabled, a
-//     read-only sandbox, and live web search on the search track and none on recall.
+//   - codex: `codex exec` with your config ignored, local read and shell tools, plugins, apps and
+//     analytics off, a read-only sandbox, and live web search on the search track and none on
+//     recall.
 //
 // Each call runs in an empty temp directory, keeps no session, and gets only the environment it
 // needs (cliEnv): not the provider's API key, so it can't fall back to billing the API, and not
@@ -374,10 +375,15 @@ func codexArgs(model string, track Track, sys, prompt string, insist bool) []str
 	// reading local files. Approval is never interactive in this unattended answerer. The
 	// sub-agent and JavaScript orchestration tools stay: no switch in codex 0.163 removes them
 	// (not --disable multi_agent, not agents.max_depth), and neither reads files on its own.
-	args := []string{"--disable", "view_image", "--disable", "shell_tool", "--ask-for-approval", "never"}
+	// Plugins and apps are off too: each call otherwise fetches the plugin catalog and lists
+	// ChatGPT apps over the account's login, which an answer never needs.
+	args := []string{"--disable", "view_image", "--disable", "shell_tool",
+		"--disable", "plugins", "--disable", "remote_plugin", "--disable", "apps", "--ask-for-approval", "never"}
 	// A defense-in-depth empty environment also applies if a future CLI adds another command tool.
+	// Analytics is a setting, so it follows exec (a -c before it is ignored).
 	args = append(args, "exec", "--json", "--ephemeral", "--ignore-user-config", "--ignore-rules",
-		"--skip-git-repo-check", "--sandbox", "read-only", "-c", "shell_environment_policy.inherit=none")
+		"--skip-git-repo-check", "--sandbox", "read-only", "-c", "shell_environment_policy.inherit=none",
+		"-c", "analytics.enabled=false")
 	if track == Search {
 		brief += " " + SearchPolicy
 		if insist {
