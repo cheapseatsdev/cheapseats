@@ -2,7 +2,7 @@
 // a page because someone asked an assistant (assistant), building an assistant's search index
 // (search), collecting training data (training), or a web search engine some assistants search
 // through (engine). The site audit reads robots.txt rules for them; the crawler log import counts
-// their fetches.
+// their fetches, and people's visits beside them.
 package bots
 
 import "strings"
@@ -15,6 +15,7 @@ const (
 	Training  Class = "training"  // training data
 	Engine    Class = "engine"    // a web search engine (Bing feeds ChatGPT and Copilot, Google feeds Gemini)
 	Referral  Class = "referral"  // not a bot: a person who came from an assistant's answer
+	Visit     Class = "visit"     // not a bot: a person's browser, come from anywhere else
 )
 
 // Classes in the order pages show them.
@@ -79,6 +80,27 @@ func Match(ua string) (Bot, bool) {
 		}
 	}
 	return Bot{}, false
+}
+
+// notBrowser are words in a user agent that only tools and bots send: a crawler's "+https://" URL,
+// "bot", "spider", a headless browser, an HTTP library.
+var notBrowser = []string{"bot", "crawl", "spider", "slurp", "http", "compatible;", "headless", "lighthouse",
+	"preview", "python", "curl", "wget", "java/", "okhttp", "go-http", "fetch", "scan", "monitor"}
+
+// Browser says whether a user agent reads as a person's web browser: it starts as browsers' do and
+// has none of the words tools and bots send. It's a guess from the user agent alone, so counts it
+// keeps are approximate: a bot dressed as a browser counts.
+func Browser(ua string) bool {
+	l := strings.ToLower(ua)
+	if !strings.HasPrefix(l, "mozilla/") {
+		return false
+	}
+	for _, w := range notBrowser {
+		if strings.Contains(l, w) {
+			return false
+		}
+	}
+	return true
 }
 
 // Referrers are the hosts of assistants whose answers link people to pages, by assistant.

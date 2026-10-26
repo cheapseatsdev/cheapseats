@@ -173,8 +173,8 @@ func crawlCmd(ctx context.Context, args []string) error {
 			if err != nil {
 				return fmt.Errorf("%s: %w", name, err)
 			}
-			fmt.Printf("%s: %d lines, %d counted (%d assistant, %d search, %d training, %d engine, %d AI referrals), %d already imported, %d over 400 days old, %d unreadable\n",
-				name, st.Lines, st.Counted, st.ByClass[bots.Assistant], st.ByClass[bots.Search], st.ByClass[bots.Training], st.ByClass[bots.Engine], st.ByClass[bots.Referral], st.Duplicate, st.TooOld, st.Unread)
+			fmt.Printf("%s: %d lines, %d counted (%d assistant, %d search, %d training, %d engine, %d AI referrals, %d other visits), %d already imported, %d over %d days old, %d unreadable\n",
+				name, st.Lines, st.Counted, st.ByClass[bots.Assistant], st.ByClass[bots.Search], st.ByClass[bots.Training], st.ByClass[bots.Engine], st.ByClass[bots.Referral], st.ByClass[bots.Visit], st.Duplicate, st.TooOld, crawl.KeepDays, st.Unread)
 			if st.Future > 0 {
 				fmt.Printf("  %d lines are dated after tomorrow (UTC) and weren't counted\n", st.Future)
 			}
@@ -185,7 +185,7 @@ func crawlCmd(ctx context.Context, args []string) error {
 				fmt.Println("  some lines name no host; pass -host to say which site the log is for")
 			}
 		}
-		fmt.Println("Crawlers are identified by user agent only (unverified): anyone can send one.")
+		fmt.Println("Crawlers and people are told apart by user agent only (unverified): anyone can send one.")
 		return nil
 	case "report":
 		fs := flag.NewFlagSet("crawl report", flag.ExitOnError)
@@ -201,12 +201,12 @@ func crawlCmd(ctx context.Context, args []string) error {
 		}
 		fmt.Printf("Since %s, hosts %s (user agent only, unverified)\n\n", rep.Since, strings.Join(rep.Hosts, ", "))
 		w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-		fmt.Fprintln(w, "CITED\tSURFACED\tASSISTANT\tSEARCH\tTRAINING\tENGINE\tREFERRALS\tPAGE\tFLAG")
+		fmt.Fprintln(w, "CITED\tSURFACED\tASSISTANT\tSEARCH\tTRAINING\tENGINE\tREFERRALS\tVISITS\tPAGE\tFLAG")
 		for i, p := range rep.Pages {
 			if i == 50 {
 				break
 			}
-			fmt.Fprintf(w, "%d\t%d\t%d\t%d\t%d\t%d\t%d\t%s%s\t%s\n", p.Cited, p.Surfaced, p.Assistant, p.Search, p.Training, p.Engine, p.Referrals, p.Host, p.Path, p.Flag)
+			fmt.Fprintf(w, "%d\t%d\t%d\t%d\t%d\t%d\t%d\t%d\t%s%s\t%s\n", p.Cited, p.Surfaced, p.Assistant, p.Search, p.Training, p.Engine, p.Referrals, p.Visits, p.Host, p.Path, p.Flag)
 		}
 		return w.Flush()
 	}

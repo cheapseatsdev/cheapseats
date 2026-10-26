@@ -234,3 +234,40 @@ func TestUpgradeKeepsCrawlErrorsCountedByPath(t *testing.T) {
 		t.Errorf("errors by path %v, totals %+v", errs, rep.Totals)
 	}
 }
+
+// Counts imported before visits were counted have referrals but no visits: the report shows no
+// visits rather than the referrals as every visit, and importing the same log again (the hourly
+// sync does) adds its visits without counting a crawler fetch or a referral twice.
+func TestUpgradeCountsVisitsFromLogsImportedBefore(t *testing.T) {
+	db, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	clf := time.Now().UTC().Format("02/Jan/2006:15:04:05 -0700")
+	crawled := `203.0.113.7 - - [` + clf + `] "GET /docs HTTP/1.1" 200 1 "-" "GPTBot/1.0"` + "\n" +
+		`203.0.113.8 - - [` + clf + `] "GET /docs HTTP/1.1" 200 1 "https://chatgpt.com/" "Mozilla/5.0 (Macintosh)"` + "\n"
+	visited := `203.0.113.9 - - [` + clf + `] "GET /docs HTTP/1.1" 200 1 "-" "Mozilla/5.0 (Windows NT 10.0)"` + "\n"
+	ctx := context.Background()
+	// What an older release kept of the whole log: the crawler fetch and the referral.
+	if _, err := crawl.Import(ctx, db.DB, strings.NewReader(crawled), "cheapseats.dev"); err != nil {
+		t.Fatal(err)
+	}
+	rep, err := crawl.Build(ctx, db.DB, 30, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.Totals.Referrals != 1 || rep.Totals.Visits != 0 {
+		t.Errorf("before visits were counted: totals %+v", rep.Totals)
+	}
+	st, err := crawl.Import(ctx, db.DB, strings.NewReader(crawled+visited), "cheapseats.dev")
+	if err != nil || st.Counted != 1 || st.Duplicate != 2 {
+		t.Fatalf("the same log again: %+v %v", st, err)
+	}
+	if rep, err = crawl.Build(ctx, db.DB, 30, nil); err != nil {
+		t.Fatal(err)
+	}
+	if rep.Totals.Training != 1 || rep.Totals.Referrals != 1 || rep.Totals.Visits != 2 {
+		t.Errorf("after: totals %+v", rep.Totals)
+	}
+}

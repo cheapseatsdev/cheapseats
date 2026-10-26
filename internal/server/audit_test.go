@@ -117,10 +117,15 @@ func TestSiteChecks(t *testing.T) {
 	if body := do("POST", "/api/runs/"+r.ID+"/citation-check"); !strings.Contains(body, `"outreach": true`) || !strings.Contains(body, competitor) {
 		t.Errorf("citation check: %s", limit(body))
 	}
-	log := `203.0.113.7 - - [01/Jan/2026:00:00:00 +0000] "GET / HTTP/1.1" 200 10 "-" "GPTBot/1.2"` + "\n"
-	log = strings.Replace(log, "01/Jan/2026:00:00:00 +0000", nowCLF(), 1)
-	if st, err := a.ImportCrawl(context.Background(), strings.NewReader(log), "127.0.0.1"); err != nil || st.Counted != 1 {
+	log := `203.0.113.7 - - [01/Jan/2026:00:00:00 +0000] "GET / HTTP/1.1" 200 10 "-" "GPTBot/1.2"` + "\n" +
+		`203.0.113.8 - - [01/Jan/2026:00:00:00 +0000] "GET / HTTP/1.1" 200 10 "https://chatgpt.com/" "Mozilla/5.0 (Macintosh)"` + "\n" +
+		`203.0.113.9 - - [01/Jan/2026:00:00:00 +0000] "GET / HTTP/1.1" 200 10 "-" "Mozilla/5.0 (Macintosh)"` + "\n"
+	log = strings.ReplaceAll(log, "01/Jan/2026:00:00:00 +0000", nowCLF())
+	if st, err := a.ImportCrawl(context.Background(), strings.NewReader(log), "127.0.0.1"); err != nil || st.Counted != 3 {
 		t.Fatalf("import: %+v %v", st, err)
+	}
+	if body := do("GET", "/crawlers"); !strings.Contains(body, "AI referrals of 2 visits") || !strings.Contains(body, `<th class="num">Visits</th>`) {
+		t.Errorf("/crawlers: want visits beside the AI referrals in %s", limit(body))
 	}
 
 	for path, want := range map[string]string{
