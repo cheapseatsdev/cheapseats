@@ -43,6 +43,12 @@ var cliEnv = []string{"HOME", "USER", "LOGNAME", "PATH", "SHELL", "TMPDIR", "TER
 	"HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "no_proxy",
 	"SSL_CERT_FILE", "SSL_CERT_DIR", "NODE_EXTRA_CA_CERTS"}
 
+// cliSets is what each CLI is always given, after cliEnv, so it wins over this process's value.
+var cliSets = map[string][]string{
+	// Telemetry, error reports and update checks: an answer needs none of them.
+	config.ClaudeCode: {"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1"},
+}
+
 // sudoSets is what sudo sets for the target user itself; passing them would override that.
 var sudoSets = []string{"HOME", "USER", "LOGNAME", "PATH", "SHELL", "TMPDIR"}
 
@@ -138,7 +144,7 @@ func runCLIInput(ctx context.Context, provider, unsetKey string, stdin []byte, n
 	defer os.RemoveAll(dir)
 	ctx, cancel := context.WithTimeout(ctx, cliTimeout)
 	defer cancel()
-	vars := cliVars(unsetKey)
+	vars := append(cliVars(unsetKey), cliSets[provider]...)
 	var cmd *exec.Cmd
 	if user := strings.TrimSpace(env.Get("CLI_USER")); user == "" {
 		cmd = exec.CommandContext(ctx, name, args...)

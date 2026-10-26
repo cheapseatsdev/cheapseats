@@ -252,3 +252,14 @@ func TestCLIErrorKeepsTheEndOfStderr(t *testing.T) {
 		t.Fatalf("err %v", err)
 	}
 }
+
+// Claude's telemetry is off on every call, even when this process turns it back on and passes it.
+func TestClaudeCLISendsNoTelemetry(t *testing.T) {
+	cliCapFake(t, "echo \"$CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC\"\n")
+	t.Setenv("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "0")
+	t.Setenv("CHEAPSEATS_CLI_ENV", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC")
+	out, err := runCLI(context.Background(), config.ClaudeCode, "ANTHROPIC_API_KEY", "claude")
+	if err != nil || strings.TrimSpace(string(out)) != "1" {
+		t.Fatalf("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=%q, err %v", out, err)
+	}
+}
