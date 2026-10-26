@@ -330,19 +330,21 @@ func askCodex(ctx context.Context, model string, track Track, sys, prompt string
 	// sub-agent and JavaScript orchestration tools stay: no switch in codex 0.163 removes them
 	// (not --disable multi_agent, not agents.max_depth), and neither reads files on its own.
 	args := []string{"--disable", "view_image", "--disable", "shell_tool", "--ask-for-approval", "never"}
+	// A defense-in-depth empty environment also applies if a future CLI adds another command tool.
+	args = append(args, "exec", "--json", "--ephemeral", "--ignore-user-config", "--ignore-rules",
+		"--skip-git-repo-check", "--sandbox", "read-only", "-c", "shell_environment_policy.inherit=none")
 	if track == Search {
 		brief += " " + SearchPolicy
 		if insist {
 			brief += " You must use web search at least once before you answer."
 		}
-		args = append(args, "--search")
+		// Live search is a setting after `exec`: codex 0.163 drops a global --search for exec, and
+		// its default searches a cache (the request says external_web_access: false).
+		args = append(args, "-c", `web_search="live"`)
 	} else {
 		brief += " Answer from what you already know; do not look anything up."
 	}
-	// A defense-in-depth empty environment also applies if a future CLI adds another command tool.
-	args = append(args, "exec", "--json", "--ephemeral", "--ignore-user-config", "--ignore-rules",
-		"--skip-git-repo-check", "--sandbox", "read-only", "-c", "shell_environment_policy.inherit=none",
-		"-m", model, brief+"\n\nQuestion: "+prompt)
+	args = append(args, "-m", model, brief+"\n\nQuestion: "+prompt)
 	out, err := runCLI(ctx, config.Codex, "OPENAI_API_KEY", "codex", args...)
 	ans := ParseCodex(out)
 	if ans.Model == "" {
