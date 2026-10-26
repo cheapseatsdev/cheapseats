@@ -197,7 +197,7 @@ func (s *Server) frontDoor(ctx context.Context) FrontDoor {
 	at, _ := s.App.Attempts(ctx, "")
 	fd.regradeDue = map[string]regradeNeed{}
 	for _, x := range at {
-		if x.State == app.Withdrawn {
+		if !x.State.Shipped() {
 			continue
 		}
 		switch x.Outcome.Status() {

@@ -66,19 +66,25 @@ stateDiagram-v2
 
 Work submitted for a fix is **proposed** (a commit or pull request is up), **accepted** (it
 merged) or **withdrawn** (closed, which reopens the fix). An attempt can be recorded in any
-state and moved to any other, since a pull request can be reopened or a merge reverted.
+state and moved to any other, since a pull request can be reopened or a merge reverted. A fix
+the team won't do is **dismissed**, with the reason as its note and no link; a dismissal can
+only be withdrawn, which undoes it, and merged work must be withdrawn before its fix is dismissed.
 
 ```mermaid
 stateDiagram-v2
     [*] --> proposed
     [*] --> accepted
     [*] --> withdrawn
+    [*] --> dismissed
     proposed --> accepted
     proposed --> withdrawn
+    proposed --> dismissed
     accepted --> proposed
     accepted --> withdrawn
     withdrawn --> proposed
     withdrawn --> accepted
+    withdrawn --> dismissed
+    dismissed --> withdrawn
 ```
 
 ## Budget reservations (`spend_events.state`)

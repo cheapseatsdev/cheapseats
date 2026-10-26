@@ -148,7 +148,7 @@ func TestStatesSQLLiteralsAreKnown(t *testing.T) {
 	for _, s := range budget.States {
 		known[string(s)] = true
 	}
-	for _, s := range []string{"proposed", "accepted", "withdrawn"} { // app.AttemptStates: app imports this package
+	for _, s := range []string{"proposed", "accepted", "withdrawn", "dismissed"} { // app.AttemptStates: app imports this package
 		known[s] = true
 	}
 	column := regexp.MustCompile(`(?i)\b(?:status|state)\s*(?:=|!=|<>|IN\s*\()\s*('[a-z_]+'(?:\s*,\s*'[a-z_]+')*)`)

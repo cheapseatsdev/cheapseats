@@ -66,7 +66,7 @@ func TestBuildTriagesTheAnalystsList(t *testing.T) {
 	results := []run.Result{{PromptIdx: 0, Answerer: "claude", Track: answer.Search, Status: "done",
 		Grade:  &grade.Grade{Verdict: grade.Absent, WhyNotTop: &why},
 		Answer: &answer.Answer{Citations: []answer.Link{{URL: "https://coder.com/docs"}}}}}
-	a, _, err := Build(context.Background(), cfg, set, results, nil)
+	a, _, err := Build(context.Background(), cfg, set, results, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

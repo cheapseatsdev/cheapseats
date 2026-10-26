@@ -17,7 +17,8 @@ import (
 )
 
 // Attempt is work submitted for a fix: the commit or pull request, proposed, then accepted or
-// withdrawn. It settles the one fix it was recorded on. Fix lists are rebuilt every run, so the fix
+// withdrawn. Or it's a dismissal: the team decided not to do the fix, with no link needed and the
+// reason in its note. It settles the one fix it was recorded on. Fix lists are rebuilt every run, so the fix
 // is kept as it was; a later fix with the same target stays open, as a retry of the same idea, and
 // shows the attempts before it with their outcomes.
 type Attempt struct {
@@ -71,6 +72,8 @@ type Outcome struct {
 	// The set has run since, but only with answers asked differently (another answer prompt or
 	// search policy), which no re-grade can change: nothing compares and nothing ever will.
 	Incomparable bool `json:"incomparable,omitempty"`
+	// The fix was dismissed: nothing shipped, so there's nothing to measure.
+	Dismissed bool `json:"dismissed,omitempty"`
 	// The set has only run since under another grading method. These runs (the fix's, the ones
 	// pooled before it, and runs since on methods older than the newest) would compare once
 	// re-graded under today's grader; a re-grade of the set reaching RegradeSinceDays back covers
@@ -117,6 +120,7 @@ const (
 	OutcomeNoChange     = "no detectable change"
 	OutcomeIncomparable = "not comparable"
 	OutcomeNeedsRegrade = "needs regrade"
+	OutcomeDismissed    = "dismissed"
 )
 
 // Changes is the stratified change over the target prompts in named (out of every answer) and
@@ -136,6 +140,9 @@ func (o Outcome) Changes() (named, recommended Diff) {
 // moved when named or recommended rose beyond its 95% margin, worse when one fell beyond it,
 // mixed when one did each, and otherwise no detectable change.
 func (o Outcome) Status() string {
+	if o.Dismissed {
+		return OutcomeDismissed
+	}
 	if len(o.RegradeRuns) > 0 {
 		return OutcomeNeedsRegrade
 	}
@@ -173,6 +180,8 @@ func (o Outcome) Status() string {
 // named and recommended with their margins, how much data it rests on, then each prompt.
 func (o Outcome) Summary() string {
 	switch o.Status() {
+	case OutcomeDismissed:
+		return "dismissed: nothing shipped to measure"
 	case OutcomePending:
 		return "pending: the set hasn't run since"
 	case OutcomeIncomparable:
@@ -261,7 +270,7 @@ const (
 )
 
 // MarkFix records work submitted for fix rank of run runID: the commit or pull request at link, in
-// state (proposed when empty).
+// state (proposed when empty). A dismissal needs no link but needs its reason as the note.
 func (a *App) MarkFix(ctx context.Context, runID string, rank int, link, state, note, by string) (Attempt, error) {
 	link, note = strings.TrimSpace(link), strings.TrimSpace(note)
 	if len(link) > MaxAttemptURL {
@@ -270,16 +279,22 @@ func (a *App) MarkFix(ctx context.Context, runID string, rank int, link, state, 
 	if len(note) > MaxAttemptNote {
 		return Attempt{}, fmt.Errorf("the note is %d bytes; at most %d", len(note), MaxAttemptNote)
 	}
-	u, err := url.Parse(link)
-	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
-		return Attempt{}, fmt.Errorf("a link to the commit or pull request is required, as an http(s) URL")
-	}
 	st := AttemptState(state)
 	if st == "" {
 		st = Proposed
 	}
 	if !validState(st) {
-		return Attempt{}, fmt.Errorf("state is proposed, accepted or withdrawn, not %q", state)
+		return Attempt{}, fmt.Errorf("state is proposed, accepted, withdrawn or dismissed, not %q", state)
+	}
+	if st == Dismissed && note == "" {
+		return Attempt{}, fmt.Errorf("a dismissal needs its reason as the note")
+	}
+	if link != "" || st != Dismissed {
+		u, err := url.Parse(link)
+		if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
+			return Attempt{}, fmt.Errorf("a link to the commit or pull request is required, as an http(s) URL")
+		}
+		link = u.String()
 	}
 	r, err := a.Runs.Get(ctx, runID)
 	if err != nil {
@@ -291,7 +306,7 @@ func (a *App) MarkFix(ctx context.Context, runID string, rank int, link, state, 
 			continue
 		}
 		now := store.Now()
-		at := Attempt{RunID: runID, SetID: r.SetID, Rank: rank, Fix: f, URL: u.String(), State: st, Note: note, By: by, CreatedAt: now, UpdatedAt: now}
+		at := Attempt{RunID: runID, SetID: r.SetID, Rank: rank, Fix: f, URL: link, State: st, Note: note, By: by, CreatedAt: now, UpdatedAt: now}
 		AttemptTransitions.Check("fix_attempts", newAttempt, at.State)
 		res, err := a.DB.ExecContext(ctx, `INSERT INTO fix_attempts(run_id,set_id,fix_rank,fix,target_key,url,state,note,marked_by,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
 			at.RunID, at.SetID, at.Rank, mustJSON(f), TargetKey(f.Target), at.URL, at.State, at.Note, at.By, at.CreatedAt, at.UpdatedAt)
@@ -305,13 +320,13 @@ func (a *App) MarkFix(ctx context.Context, runID string, rank int, link, state, 
 	return Attempt{}, fmt.Errorf("run %s has no fix %d", runID, rank)
 }
 
-// triedFor is the set's ten newest standing attempts, for the analyst. Withdrawn ones are left out:
-// nothing shipped, so there's nothing to follow up on.
+// triedFor is the set's ten newest shipped attempts, for the analyst. Withdrawn and dismissed ones
+// are left out: nothing shipped, so there's nothing to follow up on.
 func (a *App) triedFor(ctx context.Context, setID string) []analysis.Tried {
 	all, _ := a.Attempts(ctx, setID)
 	var out []analysis.Tried
 	for _, at := range all {
-		if at.State == Withdrawn {
+		if !at.State.Shipped() {
 			continue
 		}
 		out = append(out, analysis.Tried{Title: at.Fix.Title, Target: at.Fix.Target, URL: at.URL, State: string(at.State), Outcome: at.Outcome.Summary()})
@@ -322,16 +337,50 @@ func (a *App) triedFor(ctx context.Context, setID string) []analysis.Tried {
 	return out
 }
 
+// dismissedFor is the twenty newest dismissals in every set, with their reasons, for the analyst.
+// Every set's, since a reason is usually about the brand rather than one set's questions.
+func (a *App) dismissedFor(ctx context.Context) []analysis.Dismissed {
+	rows, err := a.DB.QueryContext(ctx, `SELECT fix, note FROM fix_attempts WHERE state=? ORDER BY created_at DESC, id DESC LIMIT 20`, Dismissed)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var out []analysis.Dismissed
+	for rows.Next() {
+		var fix, note string
+		if rows.Scan(&fix, &note) != nil {
+			continue
+		}
+		var f analysis.Fix
+		json.Unmarshal([]byte(fix), &f)
+		out = append(out, analysis.Dismissed{Title: f.Title, Target: f.Target, Reason: note})
+	}
+	return out
+}
+
 // SetAttemptState moves an attempt on: proposed to accepted when the pull request merges, or to
-// withdrawn when it's closed, which reopens its fix.
+// withdrawn when it's closed, which reopens its fix. Withdrawing a dismissal undoes it.
 func (a *App) SetAttemptState(ctx context.Context, id int64, state string) error {
 	st := AttemptState(state)
 	if !validState(st) {
-		return fmt.Errorf("state is proposed, accepted or withdrawn, not %q", state)
+		return fmt.Errorf("state is proposed, accepted, withdrawn or dismissed, not %q", state)
 	}
 	var from AttemptState
-	if err := a.DB.QueryRowContext(ctx, `SELECT state FROM fix_attempts WHERE id=?`, id).Scan(&from); err == nil {
-		AttemptTransitions.Check("fix_attempts", from, st)
+	var link, note string
+	if err := a.DB.QueryRowContext(ctx, `SELECT state, url, note FROM fix_attempts WHERE id=?`, id).Scan(&from, &link, &note); err == nil {
+		switch {
+		case from == Dismissed && st != Withdrawn && st != Dismissed:
+			return fmt.Errorf("a dismissal can only be withdrawn, which undoes it")
+		case from == Accepted && st == Dismissed:
+			return fmt.Errorf("attempt %d merged; withdraw it before dismissing the fix", id)
+		case st.Shipped() && link == "":
+			return fmt.Errorf("attempt %d has no commit or pull request to be %s", id, st)
+		case st == Dismissed && note == "":
+			return fmt.Errorf("attempt %d has no note to give as the reason; record the dismissal with one", id)
+		}
+		if from != st {
+			AttemptTransitions.Check("fix_attempts", from, st)
+		}
 	}
 	res, err := a.DB.ExecContext(ctx, `UPDATE fix_attempts SET state=?, updated_at=? WHERE id=?`, st, store.Now(), id)
 	if err != nil {
@@ -407,13 +456,13 @@ func (fa FixAttempts) On(runID string, rank int) []Attempt { return fa.byFix[fix
 // Status is where fix f of run runID stands. The attempts on it decide first. Failing those, an
 // attempt on the same target made after the fix list was built (fixesAt) covers it too: the list
 // didn't know about that work. A fix built after an attempt is a retry the analyst chose knowing
-// what was tried, so it's open.
+// what was tried, so it's open; but a dismissed page stays dismissed, however late the fix for it.
 func (fa FixAttempts) Status(runID string, f analysis.Fix, fixesAt string) string {
 	if s := FixStatus(fa.On(runID, f.Rank)); s != Open {
 		return s
 	}
 	for _, at := range fa.Earlier(runID, f) {
-		if at.State != Withdrawn && at.CreatedAt >= fixesAt {
+		if at.State == Dismissed || at.State.Shipped() && at.CreatedAt >= fixesAt {
 			return string(at.State)
 		}
 	}
@@ -439,6 +488,10 @@ func (fa FixAttempts) Earlier(runID string, f analysis.Fix) []Attempt {
 // incomparable for good if not.
 func (a *App) outcome(ctx context.Context, at Attempt) Outcome {
 	var o Outcome
+	if at.State == Dismissed {
+		o.Dismissed = true
+		return o
+	}
 	r, err := a.Runs.Get(ctx, at.RunID)
 	if err != nil {
 		return o
