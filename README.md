@@ -1,12 +1,16 @@
 <h1><picture><source media="(prefers-color-scheme: dark)" srcset="docs/images/logo-dark.svg"><img src="docs/images/logo-light.svg" alt="Cheap Seats" width="360"></picture></h1>
 
-Cheap Seats is an AI visibility tracker for Claude and OpenAI models. It asks your buyers'
-questions, grades whether answers recommend your product, and ranks pages to improve. It is free
-MIT-licensed software you run yourself, with SQLite storage and a web UI, CLI, JSON API and MCP server.
-Use Docker with API keys, or run locally with Go to use your Claude subscription (ChatGPT optional).
+Cheap Seats is an open-source (MIT), self-hosted AI visibility tracker. It asks Claude and OpenAI
+models your buyers' questions, grades each answer recommended, mentioned or absent, and builds a
+ranked fix list. One container with SQLite, and a web UI, CLI, JSON API and MCP server. Use Docker
+with API keys, or run locally with Go to use your Claude subscription (ChatGPT optional).
 
-It measures direct model responses, not consumer apps. Model access, hosting and optional services
-have their own costs. [Docs](https://cheapseats.dev/docs/) · [Live demo](https://demo.cheapseats.dev/)
+**What it measures.** Cheap Seats supports two tracks: **search** requires web retrieval before
+answering and records searches, returned URLs and citations; **recall** uses no tools, so you see
+what the model already believes. It doesn't reproduce consumer-app answers or cover Gemini,
+Perplexity, Google AI Overviews, AI Mode or Microsoft Copilot. Cheap Seats avoids consumer-app
+scraping dependencies ([why](https://cheapseats.dev/docs/engines/#why-not-scrape-the-consumer-apps)).
+Model access, hosting and optional services have their own costs. [Docs](https://cheapseats.dev/docs/) · [Live demo](https://demo.cheapseats.dev/)
 · [Compare tools](https://cheapseats.dev/compare/) · [Latest release](https://github.com/cheapseatsdev/cheapseats/releases/latest).
 
 ## Quick start
