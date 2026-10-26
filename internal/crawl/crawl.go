@@ -153,13 +153,14 @@ func Import(ctx context.Context, db *sql.DB, r io.Reader, host string) (Stats, e
 		return st, err
 	}
 	// Hashes are kept as long as a log line counts: older lines are left out, so a log from
-	// before then imported again can't count twice. The counts are kept as long, too. A line
-	// dated after tomorrow is a wrong clock or a forged line, and is left out as well.
+	// before then imported again can't count twice. The daily counts are kept longer, so a
+	// shorter import window never deletes the history earlier imports counted. A line dated
+	// after tomorrow is a wrong clock or a forged line, and is left out as well.
 	now := time.Now().UTC()
 	horizon := now.AddDate(0, 0, -KeepDays).Format("2006-01-02")
 	tomorrow := now.AddDate(0, 0, 1).Format("2006-01-02")
-	for _, table := range []string{"crawl_seen", "crawl_daily"} {
-		if _, err := tx.ExecContext(ctx, `DELETE FROM `+table+` WHERE day < ?`, horizon); err != nil {
+	for table, keep := range map[string]int{"crawl_seen": KeepDays, "crawl_daily": CountDays} {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM `+table+` WHERE day < ?`, now.AddDate(0, 0, -keep).Format("2006-01-02")); err != nil {
 			return st, err
 		}
 	}
@@ -220,8 +221,13 @@ func Import(ctx context.Context, db *sql.DB, r io.Reader, host string) (Stats, e
 	return st, tx.Commit()
 }
 
-// KeepDays is how far back an import counts lines, and keeps their hashes and the daily counts.
-const KeepDays = 120
+// KeepDays is how far back an import counts lines and keeps their hashes: one a request, so one a
+// page view now that visits count. CountDays is how long the daily counts are kept, which is far
+// smaller, so it stays at what earlier releases kept.
+const (
+	KeepDays  = 120
+	CountDays = 400
+)
 
 // maxEvents is the most new requests one import counts. Duplicates don't count toward it, so
 // importing the same log again carries on where this one stopped.

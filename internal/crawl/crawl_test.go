@@ -204,7 +204,11 @@ func TestImportBoundsWhatAForgedLogCanAdd(t *testing.T) {
 		`203.0.113.9 - - [`+clf+`] "GET /real HTTP/1.1" 500 1 "-" "GPTBot/1.0"`,
 		`203.0.113.7 - - [`+future+`] "GET /future HTTP/1.1" 200 1 "-" "GPTBot/1.0"`)
 	db.Exec(`INSERT INTO crawl_daily (day, host, path, class, bot, hits, errors) VALUES (?, 'cheapseats.dev', '/stale', 'training', 'GPTBot', 1, 0)`,
-		today.AddDate(0, 0, -KeepDays-1).Format("2006-01-02"))
+		today.AddDate(0, 0, -CountDays-1).Format("2006-01-02"))
+	// Counted by an earlier import, older than an import counts lines but younger than counts
+	// are kept: it stays.
+	db.Exec(`INSERT INTO crawl_daily (day, host, path, class, bot, hits, errors) VALUES (?, 'cheapseats.dev', '/kept', 'training', 'GPTBot', 1, 0)`,
+		today.AddDate(0, 0, -KeepDays-5).Format("2006-01-02"))
 	st, err := Import(ctx, db.DB, strings.NewReader(strings.Join(lines, "\n")), "cheapseats.dev")
 	if err != nil || st.Counted != 52 || st.Future != 1 {
 		t.Fatalf("%+v %v", st, err)
@@ -217,8 +221,8 @@ func TestImportBoundsWhatAForgedLogCanAdd(t *testing.T) {
 		paths = append(paths, p)
 	}
 	rows.Close()
-	if strings.Join(paths, " ") != ErrorPath+":50:50 /real:2:1" {
-		t.Errorf("crawl_daily: %v; want the 404s in one row, the real page with its 500, nothing stale or future", paths)
+	if strings.Join(paths, " ") != ErrorPath+":50:50 /kept:1:0 /real:2:1" {
+		t.Errorf("crawl_daily: %v; want the 404s in one row, the count within CountDays, the real page with its 500, nothing stale or future", paths)
 	}
 	rep, err := Build(ctx, db.DB, 30, nil)
 	if err != nil {
