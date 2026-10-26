@@ -192,7 +192,39 @@ func runCLIInput(ctx context.Context, provider, unsetKey string, stdin []byte, n
 	return stdout.buf.Bytes(), nil
 }
 
+// CLIArgs is how provider's CLI is called on each track, with placeholders for the model, the
+// system prompt and the question; "" for an API provider. Runs record it (run.Snapshot) so a
+// changed flag starts a new method, as a changed prompt does.
+func CLIArgs(provider string) string {
+	build := map[string]func(string, Track, string, string, bool) []string{
+		config.ClaudeCode: claudeCodeArgs, config.Codex: codexArgs}[provider]
+	if build == nil {
+		return ""
+	}
+	var b strings.Builder
+	for _, v := range []struct {
+		name   string
+		track  Track
+		insist bool
+	}{{"recall", Recall, false}, {"search", Search, false}, {"search, insisting", Search, true}} {
+		fmt.Fprintf(&b, "%s: %q\n", v.name, build("{model}", v.track, "{system}", "{question}", v.insist))
+	}
+	return b.String()
+}
+
 func askClaudeCode(ctx context.Context, model string, track Track, sys, prompt string, insist bool) (Answer, error) {
+	out, err := runCLI(ctx, config.ClaudeCode, "ANTHROPIC_API_KEY", "claude", claudeCodeArgs(model, track, sys, prompt, insist)...)
+	ans := ParseClaudeCode(out)
+	if err != nil {
+		return ans, err
+	}
+	if ans.Text == "" {
+		return ans, fmt.Errorf("claude: no result in output")
+	}
+	return ans, nil
+}
+
+func claudeCodeArgs(model string, track Track, sys, prompt string, insist bool) []string {
 	tools := ""
 	if track == Search {
 		sys += " " + SearchPolicy
@@ -207,15 +239,7 @@ func askClaudeCode(ctx context.Context, model string, track Track, sys, prompt s
 	if tools != "" {
 		args = append(args, "--allowedTools", tools)
 	}
-	out, err := runCLI(ctx, config.ClaudeCode, "ANTHROPIC_API_KEY", "claude", args...)
-	ans := ParseClaudeCode(out)
-	if err != nil {
-		return ans, err
-	}
-	if ans.Text == "" {
-		return ans, fmt.Errorf("claude: no result in output")
-	}
-	return ans, nil
+	return args
 }
 
 // ClaudeStructured asks the claude CLI, on its subscription and with no tools, for output that
@@ -329,6 +353,21 @@ func ParseClaudeCode(out []byte) Answer {
 const codexBrief = "Answer the question below as a chat assistant would. Do not run shell commands or read or write files."
 
 func askCodex(ctx context.Context, model string, track Track, sys, prompt string, insist bool) (Answer, error) {
+	out, err := runCLI(ctx, config.Codex, "OPENAI_API_KEY", "codex", codexArgs(model, track, sys, prompt, insist)...)
+	ans := ParseCodex(out)
+	if ans.Model == "" {
+		ans.Model = model
+	}
+	if err != nil {
+		return ans, err
+	}
+	if ans.Text == "" {
+		return ans, fmt.Errorf("codex: no answer in output")
+	}
+	return ans, nil
+}
+
+func codexArgs(model string, track Track, sys, prompt string, insist bool) []string {
 	brief := codexBrief + " " + sys
 	// These are global flags and must precede `exec`. The read-only sandbox prevents apply_patch
 	// writes; disabling view_image and shell_tool also keeps prompt-controlled tool calls from
@@ -352,19 +391,7 @@ func askCodex(ctx context.Context, model string, track Track, sys, prompt string
 		// Recall has no tools: without this, codex still offers its cached web search (web.run).
 		args = append(args, "-c", `web_search="disabled"`)
 	}
-	args = append(args, "-m", model, brief+"\n\nQuestion: "+prompt)
-	out, err := runCLI(ctx, config.Codex, "OPENAI_API_KEY", "codex", args...)
-	ans := ParseCodex(out)
-	if ans.Model == "" {
-		ans.Model = model
-	}
-	if err != nil {
-		return ans, err
-	}
-	if ans.Text == "" {
-		return ans, fmt.Errorf("codex: no answer in output")
-	}
-	return ans, nil
+	return append(args, "-m", model, brief+"\n\nQuestion: "+prompt)
 }
 
 // ParseCodex reads `codex exec --json` events.

@@ -21,7 +21,7 @@ changed; a different answer prompt or search policy needs a new baseline.
 
 - **Scope:** a set's finished runs within `-since` (`28d`, `72h` or `all`; default 28 days),
   or one named run. Running and unfinished runs are skipped, as are runs whose grading inputs
-  already match today's or whose answer prompt or search policy differs.
+  already match today's or whose answer prompt, search policy or CLI arguments differ.
 - **Inputs:** `run.GradeInputs` fingerprints grader prompt/model, brand name/aliases/`about`,
   and competitor names/aliases. Competitor edits can require re-grading without changing
   `run.Method`. The method also covers how answers were asked; re-grading cannot change that.

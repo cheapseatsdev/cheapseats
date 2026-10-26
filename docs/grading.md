@@ -39,8 +39,9 @@ the model said, and an `other_product` grade is `absent`.
 
 ## A method change
 
-A run's **method** (`run.Method`) covers the answer prompt, search policy, grader prompt/model
-and the brand's name, aliases and `about`. Runs trend together only within one method.
+A run's **method** (`run.Method`) covers the answer prompt, search policy, the arguments
+`claude-code` and `codex` answerers are called with, grader prompt/model and the brand's name,
+aliases and `about`. Runs trend together only within one method.
 `run.GradeInputs` fingerprints the grading inputs, including competitors' names and aliases.
 Competitor changes affect that fingerprint without themselves changing `Method`.
 

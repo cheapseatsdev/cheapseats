@@ -157,6 +157,37 @@ func TestDesignIgnoresAudience(t *testing.T) {
 	}
 }
 
+// A CLI answerer's flags are part of how its answers were asked: changing them starts a new method
+// and stops an older run resuming, while a run recorded before them keeps its stored method.
+func TestMethodCoversCLIArgs(t *testing.T) {
+	cfg := &config.Config{Brand: config.Brand{Name: "B", Aliases: []string{"b"}, About: "x"}}
+	api := NewSnapshot(cfg, sets.Set{})
+	b := api.Brand
+	before := Digest(struct {
+		AnswerPrompt, SearchPolicy, GraderPrompt, Grader string
+		Name, About                                      string
+		Aliases                                          []string
+	}{api.AnswerPrompt, api.SearchPolicy, api.GraderPrompt, api.Grader, b.Name, b.About, b.Aliases})
+	if api.CLIArgs != nil || Method(api) != before {
+		t.Fatalf("a run without CLI answerers changed method: %v", api.CLIArgs)
+	}
+
+	cli := api
+	cli.Answerers = []config.Answerer{{ID: "api", Provider: config.Anthropic}, {ID: "c", Provider: config.Codex}}
+	cli.CLIArgs = cliArgs(cli.Answerers)
+	if len(cli.CLIArgs) != 1 || !strings.Contains(cli.CLIArgs[config.Codex], `web_search=\"live\"`) {
+		t.Fatalf("codex arguments not recorded: %v", cli.CLIArgs)
+	}
+	if !cli.Current(cfg) || Method(cli) == before {
+		t.Fatal("recording codex arguments should give a current snapshot a new method")
+	}
+	old := cli
+	old.CLIArgs = map[string]string{config.Codex: strings.Replace(cli.CLIArgs[config.Codex], "live", "cached", 1)}
+	if Method(old) == Method(cli) || old.Current(cfg) {
+		t.Fatal("a codex flag change should change the method and stop the old run resuming")
+	}
+}
+
 // A deploy restarts Cheap Seats mid-run: the run records itself as interrupted rather than
 // cancelled, and the next start resumes it, keeping every answer it already had.
 func TestShutdownInterruptsAndTheNextStartResumes(t *testing.T) {

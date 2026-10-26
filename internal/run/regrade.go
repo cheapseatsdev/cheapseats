@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/cheapseatsdev/cheapseats/internal/answer"
 	"github.com/cheapseatsdev/cheapseats/internal/config"
 	"github.com/cheapseatsdev/cheapseats/internal/grade"
 	"github.com/cheapseatsdev/cheapseats/internal/llm"
@@ -169,7 +168,7 @@ func (e *Engine) PlanRegrade(ctx context.Context, runs []Run, set sets.Set) (Reg
 			p.Unfinished++
 			continue
 		}
-		if r.Snapshot.AnswerPrompt != answer.System(e.Cfg.Brand.Audience) || r.Snapshot.SearchPolicy != answer.SearchPolicy {
+		if !r.Snapshot.AskedAsToday(e.Cfg) {
 			p.AskedDifferently++
 			continue
 		}

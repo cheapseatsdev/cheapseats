@@ -551,12 +551,11 @@ func (a *App) beforeRuns(ctx context.Context, at Attempt, r *run.Run) (ids []str
 	return ids, oldest
 }
 
-// askedAlike reports whether run id asked its answers as r did (the answer prompt and search
-// policy): the part of a method a re-grade can't change, so what decides whether one could ever
-// join the two.
+// askedAlike reports whether run id asked its answers as r did (run.Snapshot.AskedAlike): the
+// part of a method a re-grade can't change, so what decides whether one could ever join the two.
 func (a *App) askedAlike(ctx context.Context, r *run.Run, id string) bool {
 	x, err := a.Runs.Get(ctx, id)
-	return err == nil && x.Snapshot.AnswerPrompt == r.Snapshot.AnswerPrompt && x.Snapshot.SearchPolicy == r.Snapshot.SearchPolicy
+	return err == nil && x.Snapshot.AskedAlike(r.Snapshot)
 }
 
 // hostCitedIn reports whether any answer in runs cited a page on host or a subdomain of it. Only

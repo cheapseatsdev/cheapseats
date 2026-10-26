@@ -54,8 +54,8 @@ Never write a guess that becomes permanent: a backfill writes only confident mat
 
 ## Grading is the product
 
-`run.Method` covers the answer prompt, search policy, grader prompt/model and brand name,
-aliases and `about`. Changing it breaks comparisons with earlier runs. `run.GradeInputs` also
+`run.Method` covers the answer prompt, search policy, CLI answerers' arguments
+(`answer.CLIArgs`), grader prompt/model and brand name, aliases and `about`. Changing it breaks comparisons with earlier runs. `run.GradeInputs` also
 includes competitors; those edits can require re-grading without changing `Method`.
 
 A method change:

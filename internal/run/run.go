@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -35,6 +36,9 @@ type Snapshot struct {
 	AnswerPrompt string `json:"answer_prompt"`
 	SearchPolicy string `json:"search_policy"`
 	GraderPrompt string `json:"grader_prompt"`
+	// How each CLI answerer's provider was called (answer.CLIArgs), by provider; nil without one
+	// and for runs from before it was recorded.
+	CLIArgs map[string]string `json:"cli_args,omitempty"`
 
 	Set       sets.Set          `json:"set"`
 	Brand     config.Brand      `json:"brand"`
@@ -524,13 +528,40 @@ func NewSnapshot(c *config.Config, s sets.Set) Snapshot {
 			skipped = append(skipped, a.ID)
 		}
 	}
-	return Snapshot{Set: s, Brand: c.Brand, Answerers: answerers, Skipped: skipped, Grader: c.Grader.Ref(), AnswerPrompt: answer.System(c.Brand.Audience), SearchPolicy: answer.SearchPolicy, GraderPrompt: grade.System}
+	return Snapshot{Set: s, Brand: c.Brand, Answerers: answerers, Skipped: skipped, Grader: c.Grader.Ref(), AnswerPrompt: answer.System(c.Brand.Audience), SearchPolicy: answer.SearchPolicy, GraderPrompt: grade.System,
+		CLIArgs: cliArgs(answerers)}
 }
 
 // Current reports whether the run was answered and graded under the prompts c would use today,
 // so a retry can't mix two rubrics in one run.
 func (s Snapshot) Current(c *config.Config) bool {
-	return s.AnswerPrompt == answer.System(c.Brand.Audience) && s.SearchPolicy == answer.SearchPolicy && s.GraderPrompt == grade.System
+	return s.AskedAsToday(c) && s.GraderPrompt == grade.System
+}
+
+// AskedAsToday reports whether the run asked its answers as c would today: the part of a method a
+// re-grade can't change.
+func (s Snapshot) AskedAsToday(c *config.Config) bool {
+	return s.AskedAlike(Snapshot{AnswerPrompt: answer.System(c.Brand.Audience), SearchPolicy: answer.SearchPolicy, CLIArgs: cliArgs(s.Answerers)})
+}
+
+// AskedAlike reports whether two runs asked their answers the same way: the answer prompt, search
+// policy and CLI arguments.
+func (s Snapshot) AskedAlike(o Snapshot) bool {
+	return s.AnswerPrompt == o.AnswerPrompt && s.SearchPolicy == o.SearchPolicy && maps.Equal(s.CLIArgs, o.CLIArgs)
+}
+
+// cliArgs is answer.CLIArgs for each CLI provider among answerers, or nil when there is none.
+func cliArgs(answerers []config.Answerer) map[string]string {
+	var m map[string]string
+	for _, a := range answerers {
+		if args := answer.CLIArgs(a.Provider); args != "" {
+			if m == nil {
+				m = map[string]string{}
+			}
+			m[a.Provider] = args
+		}
+	}
+	return m
 }
 func Digest(v any) string {
 	b, _ := json.Marshal(v)
@@ -550,19 +581,22 @@ func Design(s Snapshot) string {
 }
 
 // Method is how a run's answers were asked and graded: the answer, search and grader prompts,
-// the grader model, and the brand as the grader knows it (name, aliases, about). Two runs with
+// the arguments CLI answerers were called with, the grader model, and the brand as the grader
+// knows it (name, aliases, about). Two runs with
 // the same method measure the same thing, so their rates trend together even when prompts,
 // competitors or answerers changed between them (those changes are annotated); a different
 // method starts a new trend. The brand's sites aren't part of it: they shape which pages count
 // as its own, not how answers are graded. Stored methods are recomputed from snapshots at every
-// start (app.Backfill), so changing this definition never splits existing history.
+// start (app.Backfill), so changing this definition never splits existing history: a run with no
+// CLI arguments recorded keeps the method it had before they were.
 func Method(s Snapshot) string {
 	b := s.Brand
 	return Digest(struct {
 		AnswerPrompt, SearchPolicy, GraderPrompt, Grader string
 		Name, About                                      string
 		Aliases                                          []string
-	}{s.AnswerPrompt, s.SearchPolicy, s.GraderPrompt, s.Grader, b.Name, b.About, b.Aliases})
+		CLIArgs                                          map[string]string `json:",omitempty"`
+	}{s.AnswerPrompt, s.SearchPolicy, s.GraderPrompt, s.Grader, b.Name, b.About, b.Aliases, s.CLIArgs})
 }
 
 func (e *Engine) Get(ctx context.Context, id string) (*Run, error) {
