@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -411,6 +412,9 @@ func TestProxyEmailHeader(t *testing.T) {
 		{"", "", "/", 303}, // tokens are configured too: the token sign-in page
 		{"", "tok", "/api/status", 200},
 		{"", "", "/healthz", 200},
+		{"", "", "/robots.txt", 200},
+		{"", "", "/favicon.ico", 200},
+		{"", "", "/apple-touch-icon.png", 200},
 	} {
 		req := httptest.NewRequest("GET", c.path, nil)
 		if c.email != "" {
@@ -432,6 +436,30 @@ func TestProxyEmailHeader(t *testing.T) {
 	s.Handler().ServeHTTP(rec, httptest.NewRequest("GET", "/", nil))
 	if rec.Code != 401 {
 		t.Errorf("unsigned request without tokens: %d", rec.Code)
+	}
+}
+
+// Crawlers stay off the JSON API, and the icons browsers ask for at the root are the real files.
+func TestRobotsAndRootIcons(t *testing.T) {
+	d, _ := store.Open(t.TempDir())
+	defer d.Close()
+	s, err := New(newApp(t, testConfig(t), d))
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := s.Handler()
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "/robots.txt", nil))
+	if body := rec.Body.String(); !strings.Contains(body, "User-agent: *\nDisallow: /api/\n") || strings.Contains(body, "Disallow: /\n") {
+		t.Errorf("robots.txt: %q", body)
+	}
+	for _, name := range rootFiles {
+		want, _ := assets.ReadFile("static/" + name)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest("GET", "/"+name, nil))
+		if rec.Code != 200 || !bytes.Equal(rec.Body.Bytes(), want) || len(want) == 0 {
+			t.Errorf("/%s: %d, %d bytes, want the %d-byte file", name, rec.Code, rec.Body.Len(), len(want))
+		}
 	}
 }
 
