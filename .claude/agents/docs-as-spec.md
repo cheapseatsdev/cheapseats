@@ -30,7 +30,10 @@ You keep the docs true. In this repo the docs are the spec, so a false sentence 
    if checked out) names it too. Fix what is small; list the rest in the summary under
    "Release coverage". Confirm every version pin in docs and site examples is the newest tag.
    The v0.4.0 review missed ten of twelve features this way.
-7. Items from the retro (`items.docs`) first.
+7. Dated files. `../cheapseats-site/static/.well-known/security.txt` (if checked out) has an
+   `Expires:` date, and a reader treats the file as stale after it (RFC 9116). Within 60 days of
+   it, move it to the first of the month eleven months out, in the site repo, as its own PR.
+8. Items from the retro (`items.docs`) first.
 
 ## Guardrails
 
@@ -43,4 +46,4 @@ You keep the docs true. In this repo the docs are the spec, so a false sentence 
 
 Final text is JSON: `{"pr": "<url or null>", "fixed": ["<claim: was, now>"], "undocumented":
 ["<surface>"], "untested_claims": ["<doc:line, claim, where the constant lives>"], "release_coverage":
-["<tag: feature with no page>"]}`.
+["<tag: feature with no page>"], "dated": ["<file: date, and the PR that moved it, or ok>"]}`.
