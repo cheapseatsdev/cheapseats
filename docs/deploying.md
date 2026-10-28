@@ -88,6 +88,9 @@ Cheap Seats by reviewing the `FROM` change. For a local trial,
 - **Time to stop.** On SIGTERM Cheap Seats marks runs in progress as interrupted, and resumes them on
   the next start; give it 30 seconds.
 - **Probes:** `GET /healthz` answers `ok` without a token.
+- **Crawlers:** `/robots.txt` disallows `/api/` and leaves pages open; a shared report says
+  `noindex` itself. It is served without a token, like `/favicon.ico` and `/apple-touch-icon.png`.
+  To keep crawlers off a whole deployment, answer `/robots.txt` at your proxy instead.
 - **Request limits:** one minute to send a request; two to start the next on an idle connection.
   Bodies are at most 1 MiB (4 KiB for `/login`); a fix attempt's link is at most 2048 bytes and its
   note 4096. Responses have no timeout: allow more than ten minutes at the proxy for MCP's

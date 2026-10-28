@@ -239,6 +239,14 @@ func fmtRate(r report.Rate) string {
 	return fmt.Sprintf("%.0f%% (%.0f–%.0f)", 100*r.P, 100*r.Lo, 100*r.Hi)
 }
 
+// robotsTxt keeps crawlers off the JSON API. Pages are left to crawl: a public read-only copy is
+// meant to be seen, a signed-in deployment answers crawlers with a sign-in, and a shared report
+// says noindex itself, which a crawler kept out by robots.txt would never read.
+const robotsTxt = "User-agent: *\nDisallow: /api/\n"
+
+// rootFiles are static files also served at the root, open without a sign-in like robots.txt.
+var rootFiles = []string{"favicon.ico", "apple-touch-icon.png"}
+
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	static, _ := fs.Sub(assets, "static")
@@ -253,6 +261,17 @@ func (s *Server) Handler() http.Handler {
 		}
 		files.ServeHTTP(w, r)
 	}))
+	// Browsers and crawlers ask for these at the root, whatever a page links.
+	mux.HandleFunc("GET /robots.txt", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("content-type", "text/plain; charset=utf-8")
+		w.Write([]byte(robotsTxt))
+	})
+	for _, name := range rootFiles {
+		mux.HandleFunc("GET /"+name, func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("cache-control", "public, max-age=86400")
+			http.ServeFileFS(w, r, static, name)
+		})
+	}
 	mux.HandleFunc("GET /login", s.loginPage)
 	mux.HandleFunc("POST /login", s.login)
 
@@ -558,7 +577,7 @@ func (s *Server) validToken(t string) bool {
 
 func (s *Server) auth(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if len(s.tokens) == 0 && s.authHeader == "" || r.URL.Path == "/login" || r.URL.Path == "/healthz" || strings.HasPrefix(r.URL.Path, "/static/") {
+		if len(s.tokens) == 0 && s.authHeader == "" || r.URL.Path == "/login" || r.URL.Path == "/healthz" || r.URL.Path == "/robots.txt" || slices.Contains(rootFiles, strings.TrimPrefix(r.URL.Path, "/")) || strings.HasPrefix(r.URL.Path, "/static/") {
 			h.ServeHTTP(w, r)
 			return
 		}

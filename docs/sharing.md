@@ -40,7 +40,7 @@ loopback address gets a warning on the run page and in `share_run`'s result.
 - The token is 128 random bits (22 characters, base64url), stored as its SHA-256. A database copy
   cannot recover share tokens, but still contains private answers and config snapshots.
 - `/share/<token>` is the only page open without a sign-in besides `/login`, `/healthz` and
-  static files, and only for `GET` or `HEAD` with a well-formed token.
+  static files (including `/robots.txt` and the root icons), and only for `GET` or `HEAD` with a well-formed token.
 - The page is sent with `X-Robots-Tag: noindex, nofollow`, `Referrer-Policy: no-referrer` (so the
   token doesn't leak to sites it links to), `Cache-Control: no-store`, and, like every page,
   `X-Frame-Options: DENY` and a `Content-Security-Policy` that refuses frames and outside images.
