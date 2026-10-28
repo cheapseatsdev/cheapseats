@@ -251,12 +251,13 @@ func (n Name) OnHost(url string) bool {
 			label = label[j+1:]
 		}
 	}
+	label = squeeze(label)
 	for _, f := range n.Forms {
 		s := squeeze(f)
 		if len(s) < 4 {
 			continue
 		}
-		if s == whole || s == squeeze(label) {
+		if s == whole || s == label {
 			return true
 		}
 	}
