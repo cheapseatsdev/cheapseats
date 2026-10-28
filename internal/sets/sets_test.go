@@ -143,6 +143,14 @@ func TestNamesMatchesWholeWords(t *testing.T) {
 		{"cheapseats.example docs", "cheapseats.example", true},
 		{"microwave cheapseatss", "cheapseats", false},
 		{"anything", "", false},
+		// Case folds beyond ASCII lowercasing: Names checks that the text contains the folded
+		// name before running the pattern, and that check mustn't miss a match the pattern makes.
+		{"Kelvin sign: Kelvin tools", "kelvin", true},
+		{"long s: ſtripe docs", "STRIPE", true},
+		{"ÜBER vs others", "über", true},
+		{"Ünter Über", "uber", false},
+		{"\xffAcme\xfe", "acme", true},
+		{"acm", "acme", false},
 	} {
 		if got := Names(c.text, c.name); got != c.want {
 			t.Errorf("Names(%q, %q) = %v", c.text, c.name, got)

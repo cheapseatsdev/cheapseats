@@ -12,6 +12,8 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"unicode"
+	"unicode/utf8"
 
 	"encoding/json"
 	"github.com/BurntSushi/toml"
@@ -231,20 +233,88 @@ func Names(text, name string) bool {
 	if name == "" {
 		return false
 	}
-	return nameRe(name).MatchString(text)
+	p := namePattern(name)
+	// Most texts don't contain the name at all, and the pattern, whose leading word boundary
+	// rules out the regexp package's literal-prefix scan, tries every offset of the text.
+	// Containing the name, case folded, is necessary for a match, and far cheaper to check.
+	if !containsFolded(text, p.folded) {
+		return false
+	}
+	return p.re.MatchString(text)
+}
+
+type nameRe struct {
+	re     *regexp.Regexp
+	folded []rune // the name's runes, each through foldRune
 }
 
 // nameRes caches Names' pattern per name: a report asks the same few brand and competitor names of
 // every prompt, and compiling the pattern cost more than matching it.
-var nameRes sync.Map // name -> *regexp.Regexp
+var nameRes sync.Map // name -> nameRe
 
-func nameRe(name string) *regexp.Regexp {
-	if re, ok := nameRes.Load(name); ok {
-		return re.(*regexp.Regexp)
+func namePattern(name string) nameRe {
+	if p, ok := nameRes.Load(name); ok {
+		return p.(nameRe)
 	}
-	re := regexp.MustCompile(`(?i)(^|[^\pL\pN])` + regexp.QuoteMeta(name) + `($|[^\pL\pN])`)
-	nameRes.Store(name, re)
-	return re
+	p := nameRe{re: regexp.MustCompile(`(?i)(^|[^\pL\pN])` + regexp.QuoteMeta(name) + `($|[^\pL\pN])`)}
+	for _, r := range name {
+		p.folded = append(p.folded, foldRune(r))
+	}
+	nameRes.Store(name, p)
+	return p
+}
+
+// containsFolded reports whether text has a run of runes that fold, one by one, to name's: what
+// (?i) matching a literal requires. Invalid UTF-8 reads as U+FFFD, as the regexp package reads it.
+func containsFolded(text string, name []rune) bool {
+	for i := 0; i < len(text); {
+		if c := text[i]; c < utf8.RuneSelf {
+			// The common case, an ASCII byte, is checked against the name's first rune inline.
+			if foldRune(rune(c)) == name[0] && hasFoldedPrefix(text[i:], name) {
+				return true
+			}
+			i++
+			continue
+		}
+		if hasFoldedPrefix(text[i:], name) {
+			return true
+		}
+		_, w := utf8.DecodeRuneInString(text[i:])
+		i += w
+	}
+	return false
+}
+
+func hasFoldedPrefix(s string, name []rune) bool {
+	for _, n := range name {
+		if s == "" {
+			return false
+		}
+		r, w := utf8.DecodeRuneInString(s)
+		if foldRune(r) != n {
+			return false
+		}
+		s = s[w:]
+	}
+	return true
+}
+
+// foldRune is the smallest rune in r's simple case-folding orbit (the runes (?i) treats as one:
+// "k", "K" and the Kelvin sign), for ASCII letters the capital.
+func foldRune(r rune) rune {
+	if r < utf8.RuneSelf {
+		if 'a' <= r && r <= 'z' {
+			return r - 'a' + 'A'
+		}
+		return r
+	}
+	min := r
+	for f := unicode.SimpleFold(r); f != r; f = unicode.SimpleFold(f) {
+		if f < min {
+			min = f
+		}
+	}
+	return min
 }
 
 func Parse(path string) (Set, error) {
