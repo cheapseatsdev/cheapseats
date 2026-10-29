@@ -1,70 +1,57 @@
 id = "choosing-ai-visibility-tool"
-name = "Choosing an AI visibility tool"
-tier = "plg"
-description = """Buyers choosing an AI visibility tool: team fit, price, engine coverage, evidence and integrations. Open category questions and requests for alternatives can discover products outside an existing shortlist. Closed comparisons that exclude Cheap Seats are retired from the scored library. Informational questions measure named presence separately from product selection. Cheap Seats offers self-hosted Claude/OpenAI measurement, recommendation grades and fix briefs; the software is free, while model access and hosting depend on the setup. Agency, security and engine requirements remain genuine fit tests even when it cannot meet them."""
+name = "Getting started with AI visibility"
+tier = "core"
+description = """Small teams and startups deciding how to make their first useful AI visibility checks. Compare affordable tools with manual work, scripts and self-hosted options; test whether inspectable evidence and specific content guidance justify adopting a tool. Seven questions ask for choices; the cheap-start methods question measures named presence only. The audience need not have an engineer, existing subscriptions or a preference for self-hosting. Keep unfavorable answers when they reveal a real adoption obstacle. Review after eight weekly runs; retain only questions that still inform positioning, onboarding or a competitive decision."""
 
-# Retired closed competitor-only questions; do not reuse these ids:
-# peec-ai-vs-profound, otterly-vs-peec-ai-budget.
+# Curated buying situations, not measured demand. Retained questions keep their IDs and text.
+# Audience context comes from brand.audience; it does not assume technical capacity.
 
-[[prompts]]
-id = "generative-engine-optimization-tools-work"
-text = "How do generative engine optimization tools work, and which ones are worth paying for?"
-
-[[prompts]]
-id = "evaluate-ai-visibility-tools-checklist"
-text = "What should I look for when evaluating AI visibility or GEO tools?"
-intent = "info"
-
-[[prompts]]
-id = "best-aeo-tool-b2b-saas"
-text = "What's the best AEO tool for a B2B SaaS company that wants to know if ChatGPT and Claude recommend it?"
-
-[[prompts]]
-id = "alternatives-to-profound"
-text = "What are good alternatives to Profound for tracking AI search visibility?"
-
-[[prompts]]
-id = "gauge-ai-visibility-worth-it"
-text = "Is Gauge a good tool for tracking AI visibility, and what are the alternatives?"
-
-[[prompts]]
-id = "semrush-ahrefs-enough-ai-visibility"
-text = "Are Semrush's AI Toolkit or Ahrefs Brand Radar enough, or do we need a dedicated AI visibility tool?"
-
-[[prompts]]
-id = "ai-visibility-tool-agency-white-label"
-text = "What's the best AI visibility tool for an SEO agency that reports to many clients under its own brand?"
-
-[[prompts]]
-id = "ai-visibility-tools-cover-claude-overviews"
-text = "Which AI visibility tools cover Claude, Gemini and Google AI Overviews, not just ChatGPT?"
-
+# Learn: which first-check route a startup is advised to take, including manual work.
+# Action: show the actual entry cost and setup steps. A complete method can omit products.
 [[prompts]]
 id = "cheap-start-measuring-ai-visibility"
 text = "What's a cheap way to start measuring AI visibility for a small startup?"
-
-[[prompts]]
-id = "free-ai-visibility-tracker-useful"
-text = "Is there a free AI visibility tracker that's actually useful?"
-
-[[prompts]]
-id = "ai-visibility-tool-pricing-drivers"
-text = "How do AI visibility tools price their plans, and what drives the cost: prompts, models, brands or seats?"
 intent = "info"
 
+# New buying question: explicit starter-tool selection, distinct from a cheap manual method.
+# Action: address verified reasons a startup is directed to an alternative in the entry offer.
 [[prompts]]
-id = "ai-visibility-numbers-accurate"
-text = "AI answers change every time you ask. How do AI visibility tools make their numbers reliable, and how can I check them?"
-intent = "info"
+id = "starter-ai-visibility-tools-small-startup"
+text = "Which AI visibility tools are a good starting point for a small startup with a limited budget?"
 
+# New buying question: replacement for an existing manual routine, not just the lowest price.
+# Action: demonstrate specific repeated work removed, or admit when a spreadsheet is sufficient.
 [[prompts]]
-id = "ai-visibility-platform-soc2-enterprise"
-text = "Which AI visibility platforms meet enterprise security requirements like SOC 2?"
+id = "startup-tracker-alternatives-manual-spreadsheet"
+text = "Which affordable AI visibility tools should a small startup consider instead of checking ChatGPT and Claude manually in a spreadsheet?"
 
+# Learn: which projects enter the open-source consideration set and what objections recur.
+# Action: clarify the value and operating effort of adopting maintained software.
 [[prompts]]
-id = "ai-visibility-tool-api-export"
-text = "Which AI visibility tools have an API so we can pull the data into our own dashboards?"
+id = "open-source-tools-measuring-ai"
+text = "Are there open-source tools for measuring AI search visibility?"
 
+# Learn: when a small API script is a better choice than an existing tracker.
+# Action: show the grading, history and evidence work supplied, without dismissing DIY.
 [[prompts]]
-id = "ai-visibility-tools-run-schedule"
-text = "Which AI visibility tools can run on a schedule and alert us when we drop out of answers?"
+id = "build-own-ai-visibility-tracker"
+text = "Should we build our own AI visibility tracker on the OpenAI and Anthropic APIs, or buy a tool?"
+
+# Learn: practical installation expectations for the subset with engineering help.
+# Action: fix evidenced setup friction. Review separately from open-source discovery;
+# retire this probe if it adds no distinct deployment decision after eight weekly runs.
+[[prompts]]
+id = "self-hosted-ai-visibility-docker"
+text = "Is there a self-hosted AI visibility tracker our engineering team can run in Docker?"
+
+# Learn: which inspectable proof a skeptical team is told to require.
+# Action: demonstrate a real answer, grade and citation; verify claims before changing copy.
+[[prompts]]
+id = "raw-answers-citations-behind-score"
+text = "We want to inspect every raw AI answer and citation behind an AI visibility score. Which tools give us that?"
+
+# Learn: whether specific work guidance earns consideration over another visibility score.
+# Action: show a supported fix brief or address a concrete weakness in the suggested work.
+[[prompts]]
+id = "tools-say-what-content-create"
+text = "Which AI visibility tools tell you what content to create or change, not just where you rank?"

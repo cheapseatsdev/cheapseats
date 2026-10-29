@@ -1,30 +1,49 @@
 # Prompt sets
 
+The active library has **11 questions in two sets**, focused on small teams and startups
+getting started. The eight unbranded questions run weekly; the three known-brand questions
+run every 28 days. Every retained question names a learning and a possible action in comments.
+Review the core after eight runs and fit checks after three; review dates do not stop the scheduler.
+Stop or reduce questions whose answers no longer change a decision, while preserving relevant losses.
+
+Nine existing questions retain their text and IDs. Two new selection questions cover starter-tool
+choice and replacement of manual spreadsheet checks. The cheap-start question is now `info`:
+a manual method is a complete answer, so its named presence remains useful without treating every
+product-free explanation as a lost recommendation. With both configured answerers available,
+weekly core runs plan 48 answers and fit runs plan 12 every 28 days: 51 answers per week averaged
+over four weeks, plus grading and other passes. This is configured volume, not measured usage or cost.
+
+Thirteen parked questions, including the event-driven cost audit, live in
+[`../research-prompts/`](../research-prompts/README.md) outside the active loader. They have no
+standing run budget. The [retirement registry](retired-ids.txt) reserves the 56 cut IDs and four
+previously retired IDs. Do not repurpose historical IDs. The audience and product description now
+reflect the starter market, so this refresh starts a new method baseline; earlier rates are not
+comparable. Prompt moves preserve the original IDs and stored runs retain their original sets.
+
 Each file holds one category of buyer questions. Change it in your config repo, run
 `cheapseats check -no-jev`, then submit a pull request. Cheap Seats does not edit these files.
 The flag skips optional model judgments; the config and prompt validation still run.
 
 ```toml
-id = "ai-search-visibility"       # never change it: runs and rankings key on it
-name = "Understanding and measuring AI visibility"
-tier = "core"                   # interval: tiers.core.every_days; uses full configured samples
-description = """What the category is, who is competing for it, and what the brand claims."""
+id = "choosing-ai-visibility-tool" # never change it: stored runs key on it
+name = "Getting started with AI visibility"
+tier = "core"                    # weekly; uses full configured samples
+description = """Small teams deciding how to make their first useful checks."""
 
 [[prompts]]
-id = "tools-track-often-ai-assistants"
-text = "What tools track how often AI assistants like ChatGPT, Claude, Perplexity and Gemini mention a brand?"
+id = "starter-ai-visibility-tools-small-startup"
+text = "Which AI visibility tools are a good starting point for a small startup with a limited budget?"
 
 [[prompts]]
-id = "recommended-versus-mentioned-ai-answers"
-text = "What's the difference between being mentioned and being recommended in an AI answer?"
-intent = "info"                   # asks to explain, not to choose: scored on named, not recommended
+id = "cheap-start-measuring-ai-visibility"
+text = "What's a cheap way to start measuring AI visibility for a small startup?"
+intent = "info"                  # a complete manual method can satisfy the question
 
-# Products the grader folds onto one canonical name, so share of voice counts "Peec" as Peec AI.
-# Competitors every set shares go once in cheapseats.toml; list one here only for this set.
+# Competitors every set shares go in cheapseats.toml; add one here only for this set.
 [[competitors]]
 name = "Peec AI"
 aliases = ["Peec"]
-domains = ["peec.ai"]  # pages on these sites belong to this competitor
+domains = ["peec.ai"]
 ```
 
 `core` and `plg` intervals come from `[tiers.core]` and `[tiers.plg]`; PLG samples are capped by
@@ -53,11 +72,8 @@ to check wording and coverage.
 
 | set | what it measures |
 | --- | --- |
-| `ai-search-visibility` | Named presence while explaining awareness and measurement; one explicit tool-discovery question also measures recommendations. |
-| `choosing-ai-visibility-tool` | Open tool selection and requests for alternatives, plus informational evaluation questions. |
-| `fix-ai-recommendations` | Named presence while explaining diagnosis and improvement; one explicit tool-selection question also measures recommendations. |
-| `head-to-heads` | Known-brand comparison and fit; naming the brand in the question prevents a discovery claim. Named presence alone does not establish factual accuracy. |
-| `self-hosted-ai-visibility` | Open-source, self-hosted and DIY needs; a constrained segment, not the whole market. |
+| `choosing-ai-visibility-tool` | Eight unbranded starter questions: seven selection and one informational. Affordable entry, manual-work replacement, DIY, open-source, practical setup, evidence and useful fixes. Weekly core tier. |
+| `head-to-heads` | Three known-brand fit questions: two selection and one informational. Small-team alternatives and operating objections, every 28 days. Named presence alone does not establish accuracy or independent discovery. |
 
 Selection/info and whether the question supplies a brand or shortlist are separate distinctions.
 These descriptions do not add new TOML intent values. The `core` tier controls scheduling and
@@ -66,7 +82,8 @@ samples; it does not by itself identify a frozen benchmark.
 Keep closed comparisons between other products outside this scored library. Every set still
 grades the configured brand and generates fixes for it; moving such questions to a separate
 set does not make their expected brand absence or missing own pages an actionable gap.
-Open requests such as "What are alternatives to Profound?" remain useful discovery questions.
+Open requests for alternatives can measure discovery when they serve the target buyer and
+an unresolved decision; the Profound-alternatives question is currently parked for research.
 The closed-comparison ids `peec-ai-vs-profound` and `otterly-vs-peec-ai-budget` are retired;
 do not reuse them. Stored runs and their original ids remain in the database.
 
@@ -79,9 +96,23 @@ name/aliases/`about` change; audience is part of the answer prompt. The full lis
 
 **Ask the way a buyer would.** Only `head-to-heads` names the brand; `cheapseats check` enforces
 this with whole-word name and alias matches. Elsewhere, ask as someone who has never heard of
-the brand. Specific budget, deployment and engine needs are legitimate even when this product
-cannot meet them. Answerers receive the prompt text and `brand.audience`, not this README or
-the set description, so put necessary buyer context in the question.
+the brand. Specific budget, deployment and engine needs can be legitimate even when this product
+cannot meet them. Keep a hard question when it serves the intended buyer and an unresolved
+decision; a known exclusion outside the target market does not earn recurring spend just because
+it is a real category need. Answerers receive the prompt text and `brand.audience`, not this
+README or the set description, so put necessary buyer context in the question.
+
+**Make every recurring question earn its cost.** Use the user's current target market and goals
+to challenge the existing set descriptions. For each question, name the buyer, what remains to
+learn, what business or messaging decision the answer could change, and why another observation
+helps. State whether answer evidence could support a specific positioning change, quick win or
+suggestion; say when no useful action is identifiable. A missing capability is not a copy fix,
+and an analyst-generated page suggestion does not establish that the page should exist.
+Correct `info` scoring, category relevance or an existing article is not enough. Keep
+relevant competitive losses. Move questions with no actionable learning out of automatic runs;
+use bounded experiments with a review date or run cap for uncertain needs. Another loaded set
+still consumes calls and generates fixes. The [review skill](../.claude/skills/review-prompts/SKILL.md)
+applies these checks before wording and intent corrections.
 
 **Validate coverage, not a quota.** Start with 15–20 distinct buyer questions as a planning guide.
 Do not pad a smaller coherent set. Report the choice/info mix: a 20-question set with 19 info
@@ -91,7 +122,7 @@ interpreting precision. A weekly run does not deliver a worked example's seven d
 See [Noise and confidence](https://cheapseats.dev/docs/noise-and-confidence/).
 
 **Record what supports a question.** These examples are curated scenarios, not evidence of
-search volume or representative buyer demand. The new open-source peer comparisons are
+search volume or representative buyer demand. The parked research questions are
 exploratory hypotheses. Before expanding or weighting a set, use actual customer questions,
 support, sales or public query evidence. Source notes can be TOML comments; unrecognized fields
 are errors. Writing a page for a prompt does not independently validate demand for it.

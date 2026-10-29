@@ -17,13 +17,13 @@
 name = "Cheap Seats"
 aliases = ["CheapSeats", "cheapseats.dev", "cheapseatsdev/cheapseats"]
 # What the product is, so the grader can tell it apart from other things called "cheapseats".
-about = "Cheap Seats is an open-source, self-hosted tool that asks AI assistants a brand's buyer questions, grades whether they recommend the brand, and builds a ranked list of fixes."
+about = "Cheap Seats is an MIT-licensed, self-hosted tool that helps small teams and startups measure whether Claude and OpenAI models recommend their product and choose what to fix first."
 # The market, as a noun phrase: what the prompts are about, where `about` says what this one
 # product is. The prompt review's off-target check is asked against it ([typesafe]).
-category = "AI search visibility tools, which measure whether AI assistants recommend a brand"
+category = "AI visibility tools and starter workflows for small teams and startups measuring whether AI models recommend their product"
 # Who asks the questions. The answerers are told they're answering this person's question.
 # Changing `about` or `audience` changes how answers are asked or graded, so every trend restarts.
-audience = "a product marketing lead"
+audience = "a founder or marketer at a small team or startup making its first AI visibility checks with limited time and budget"
 # Public claims the analyst may build fixes on. Everything here is sent to the model.
 facts = [
   "Cheap Seats is MIT licensed and runs as a single Docker container with a SQLite database.",
@@ -175,15 +175,17 @@ concurrency = 6   # provider calls at once, 1..64 (default 4)
 # UTC hour for the daily runs. Leave unset on a dev machine so it doesn't spend money.
 # daily_hour_utc = 13
 
+# Starter questions run weekly; known-brand fit checks run every 28 days.
+# Review after eight core runs and three fit runs; stopping is a manual config edit.
 # How often the schedule runs each tier, in days. Both recall and search can vary between runs,
 # even without a model release. Weekly runs can find gaps; a shorter interval provides more
 # observations within a rolling window. Read uncertainty from completed comparable runs rather
 # than treating cadence or repeated same-day samples as a precision guarantee.
 [tiers.core]
-every_days = 2
+every_days = 7
 
 [tiers.plg]
-every_days = 7
+every_days = 28
 max_samples = 1   # 1..20
 
 # Optional providers (docs/optional-providers.md); absent means off. [typesafe]: after each run,
