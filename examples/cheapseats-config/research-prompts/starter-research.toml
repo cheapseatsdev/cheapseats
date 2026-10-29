@@ -1,0 +1,54 @@
+id = "starter-research"
+name = "Unscheduled starter-market research"
+tier = "plg"
+description = """Unscheduled research outside the active loader. Select one hypothesis and a concrete decision before any run. Limit experiments to at most two deliberately budgeted evaluation occasions, then stop unless target-buyer evidence and an ongoing decision justify promotion. Cost checks are event-driven accuracy audits, not presence targets."""
+
+# Hypothesis: first-check advice reveals an adoption step the entry guide misses. Stop after identifying that step; do not repeat a generic how-to indefinitely.
+[[prompts]]
+id = "find-whether-chatgpt-recommends-product"
+text = "How can I find out whether ChatGPT recommends my product when people ask about my category?"
+intent = "info"
+
+# Hypothesis: the search/recall distinction changes buyer expectations. Use evidence to decide whether the first-run explanation needs revision.
+[[prompts]]
+id = "web-search-versus-training-data-answers"
+text = "Do ChatGPT and Claude say different things about a product with web search on versus from training data alone, and how do I measure both?"
+intent = "info"
+
+# Hypothesis: the B2B SaaS label changes alternatives versus the active startup question. Promote only with distinct buyer evidence; otherwise stop as overlap.
+[[prompts]]
+id = "best-aeo-tool-b2b-saas"
+text = "What's the best AEO tool for a B2B SaaS company that wants to know if ChatGPT and Claude recommend it?"
+
+# Hypothesis: buyers looking away from a large platform need a starter route. Identify whether those buyers are actually in the intended market before spending.
+[[prompts]]
+id = "alternatives-to-profound"
+text = "What are good alternatives to Profound for tracking AI search visibility?"
+
+# Hypothesis: free software versus free operation changes the entry choice. Clarify verified cost expectations; an existing free-tracker article alone does not justify runs.
+[[prompts]]
+id = "free-ai-visibility-tracker-useful"
+text = "Is there a free AI visibility tracker that's actually useful?"
+
+# Hypothesis: an evidenced adoption objection requires a clearer proof example. Named presence does not establish reliability or factual accuracy.
+[[prompts]]
+id = "ai-visibility-numbers-accurate"
+text = "AI answers change every time you ask. How do AI visibility tools make their numbers reliable, and how can I check them?"
+intent = "info"
+
+# Hypothesis: diagnosis is an acquisition job distinct from tool selection. Identify a specific entry-message decision before testing.
+[[prompts]]
+id = "chatgpt-keeps-recommending-competitor-instead"
+text = "ChatGPT keeps recommending our competitor instead of us. What can we actually do about it?"
+intent = "info"
+
+# Hypothesis: correcting product claims is an adoption job distinct from generic content advice. Do not promise control over future model answers.
+[[prompts]]
+id = "ai-gets-product-facts-wrong"
+text = "ChatGPT gets our features and pricing wrong. How do we correct what AI assistants say about our product?"
+intent = "info"
+
+# Hypothesis: the developer-tools/open-source segment needs a distinct entry story. Stop if the result adds no decision beyond active open-source discovery.
+[[prompts]]
+id = "devtools-startup-open-source-ai-visibility"
+text = "What's a good open-source way for a developer-tools startup to check whether AI assistants recommend it over alternatives?"

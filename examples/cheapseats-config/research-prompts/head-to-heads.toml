@@ -1,0 +1,25 @@
+id = "head-to-heads"
+name = "Cheap Seats fit and cost research"
+tier = "plg"
+description = """Unscheduled research outside the active loader. Select one hypothesis and a concrete decision before any run. Limit experiments to at most two deliberately budgeted evaluation occasions, then stop unless target-buyer evidence and an ongoing decision justify promotion. Cost checks are event-driven accuracy audits, not presence targets."""
+
+# Hypothesis: developer-tool buyers have distinct fit objections. Promote only with buyer evidence beyond the general startup offer.
+[[prompts]]
+id = "cheapseats-fit-developer-tools-company"
+text = "Is Cheap Seats a good fit for a developer-tools company checking whether ChatGPT and Claude recommend it?"
+
+# Hypothesis: buyers actually compare this self-hosted peer. Require buyer or answer evidence before funding a named comparison.
+[[prompts]]
+id = "cheapseats-vs-elmo"
+text = "Cheap Seats or Elmo for a team that can self-host its AI visibility tracker?"
+
+# Hypothesis: buyers actually compare this self-hosted peer. Require buyer or answer evidence before funding a named comparison.
+[[prompts]]
+id = "cheapseats-vs-limelit-open"
+text = "Cheap Seats or Limelit Open for a team that can self-host its AI visibility tracker?"
+
+# Event-driven accuracy audit after a material setup, model-access or budget change. Verify claims against real configuration and usage; stop once corrections are checked.
+[[prompts]]
+id = "cheapseats-daily-running-cost"
+text = "What does it cost to run Cheap Seats every day, and how do I keep the spend under control?"
+intent = "info"

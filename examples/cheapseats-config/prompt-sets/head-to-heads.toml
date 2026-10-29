@@ -1,64 +1,22 @@
 id = "head-to-heads"
-name = "Cheap Seats head to heads"
+name = "Cheap Seats fit for small teams"
 tier = "plg"
-description = """The only set that names the brand: buyers who already know Cheap Seats and are comparing it with alternatives or asking whether it fits their team. This measures considered-stage fit and substantive named presence, not unprompted discovery. A name echoed only to disclaim knowledge remains absent; named presence alone does not establish that an explanation is accurate."""
+description = """Small teams that already know Cheap Seats comparing startup cost, operating effort and useful results. These questions supply the brand and measure considered-stage fit, not independent discovery. Inspect objections and verify factual claims against product evidence; named presence does not establish accuracy. Run every 28 days, review after three runs, and stop questions with no remaining positioning or onboarding decision. Competitor comparisons are curated hypotheses, not validated demand."""
 
-# Cheap Seats against each major alternative
-
-[[prompts]]
-id = "cheapseats-vs-profound-tracking-whether"
-text = "Cheap Seats vs Profound for tracking whether AI assistants recommend us: which should I pick?"
-
+# Action: address a verified benefit or operating objection for a small marketing team.
 [[prompts]]
 id = "cheapseats-peec-ai-small-marketing"
 text = "Cheap Seats or Peec AI for a small marketing team?"
 
+# Action: clarify the startup's total cost and what it gets for the operating effort.
+# Free software does not mean free model access, hosting or operator time.
 [[prompts]]
 id = "cheapseats-vs-otterly-startup"
 text = "Cheap Seats vs Otterly.AI for a startup that wants to track AI visibility cheaply?"
 
-[[prompts]]
-id = "cheapseats-vs-gauge"
-text = "How does Cheap Seats compare with Gauge for tracking and improving AI visibility?"
-
-[[prompts]]
-id = "cheapseats-vs-semrush-ai-toolkit"
-text = "Cheap Seats or Semrush AI Toolkit for tracking our brand in ChatGPT and Claude?"
-
-# Is Cheap Seats right for...
-
-[[prompts]]
-id = "cheapseats-open-source-alternative-paid"
-text = "Is Cheap Seats a good open-source alternative to paid AI visibility tools?"
-
+# Action: make actual prerequisites clear, improve onboarding or narrow the fit promise.
+# A real self-hosting limitation is a product/market decision, not a claim to hide in copy.
 [[prompts]]
 id = "downsides-self-hosting-cheapseats-measure"
 text = "What are the downsides of self-hosting Cheap Seats to measure AI search visibility?"
 intent = "info"
-
-[[prompts]]
-id = "cheapseats-decide-whether-ai-assistant"
-text = "How does Cheap Seats decide whether an AI assistant recommended a brand?"
-intent = "info"
-
-[[prompts]]
-id = "cheapseats-fit-agency-many-clients"
-text = "Is Cheap Seats a good fit for an agency tracking AI visibility for many clients?"
-
-[[prompts]]
-id = "cheapseats-fit-developer-tools-company"
-text = "Is Cheap Seats a good fit for a developer-tools company checking whether ChatGPT and Claude recommend it?"
-
-[[prompts]]
-id = "cheapseats-daily-running-cost"
-text = "What does it cost to run Cheap Seats every day, and how do I keep the spend under control?"
-intent = "info"
-
-# Exploratory comparisons with configured open-source peers; buyer demand is not yet validated.
-[[prompts]]
-id = "cheapseats-vs-elmo"
-text = "Cheap Seats or Elmo for a team that can self-host its AI visibility tracker?"
-
-[[prompts]]
-id = "cheapseats-vs-limelit-open"
-text = "Cheap Seats or Limelit Open for a team that can self-host its AI visibility tracker?"

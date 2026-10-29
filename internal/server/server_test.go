@@ -358,11 +358,11 @@ func TestTokens(t *testing.T) {
 	}
 }
 
-// testConfig is the fixture cheapseats.toml (with its prompt sets beside it) and one API answerer on
-// a fake provider, so no test depends on the config repo, or ever reaches a real CLI or API.
+// testConfig uses a frozen server fixture so the public example can evolve independently.
+// One API answerer uses a fake provider; tests never reach a real CLI or API.
 func testConfig(t *testing.T) *config.Config {
 	t.Helper()
-	cfg, err := config.Load("../../examples/cheapseats-config/cheapseats.toml")
+	cfg, err := config.Load("testdata/cheapseats-config/cheapseats.toml")
 	if err != nil {
 		t.Fatal(err)
 	}
