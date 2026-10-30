@@ -1,0 +1,705 @@
+{
+  "contract": "proposed-grader-challenges-v1",
+  "status": "proposed",
+  "provenance": {
+    "kind": "synthetic",
+    "created_by": "Codex",
+    "human_adjudicated": false
+  },
+  "cases": [
+    {
+      "id": "grader-001",
+      "family": "absence",
+      "question": "Which self-hosted platform should our small team use to track AI recommendations?",
+      "intent": "choice",
+      "brand": {
+        "name": "Example Tracker",
+        "aliases": [
+          "ExampleTracker",
+          "exampletracker.test"
+        ],
+        "about": "A fictional self-hosted software platform for recording how AI assistants recommend a brand. Not a physical tracking device."
+      },
+      "competitors": [
+        "Northstar Metrics",
+        "Harbor Monitor",
+        "Lantern Signal"
+      ],
+      "answer": "Start with a manual spreadsheet: record the question, assistant, date and exact answer.",
+      "complete": true,
+      "evidence": [],
+      "rationale": "No reference to the intended brand. Whole-answer review supplies absence support; an empty quote is correct.",
+      "proposed_expected": {
+        "verdict": "absent",
+        "top_pick": false,
+        "namesake_only": false,
+        "tone": "none"
+      },
+      "proposed_absence_reason": "no-reference"
+    },
+    {
+      "id": "grader-002",
+      "family": "echo-and-substance",
+      "question": "Which self-hosted platform should our small team use to track AI recommendations?",
+      "intent": "choice",
+      "brand": {
+        "name": "Example Tracker",
+        "aliases": [
+          "ExampleTracker",
+          "exampletracker.test"
+        ],
+        "about": "A fictional self-hosted software platform for recording how AI assistants recommend a brand. Not a physical tracking device."
+      },
+      "competitors": [
+        "Northstar Metrics",
+        "Harbor Monitor",
+        "Lantern Signal"
+      ],
+      "answer": "I cannot verify Example Tracker or tell you whether it exists. Ask its maintainer for documentation.",
+      "complete": true,
+      "evidence": [
+        "I cannot verify Example Tracker or tell you whether it exists."
+      ],
+      "rationale": "Only ignorance and evaluation advice, with no claim about the product.",
+      "proposed_expected": {
+        "verdict": "absent",
+        "top_pick": false,
+        "namesake_only": false,
+        "tone": "none"
+      },
+      "proposed_absence_reason": "echo-only"
+    },
+    {
+      "id": "grader-003",
+      "family": "echo-and-substance",
+      "question": "Which self-hosted platform should our small team use to track AI recommendations?",
+      "intent": "choice",
+      "brand": {
+        "name": "Example Tracker",
+        "aliases": [
+          "ExampleTracker",
+          "exampletracker.test"
+        ],
+        "about": "A fictional self-hosted software platform for recording how AI assistants recommend a brand. Not a physical tracking device."
+      },
+      "competitors": [
+        "Northstar Metrics",
+        "Harbor Monitor",
+        "Lantern Signal"
+      ],
+      "answer": "If Example Tracker supports scheduled checks, it could be a good pick. Verify that feature before choosing.",
+      "complete": true,
+      "evidence": [
+        "If Example Tracker supports scheduled checks, it could be a good pick."
+      ],
+      "rationale": "A hypothetical is not a substantive product claim.",
+      "proposed_expected": {
+        "verdict": "absent",
+        "top_pick": false,
+        "namesake_only": false,
+        "tone": "none"
+      },
+      "proposed_absence_reason": "echo-only"
+    },
+    {
+      "id": "grader-004",
+      "family": "echo-and-substance",
+      "question": "Which self-hosted platform should our small team use to track AI recommendations?",
+      "intent": "choice",
+      "brand": {
+        "name": "Example Tracker",
+        "aliases": [
+          "ExampleTracker",
+          "exampletracker.test"
+        ],
+        "about": "A fictional self-hosted software platform for recording how AI assistants recommend a brand. Not a physical tracking device."
+      },
+      "competitors": [
+        "Northstar Metrics",
+        "Harbor Monitor",
+        "Lantern Signal"
+      ],
+      "answer": "Example Tracker appears to support scheduled checks, although I have not verified that detail.",
+      "complete": true,
+      "evidence": [
+        "Example Tracker appears to support scheduled checks, although I have not verified that detail."
+      ],
+      "rationale": "A hedged concrete feature claim crosses the visibility boundary; neutral here describes epistemic caution rather than product criticism.",
+      "proposed_expected": {
+        "verdict": "mentioned",
+        "top_pick": false,
+        "namesake_only": false,
+        "tone": "neutral"
+      }
+    },
+    {
+      "id": "grader-005",
+      "family": "identity",
+      "question": "Which self-hosted platform should our small team use to track AI recommendations?",
+      "intent": "choice",
+      "brand": {
+        "name": "Example Tracker",
+        "aliases": [
+          "ExampleTracker",
+          "exampletracker.test"
+        ],
+        "about": "A fictional self-hosted software platform for recording how AI assistants recommend a brand. Not a physical tracking device."
+      },
+      "competitors": [
+        "Northstar Metrics",
+        "Harbor Monitor",
+        "Lantern Signal"
+      ],
+      "answer": "Example Tracker is a wrist-worn GPS locator for runners. I recommend it for recording a trail.",
+      "complete": true,
+      "evidence": [
+        "Example Tracker is a wrist-worn GPS locator for runners."
+      ],
+      "rationale": "Every use refers to a physical namesake, outside the supplied software identity.",
+      "proposed_expected": {
+        "verdict": "absent",
+        "top_pick": false,
+        "namesake_only": true,
+        "tone": "none"
+      },
+      "proposed_absence_reason": "namesake-only"
+    },
+    {
+      "id": "grader-006",
+      "family": "identity",
+      "question": "Which self-hosted platform should our small team use to track AI recommendations?",
+      "intent": "choice",
+      "brand": {
+        "name": "Example Tracker",
+        "aliases": [
+          "ExampleTracker",
+          "exampletracker.test"
+        ],
+        "about": "A fictional self-hosted software platform for recording how AI assistants recommend a brand. Not a physical tracking device."
+      },
+      "competitors": [
+        "Northstar Metrics",
+        "Harbor Monitor",
+        "Lantern Signal"
+      ],
+      "answer": "Example Tracker is also the name of a wrist-worn GPS locator. The Example Tracker software platform records AI recommendation answers.",
+      "complete": true,
+      "evidence": [
+        "The Example Tracker software platform records AI recommendation answers."
+      ],
+      "rationale": "The intended entity is described as well as the namesake, so namesake-only is false.",
+      "proposed_expected": {
+        "verdict": "mentioned",
+        "top_pick": false,
+        "namesake_only": false,
+        "tone": "neutral"
+      }
+    },
+    {
+      "id": "grader-007",
+      "family": "tone",
+      "question": "Which self-hosted platform should our small team use to track AI recommendations?",
+      "intent": "choice",
+      "brand": {
+        "name": "Example Tracker",
+        "aliases": [
+          "ExampleTracker",
+          "exampletracker.test"
+        ],
+        "about": "A fictional self-hosted software platform for recording how AI assistants recommend a brand. Not a physical tracking device."
+      },
+      "competitors": [
+        "Northstar Metrics",
+        "Harbor Monitor",
+        "Lantern Signal"
+      ],
+      "answer": "Do not choose Example Tracker for this team: its unreliable exports make the weekly review harder.",
+      "complete": true,
+      "evidence": [
+        "Do not choose Example Tracker for this team: its unreliable exports make the weekly review harder."
+      ],
+      "rationale": "Substantive negative information is visibility, without active endorsement.",
+      "proposed_expected": {
+        "verdict": "mentioned",
+        "top_pick": false,
+        "namesake_only": false,
+        "tone": "negative"
+      }
+    },
+    {
+      "id": "grader-008",
+      "family": "recommendation-strength",
+      "question": "Which self-hosted platform should our small team use to track AI recommendations?",
+      "intent": "choice",
+      "brand": {
+        "name": "Example Tracker",
+        "aliases": [
+          "ExampleTracker",
+          "exampletracker.test"
+        ],
+        "about": "A fictional self-hosted software platform for recording how AI assistants recommend a brand. Not a physical tracking device."
+      },
+      "competitors": [
+        "Northstar Metrics",
+        "Harbor Monitor",
+        "Lantern Signal"
+      ],
+      "answer": "Choose Example Tracker. Its simple setup makes it my strongest recommendation for your small self-hosted team.",
+      "complete": true,
+      "evidence": [
+        "Choose Example Tracker."
+      ],
+      "rationale": "Explicit sole recommendation; the next sentence explains the positive fit.",
+      "proposed_expected": {
+        "verdict": "recommended",
+        "top_pick": true,
+        "namesake_only": false,
+        "tone": "positive"
+      }
+    },
+    {
+      "id": "grader-009",
+      "family": "recommendation-strength",
+      "question": "Which self-hosted platform should our small team use to track AI recommendations?",
+      "intent": "choice",
+      "brand": {
+        "name": "Example Tracker",
+        "aliases": [
+          "ExampleTracker",
+          "exampletracker.test"
+        ],
+        "about": "A fictional self-hosted software platform for recording how AI assistants recommend a brand. Not a physical tracking device."
+      },
+      "competitors": [
+        "Northstar Metrics",
+        "Harbor Monitor",
+        "Lantern Signal"
+      ],
+      "answer": "Choose Example Tracker: its simple setup fits your team well, but its slow exports will make large weekly reviews tedious.",
+      "complete": true,
+      "evidence": [
+        "Choose Example Tracker: its simple setup fits your team well, but its slow exports will make large weekly reviews tedious."
+      ],
+      "rationale": "An explicit recommendation can retain criticism; tone is a separate decision from verdict.",
+      "proposed_expected": {
+        "verdict": "recommended",
+        "top_pick": true,
+        "namesake_only": false,
+        "tone": "mixed"
+      }
+    },
+    {
+      "id": "grader-010",
+      "family": "primary-set-size",
+      "question": "Which self-hosted platform should our small team use to track AI recommendations?",
+      "intent": "choice",
+      "brand": {
+        "name": "Example Tracker",
+        "aliases": [
+          "ExampleTracker",
+          "exampletracker.test"
+        ],
+        "about": "A fictional self-hosted software platform for recording how AI assistants recommend a brand. Not a physical tracking device."
+      },
+      "competitors": [
+        "Northstar Metrics",
+        "Harbor Monitor",
+        "Lantern Signal"
+      ],
+      "answer": "I actively recommend three equal choices for your team: Example Tracker for simple setup, Northstar Metrics for exports, and Harbor Monitor for dashboards. I have no overall favorite.",
+      "complete": true,
+      "evidence": [
+        "I actively recommend three equal choices for your team: Example Tracker for simple setup, Northstar Metrics for exports, and Harbor Monitor for dashboards."
+      ],
+      "rationale": "Three primary endorsements meet the current small-set rule; no single top pick.",
+      "proposed_expected": {
+        "verdict": "recommended",
+        "top_pick": false,
+        "namesake_only": false,
+        "tone": "positive"
+      }
+    },
+    {
+      "id": "grader-011",
+      "family": "primary-set-size",
+      "question": "Which self-hosted platform should our small team use to track AI recommendations?",
+      "intent": "choice",
+      "brand": {
+        "name": "Example Tracker",
+        "aliases": [
+          "ExampleTracker",
+          "exampletracker.test"
+        ],
+        "about": "A fictional self-hosted software platform for recording how AI assistants recommend a brand. Not a physical tracking device."
+      },
+      "competitors": [
+        "Northstar Metrics",
+        "Harbor Monitor",
+        "Lantern Signal"
+      ],
+      "answer": "I actively recommend four equal choices for your team: Example Tracker, Northstar Metrics, Harbor Monitor and Lantern Signal. Each fits equally well; I have no overall favorite.",
+      "complete": true,
+      "evidence": [],
+      "rationale": "Four explicitly endorsed equals exceed the <=3 recommendation definition, while the mentioned definition does not explicitly settle this exact boundary. Adjudicate the reading before scoring.",
+      "proposed_unresolved": {
+        "issue": "rubric-ambiguity",
+        "note": "Four explicitly endorsed equals exceed the <=3 recommendation definition, while the mentioned definition does not explicitly settle this exact boundary. Adjudicate the reading before scoring."
+      }
+    },
+    {
+      "id": "grader-012",
+      "family": "whole-answer",
+      "question": "Which self-hosted platform should our small team use to track AI recommendations?",
+      "intent": "choice",
+      "brand": {
+        "name": "Example Tracker",
+        "aliases": [
+          "ExampleTracker",
+          "exampletracker.test"
+        ],
+        "about": "A fictional self-hosted software platform for recording how AI assistants recommend a brand. Not a physical tracking device."
+      },
+      "competitors": [
+        "Northstar Metrics",
+        "Harbor Monitor",
+        "Lantern Signal"
+      ],
+      "answer": "Example Tracker has excellent setup and was my initial favorite.\n\nAfter checking your requirement for offline exports, I rule it out: Example Tracker cannot meet that requirement. Choose Northstar Metrics instead.",
+      "complete": true,
+      "evidence": [
+        "Example Tracker has excellent setup and was my initial favorite.",
+        "After checking your requirement for offline exports, I rule it out: Example Tracker cannot meet that requirement."
+      ],
+      "rationale": "The final decision withdraws the endorsement, while genuine praise remains in the answer. Two human spans preserve both parts; production returns one evidence span.",
+      "proposed_expected": {
+        "verdict": "mentioned",
+        "top_pick": false,
+        "namesake_only": false,
+        "tone": "mixed"
+      }
+    },
+    {
+      "id": "grader-013",
+      "family": "formatted-identity",
+      "question": "Which self-hosted platform should our small team use to track AI recommendations?",
+      "intent": "choice",
+      "brand": {
+        "name": "Example Tracker",
+        "aliases": [
+          "ExampleTracker",
+          "exampletracker.test"
+        ],
+        "about": "A fictional self-hosted software platform for recording how AI assistants recommend a brand. Not a physical tracking device."
+      },
+      "competitors": [
+        "Northstar Metrics",
+        "Harbor Monitor",
+        "Lantern Signal"
+      ],
+      "answer": "Choose **Example** **Tracker**: it is my strongest recommendation because setup is simple.",
+      "complete": true,
+      "evidence": [
+        "Choose **Example** **Tracker**: it is my strongest recommendation because setup is simple."
+      ],
+      "rationale": "A human can read the intended identity across harmless formatting; inspect postprocessing as well as the model output.",
+      "proposed_expected": {
+        "verdict": "recommended",
+        "top_pick": true,
+        "namesake_only": false,
+        "tone": "positive"
+      },
+      "annotations": {
+        "possible_failure_layer": "lexical brand matching or normalization; prompt-only changes may be insufficient"
+      }
+    },
+    {
+      "id": "grader-014",
+      "family": "formatted-identity",
+      "question": "Which self-hosted platform should our small team use to track AI recommendations?",
+      "intent": "choice",
+      "brand": {
+        "name": "Example Tracker",
+        "aliases": [
+          "ExampleTracker",
+          "exampletracker.test"
+        ],
+        "about": "A fictional self-hosted software platform for recording how AI assistants recommend a brand. Not a physical tracking device."
+      },
+      "competitors": [
+        "Northstar Metrics",
+        "Harbor Monitor",
+        "Lantern Signal"
+      ],
+      "answer": "Choose Example\nTracker: it is my strongest recommendation because setup is simple.",
+      "complete": true,
+      "evidence": [
+        "Choose Example\nTracker: it is my strongest recommendation because setup is simple."
+      ],
+      "rationale": "A human can read the intended identity across harmless formatting; inspect postprocessing as well as the model output.",
+      "proposed_expected": {
+        "verdict": "recommended",
+        "top_pick": true,
+        "namesake_only": false,
+        "tone": "positive"
+      },
+      "annotations": {
+        "possible_failure_layer": "lexical brand matching or normalization; prompt-only changes may be insufficient"
+      }
+    },
+    {
+      "id": "grader-015",
+      "family": "formatted-identity",
+      "question": "Which self-hosted platform should our small team use to track AI recommendations?",
+      "intent": "choice",
+      "brand": {
+        "name": "Example Tracker",
+        "aliases": [
+          "ExampleTracker",
+          "exampletracker.test"
+        ],
+        "about": "A fictional self-hosted software platform for recording how AI assistants recommend a brand. Not a physical tracking device."
+      },
+      "competitors": [
+        "Northstar Metrics",
+        "Harbor Monitor",
+        "Lantern Signal"
+      ],
+      "answer": "Choose Example  Tracker: it is my strongest recommendation because setup is simple.",
+      "complete": true,
+      "evidence": [
+        "Choose Example  Tracker: it is my strongest recommendation because setup is simple."
+      ],
+      "rationale": "A human can read the intended identity across harmless formatting; inspect postprocessing as well as the model output.",
+      "proposed_expected": {
+        "verdict": "recommended",
+        "top_pick": true,
+        "namesake_only": false,
+        "tone": "positive"
+      },
+      "annotations": {
+        "possible_failure_layer": "lexical brand matching or normalization; prompt-only changes may be insufficient"
+      }
+    },
+    {
+      "id": "grader-016",
+      "family": "substring-identity",
+      "question": "Which self-hosted platform should our small team use to track AI recommendations?",
+      "intent": "choice",
+      "brand": {
+        "name": "Example Tracker",
+        "aliases": [
+          "ExampleTracker",
+          "exampletracker.test"
+        ],
+        "about": "A fictional self-hosted software platform for recording how AI assistants recommend a brand. Not a physical tracking device."
+      },
+      "competitors": [
+        "Northstar Metrics",
+        "Harbor Monitor",
+        "Lantern Signal"
+      ],
+      "answer": "Choose ExampleTrackerology. Its dashboard fits your team.",
+      "complete": true,
+      "evidence": [],
+      "rationale": "A longer different product name containing an alias is not an alias match.",
+      "proposed_expected": {
+        "verdict": "absent",
+        "top_pick": false,
+        "namesake_only": false,
+        "tone": "none"
+      },
+      "proposed_absence_reason": "no-reference",
+      "annotations": {
+        "lexical_trap": "ExampleTracker inside ExampleTrackerology"
+      }
+    },
+    {
+      "id": "grader-017",
+      "family": "domain-identity",
+      "question": "Which self-hosted platform should our small team use to track AI recommendations?",
+      "intent": "choice",
+      "brand": {
+        "name": "Example Tracker",
+        "aliases": [
+          "ExampleTracker",
+          "exampletracker.test"
+        ],
+        "about": "A fictional self-hosted software platform for recording how AI assistants recommend a brand. Not a physical tracking device."
+      },
+      "competitors": [
+        "Northstar Metrics",
+        "Harbor Monitor",
+        "Lantern Signal"
+      ],
+      "answer": "For your team, start at https://exampletracker.test. It is my strongest recommendation.",
+      "complete": true,
+      "evidence": [],
+      "rationale": "Adjudicate whether the bare domain alias and pronoun carry a substantive intended-brand endorsement. Do not fill the gap by fetching the site.",
+      "proposed_unresolved": {
+        "issue": "rubric-ambiguity",
+        "note": "Adjudicate whether the bare domain alias and pronoun carry a substantive intended-brand endorsement. Do not fill the gap by fetching the site."
+      }
+    },
+    {
+      "id": "grader-018",
+      "family": "source-rail",
+      "question": "Which self-hosted platform should our small team use to track AI recommendations?",
+      "intent": "choice",
+      "brand": {
+        "name": "Example Tracker",
+        "aliases": [
+          "ExampleTracker",
+          "exampletracker.test"
+        ],
+        "about": "A fictional self-hosted software platform for recording how AI assistants recommend a brand. Not a physical tracking device."
+      },
+      "competitors": [
+        "Northstar Metrics",
+        "Harbor Monitor",
+        "Lantern Signal"
+      ],
+      "answer": "I recommend Northstar Metrics for your team because its exports fit the weekly review.",
+      "complete": true,
+      "evidence": [],
+      "rationale": "The answer text does not name the brand. A separately recorded source URL is retrieval evidence, not an endorsement.",
+      "proposed_expected": {
+        "verdict": "absent",
+        "top_pick": false,
+        "namesake_only": false,
+        "tone": "none"
+      },
+      "proposed_absence_reason": "no-reference",
+      "annotations": {
+        "retrieval_only_urls": [
+          "https://exampletracker.test/docs"
+        ],
+        "scope": "Grade only the answer text; the separate rail is not appended to it."
+      }
+    },
+    {
+      "id": "grader-019",
+      "family": "whole-answer",
+      "question": "Which self-hosted platform should our small team use to track AI recommendations?",
+      "intent": "choice",
+      "brand": {
+        "name": "Example Tracker",
+        "aliases": [
+          "ExampleTracker",
+          "exampletracker.test"
+        ],
+        "about": "A fictional self-hosted software platform for recording how AI assistants recommend a brand. Not a physical tracking device."
+      },
+      "competitors": [
+        "Northstar Metrics",
+        "Harbor Monitor",
+        "Lantern Signal"
+      ],
+      "answer": "Example Tracker has simple setup and looks suitable, but before choosing it you must consider",
+      "complete": false,
+      "evidence": [],
+      "rationale": "The stored answer ends mid-sentence. Do not infer the missing qualification or score a final recommendation.",
+      "proposed_unresolved": {
+        "issue": "incomplete-evidence",
+        "note": "The stored answer ends mid-sentence. Do not infer the missing qualification or score a final recommendation."
+      }
+    },
+    {
+      "id": "grader-020",
+      "family": "question-subject",
+      "question": "Is Northstar Metrics a good choice for our self-hosted team?",
+      "intent": "choice",
+      "brand": {
+        "name": "Example Tracker",
+        "aliases": [
+          "ExampleTracker",
+          "exampletracker.test"
+        ],
+        "about": "A fictional self-hosted software platform for recording how AI assistants recommend a brand. Not a physical tracking device."
+      },
+      "competitors": [
+        "Northstar Metrics",
+        "Harbor Monitor",
+        "Lantern Signal"
+      ],
+      "answer": "Northstar Metrics is my strongest recommendation: its exports match your weekly workflow.",
+      "complete": true,
+      "evidence": [],
+      "rationale": "The question subject is a rival, not the supplied target brand.",
+      "proposed_expected": {
+        "verdict": "absent",
+        "top_pick": false,
+        "namesake_only": false,
+        "tone": "none"
+      },
+      "proposed_absence_reason": "no-reference"
+    },
+    {
+      "id": "grader-021",
+      "family": "neutral-description",
+      "question": "Which self-hosted platform should our small team use to track AI recommendations?",
+      "intent": "choice",
+      "brand": {
+        "name": "Example Tracker",
+        "aliases": [
+          "ExampleTracker",
+          "exampletracker.test"
+        ],
+        "about": "A fictional self-hosted software platform for recording how AI assistants recommend a brand. Not a physical tracking device."
+      },
+      "competitors": [
+        "Northstar Metrics",
+        "Harbor Monitor",
+        "Lantern Signal"
+      ],
+      "answer": "Example Tracker stores saved answers and review notes in a local database.",
+      "complete": true,
+      "evidence": [
+        "Example Tracker stores saved answers and review notes in a local database."
+      ],
+      "rationale": "A substantive description without an endorsement or evaluative tone.",
+      "proposed_expected": {
+        "verdict": "mentioned",
+        "top_pick": false,
+        "namesake_only": false,
+        "tone": "neutral"
+      }
+    },
+    {
+      "id": "grader-022",
+      "family": "irrelevant-quote",
+      "question": "Which self-hosted platform should our small team use to track AI recommendations?",
+      "intent": "choice",
+      "brand": {
+        "name": "Example Tracker",
+        "aliases": [
+          "ExampleTracker",
+          "exampletracker.test"
+        ],
+        "about": "A fictional self-hosted software platform for recording how AI assistants recommend a brand. Not a physical tracking device."
+      },
+      "competitors": [
+        "Northstar Metrics",
+        "Harbor Monitor",
+        "Lantern Signal"
+      ],
+      "answer": "Example Tracker stores saved answers locally. Northstar Metrics is my strongest recommendation because exports are simple.",
+      "complete": true,
+      "evidence": [
+        "Example Tracker stores saved answers locally."
+      ],
+      "rationale": "The target receives a neutral description; the positive recommendation describes a rival.",
+      "proposed_expected": {
+        "verdict": "mentioned",
+        "top_pick": false,
+        "namesake_only": false,
+        "tone": "neutral"
+      },
+      "annotations": {
+        "proposed_bad_model_evidence": "Northstar Metrics is my strongest recommendation because exports are simple.",
+        "occurrence_valid": true,
+        "supports_target_verdict": false,
+        "note": "Quote occurrence is necessary but cannot establish logical support."
+      }
+    }
+  ]
+}
