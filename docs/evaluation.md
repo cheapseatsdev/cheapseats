@@ -115,45 +115,56 @@ inform candidate prompt tuning. The queue does not select on proposed verdicts.
 
 ## Independent checks and resolutions
 
-After committing your own judgment, choose **Check saved judgments** on the
-Evaluation overview or session summary, then **Preview check**. The preview shows
-the configured grader, estimated allowance and admission budget. The same preview
-is linked from an individual finished review as **Preview an independent check**. **Run one
-independent assessment** explicitly starts the call; viewing a page never does.
-The assessment receives the complete saved question/answer, brand identity,
-competitors and rubric, with imported and human labels, notes and evidence quotes
-removed. It uses the same transport and normalization as production grading.
-This is label independence, not a claim that the model is statistically independent
-of the model that produced the original proposal.
+After a review session, the app asks **Run independent checks on these N
+judgments?** It shows the configured grader, the number of saved assessments it
+will reuse, an estimated allowance for new calls, and optional budget/retry
+settings. **Run checks for all N** starts one batch. The live progress page opens
+automatically, then switches to **Compare independent checks** when the sweep
+finishes. No per-case previews or repeated judgment saves are required.
 
-**Check saved judgments** lists finished judgments for the selected evidence
-import. It shows completed, unchecked, failed and running checks for the current
-grader configuration and links directly to each next action. Differences needing
-a human decision take priority. A changed grader configuration needs a new check;
-an old completed assessment is not counted as current. Drafts and unresolved
-reviews remain in the review queue. Opening a reviewed answer with independent
-checks enters the assessment workflow, including older case bookmarks. Model
-reasoning and evidence are visible above the answer without expanding a disclosure.
+A session's offer selects its finished judgments. The Evaluation overview offers
+all finished judgments in the selected import, up to 500 cases per batch. The
+batch fixes its case membership and model/transport/evaluator/rule configuration.
+Each result compares against the current saved human judgment, with an indication
+when that judgment changed after the batch started. This is a working comparison,
+not an immutable scored benchmark; approved dataset versions remain separate.
 
-After an assessment agrees with your saved judgment, choose **Continue to next
-check**; no judgment needs to be saved again. To change it, open **Edit this saved
-judgment** and choose **Save revised judgment and next**. For a disagreement,
-**Keep my saved judgment and next** or **Save revised judgment and next** records
-your explained decision and advances directly. Cases follow the selected import
-order. A saved result opens its assessment; a case needing a model call opens its
-preview, where starting the call remains explicit. The last case offers **Finish
-checking**, returning to the queue with any failures or unresolved cases still
-accounted for. **Continue checking saved judgments** is a separate return-to-queue
-link when you want to leave the sequence. Check-mode edits do not autosave over
-your original judgment.
+All answers appear on one comparison screen, with human and model labels,
+reasoning, evidence, failures and unresolved differences. Agreements need no
+action. **Select all differences** and **Keep selected judgments** apply one
+required human explanation to the chosen cases. Every keep uses the saved
+revision and exact pending check set, records its actor and explanation, and
+preserves the original judgment fields. If a selected case changed meanwhile,
+other successful keeps remain saved and the conflict is shown without overwriting
+newer work. Remaining cases must be selected again after reviewing current labels.
 
-Opening results, continuing, or viewing a preview makes no model calls. Cached
-assessments can be read in sequence without repeating them. The assessment count
-is separate from the number of first human judgments. Once all current checks are complete and no
-differences remain, the main action becomes **Preview dataset version**. Checks
-remain optional: the list also explains how to continue manual approval when
-provider access is unavailable. Approval still blocks running checks and pending
-differences for included cases.
+Use **Change or inspect judgment** for a particular case when needed. Saving a
+revision or resolution returns directly to that case's row in the combined
+comparison. Ordinary case edits and individual check tools remain available;
+they are secondary to the batch flow. First-review counts remain counts of
+unique human-reviewed answers, separate from completed model assessments.
+
+The worker continues when you leave the page and pauses after 30 minutes or an
+explicit pause. Results are saved per case. Resume reuses completed assessments;
+retrying failed or interrupted assessments requires an explicit choice and retains
+each check's two-attempt limit. A four-minute renewable worker lease prevents
+competing batches from overwriting progress; an interrupted process can be
+recovered after its lease expires. Provider failures remain unknown, never absent,
+and every selected case remains accounted for. Missing provider access still
+allows viewing saved results and continuing manual review.
+
+One admission ceiling covers the selected check operations, including their
+previous recorded usage and resumes, alongside the existing per-check and daily
+limits. Actual settled charges can exceed reservations; this is not a hard
+provider billing ceiling. Opening an offer, progress or comparison never starts
+additional calls. All new calls follow the explicit batch start or retry action.
+
+The assessor receives the complete saved question/answer, intended brand,
+competitors and rubric with imported and human labels, notes and evidence quotes
+removed. It uses production grading transport and normalization. This is label
+independence, not statistical independence from the model that produced the old
+proposal. A human still owns each label; model agreement does not add another
+human review.
 
 Results are cached by immutable evidence, rubric, model, transport and evaluator
 source digest. The check's fixed admission budget covers HTTP retries and an
@@ -169,8 +180,9 @@ checks and never become absent predictions. Failed checks do not invent disputes
 
 Differences in verdict, top pick, namesake-only or tone, and missing/invalid model
 quotes, are grouped under the case. **Resolve check differences** shows the model
-assessment beside your saved judgment. **Keep my saved judgment and next** preserves its
-fields; **Save revised judgment and next** validates your edited fields.
+assessment beside your saved judgment. **Keep selected judgments** preserves their
+fields; saving a revised judgment validates its edited fields. Individual
+resolution controls use the same rules.
 Both require a resolution explanation. Resolution edits do not autosave over the
 saved human decision. A new check arriving meanwhile requires reloading before
 resolving it. You can instead leave the case unresolved. Existing approved versions
@@ -295,7 +307,7 @@ replacement for the repository's real-provider golden test. The existing golden
 CI corpus still needs explicitly approved human labels before that gate can
 represent this reviewed benchmark.
 
-The workbench uses database schema 18. Opening an existing database
+The workbench uses database schema 19. Opening an existing database
 backs it up before migration; older binaries refuse newer schemas. Rollback
 requires the pre-migration backup, not merely the older binary. Evaluation tables
 are private operational data; a read-only copy is not a redaction of its database.

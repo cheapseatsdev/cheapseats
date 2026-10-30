@@ -385,6 +385,61 @@ func TestIndependentChecksUpgradeKeepsApprovedDatasetAndProductionSnapshot(t *te
 	}
 }
 
+func TestCheckBatchUpgradePreservesExistingAssessmentAndComparison(t *testing.T) {
+	data := t.TempDir()
+	old, err := store.OpenAt(data, 18)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, query := range []string{
+		`INSERT INTO evaluation_cases VALUES ('case','{"answer":"Original answer"}','now')`,
+		`INSERT INTO evaluation_rubrics VALUES ('rubric','original rules','now')`,
+		`INSERT INTO evaluation_events VALUES ('case',3,'judgment','{"verdict":"absent"}','reviewer','rubric','now')`,
+		`INSERT INTO evaluation_checks(id,case_id,plan,state,result,actor,created_at,updated_at) VALUES ('check','case','{"id":"check"}','done','{"verdict":"mentioned"}','operator','now','now')`,
+		`INSERT INTO evaluation_resolutions VALUES ('check',3,'case','keep','The intended brand is absent.','reviewer','now')`,
+		`INSERT INTO evaluation_imports VALUES ('import','test','digest','now')`,
+		`INSERT INTO evaluation_reviews VALUES ('case',3,'reviewed','{"verdict":"absent"}','reviewer','now')`,
+		`INSERT INTO evaluation_datasets VALUES ('dataset','import','{}','reviewer','now')`,
+		`INSERT INTO evaluation_experiments VALUES ('experiment','dataset','{"id":"experiment"}','reviewer','now')`,
+	} {
+		if _, err := old.Exec(query); err != nil {
+			t.Fatal(err)
+		}
+	}
+	old.Close()
+	db, err := store.Open(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	var result, explanation, plan, judgment string
+	if err := db.QueryRow(`SELECT result FROM evaluation_checks WHERE id='check'`).Scan(&result); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow(`SELECT explanation FROM evaluation_resolutions WHERE check_id='check'`).Scan(&explanation); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow(`SELECT plan FROM evaluation_experiments WHERE id='experiment'`).Scan(&plan); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow(`SELECT judgment FROM evaluation_reviews WHERE case_id='case' AND revision=3 AND state='reviewed'`).Scan(&judgment); err != nil {
+		t.Fatal(err)
+	}
+	if judgment != `{"verdict":"absent"}` {
+		t.Fatal("batch migration changed human judgment")
+	}
+	if result != `{"verdict":"mentioned"}` || explanation != "The intended brand is absent." || plan != `{"id":"experiment"}` {
+		t.Fatal("batch migration changed saved assessments or comparisons")
+	}
+	if _, err := os.Stat(filepath.Join(data, "cheapseats.db.bak-v18")); err != nil {
+		t.Fatal(err)
+	}
+	if older, err := store.OpenAt(data, 18); err == nil {
+		older.Close()
+		t.Fatal("older writer opened batch schema")
+	}
+}
+
 func TestComparisonUpgradePreservesCheckAndResolutionEvidence(t *testing.T) {
 	data := t.TempDir()
 	old, err := store.OpenAt(data, 17)

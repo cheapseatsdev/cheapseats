@@ -4,6 +4,9 @@
 <h1>Check saved judgments</h1>
 <p class="sub">Your reviews are saved. Compare a separate model assessment with your judgment, then decide any differences yourself.</p>
 {{if not .Import}}<section class="card"><h2>Start with saved answers</h2><p>Import evidence and save your own judgments before running checks.</p><a class="btn" href="/evaluation">Go to Evaluation</a></section>{{else}}
+{{with .BatchOffer}}{{template "evaluation-batch-offer" .}}{{end}}
+{{if .Batches}}<details open><summary>Saved batch comparisons</summary>{{range .Batches}}<p><a href="/evaluation/check-batches/{{.Plan.ID}}">Compare all {{len .Plan.Cases}} independent checks</a></p>{{end}}</details>{{end}}
+<details><summary>Individual check tools</summary>
 <section class="card"><h2>What to do next</h2>
 {{if .Flow.Eligible}}
 <p>{{.Flow.Done}} / {{.Flow.Eligible}} saved judgments have a completed check for the current grader. {{.Flow.Unchecked}} not checked · {{.Flow.Failed}} failed · {{.Flow.Running}} running. {{.Flow.Pending}} cases need your decision about differences.</p>
@@ -19,4 +22,4 @@
 <section class="card"><h2>After checking: approve a dataset version</h2><p>A dataset version is a frozen set of answers and your expected grades. It lets us test candidate prompts against the same reference. Approval does not change production grading.</p><p>Checks are optional. If provider access is unavailable, you can continue manual review and preview a version. Running checks and unresolved check differences must be settled before those cases can be included. Every excluded case still needs an explicit reason.</p>
 {{if .Flow.NextURL}}<form method="post" action="/evaluation/datasets/prepare"><input type="hidden" name="import" value="{{.Import.ID}}"><button class="ghost">Preview dataset version</button></form>{{else if not .Flow.Eligible}}<p><a href="/evaluation?import={{.Import.ID}}">Return to review queue</a></p>{{end}}
 <p>After approval, choose <b>Create a grader comparison</b> on the version page. Candidate prompts are measured against your saved expectations; results do not deploy a change.</p></section>
-{{end}}{{end}}
+</details>{{end}}{{end}}
