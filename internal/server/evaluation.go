@@ -61,12 +61,13 @@ type evaluationHome struct {
 	Resume                       *evaluation.Session
 	ResumePosition               int
 	Error                        string
+	ReviewFinished               bool
 	Datasets                     []evaluation.Dataset
 }
 
 func (s *Server) evaluationHomeData(r *http.Request) (evaluationHome, error) {
 	w := s.evaluationStore()
-	d := evaluationHome{Rows: []evaluationRow{}}
+	d := evaluationHome{Rows: []evaluationRow{}, ReviewFinished: r.URL.Query().Get("review") == "finished"}
 	var err error
 	d.Imports, err = w.Imports(r.Context())
 	if err != nil || len(d.Imports) == 0 {
@@ -354,11 +355,28 @@ func (s *Server) evaluationSave(w http.ResponseWriter, r *http.Request) {
 	}
 	action := r.FormValue("action")
 	kind := action
+	continueReview := session == nil && (action == "judgment-next" || action == "unresolved-next" || action == "continue-review")
+	if continueReview {
+		// A queue continuation belongs to the import shown on this form.
+		imported, e := wb.Import(r.Context(), r.FormValue("import"))
+		found := false
+		for _, row := range imported.Rows {
+			found = found || row.CaseID == id
+		}
+		if e != nil || !found {
+			err = errors.New("reload this answer from its review queue before continuing")
+		}
+	}
+	if action == "judgment-next" {
+		kind = "judgment"
+	} else if action == "unresolved-next" {
+		kind = "unresolved"
+	}
 	if action == "end" {
 		kind = "draft"
 	}
 	saved := false
-	if action == "next" {
+	if err == nil && (action == "next" || action == "continue-review") {
 		c, e := wb.Case(r.Context(), id)
 		if e != nil {
 			err = e
@@ -367,7 +385,7 @@ func (s *Server) evaluationSave(w http.ResponseWriter, r *http.Request) {
 		} else {
 			saved = true
 		}
-	} else {
+	} else if err == nil {
 		var review evaluation.Review
 		if action == "resolve-keep" || action == "resolve-change" {
 			resolution := evaluation.Resolution{Checks: r.Form["check"], Action: strings.TrimPrefix(action, "resolve-"), Explanation: r.FormValue("resolution_note")}
@@ -383,6 +401,14 @@ func (s *Server) evaluationSave(w http.ResponseWriter, r *http.Request) {
 	if err == nil && session != nil {
 		err = wb.Advance(r.Context(), session.ID, actor, id, session.Cursor, action == "end")
 	}
+	if err == nil && continueReview {
+		var target string
+		target, err = s.evaluationNextReview(r, r.FormValue("import"), id)
+		if err == nil {
+			http.Redirect(w, r, target, http.StatusSeeOther)
+			return
+		}
+	}
 	if err != nil {
 		d, loadErr := s.evaluationCaseData(r, id, session)
 		if loadErr != nil {
@@ -392,6 +418,9 @@ func (s *Server) evaluationSave(w http.ResponseWriter, r *http.Request) {
 		// Retain typed fields on failure. Keep a stale revision stale: silently
 		// replacing it would let a retry overwrite another tab's saved work.
 		d.Judgment, d.Revision, d.Error, d.Saved = j, revision, err.Error(), saved
+		if session == nil {
+			d.ImportID = r.FormValue("import")
+		}
 		d.Resolution = r.FormValue("resolving") == "1"
 		d.ResolutionNote = r.FormValue("resolution_note")
 		if d.Resolution {

@@ -1,11 +1,31 @@
 package server
 
 import (
+	"errors"
 	"net/http"
 	"net/url"
 
 	"github.com/cheapseatsdev/cheapseats/internal/evaluation"
 )
+
+// Called only after an explicit save/continue POST. Rejoining an active session
+// must acknowledge the just-saved case if it is still the session's current item.
+func (s *Server) evaluationNextReview(r *http.Request, importID, caseID string) (string, error) {
+	wb, actor := s.evaluationStore(), s.evaluationActor(r)
+	session, err := wb.Start(r.Context(), importID, actor, "first")
+	if errors.Is(err, evaluation.ErrNoReviewCases) {
+		return "/evaluation?" + url.Values{"import": {importID}, "review": {"finished"}}.Encode(), nil
+	}
+	if err != nil {
+		return "", err
+	}
+	if session.Cursor < len(session.CaseIDs) && session.CaseIDs[session.Cursor] == caseID {
+		if err := wb.Advance(r.Context(), session.ID, actor, caseID, session.Cursor, false); err != nil {
+			return "", err
+		}
+	}
+	return "/evaluation/sessions/" + session.ID + "?advanced=1", nil
+}
 
 type evaluationCheckRow struct {
 	ID, Prompt, Status, Action, URL string

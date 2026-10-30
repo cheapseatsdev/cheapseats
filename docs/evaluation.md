@@ -83,6 +83,15 @@ unrelated namesake, quote the wording that supports that interpretation. The
 unfinished-review reason and note are required only for **Leave unresolved**;
 leave the reason blank when you can finish the judgment.
 
+Opening **Review answer** from the queue also offers **Save and next** as the
+primary action. It saves the current judgment, then starts or resumes a short
+session in the same evidence import. If that session is still on the just-saved
+answer, continuing acknowledges it and advances once. **Save and stay** keeps the
+individual answer open for editing. **Leave unresolved and next** records the
+unfinished decision before continuing. If no eligible first-review cases remain,
+the overview confirms the save and shows the next available actions. This uses
+the same development/held-out selection rules as starting a session normally.
+
 Drafts autosave without advancing the queue. **Save and next** commits a validated
 judgment; **Leave unresolved** needs an issue and explanation; **End session** saves
 the unfinished draft and resumes at the same case. Failed or stale saves preserve
