@@ -41,6 +41,7 @@ func (s *Server) evaluationRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /evaluation/cases/{id}", s.evaluationCase)
 	mux.HandleFunc("POST /evaluation/cases/{id}", s.evaluationSave)
 	mux.HandleFunc("POST /api/evaluation/cases/{id}/draft", s.evaluationDraft)
+	s.evaluationDatasetRoutes(mux)
 }
 
 type evaluationRow struct {
@@ -55,6 +56,7 @@ type evaluationHome struct {
 	Resume                       *evaluation.Session
 	ResumePosition               int
 	Error                        string
+	Datasets                     []evaluation.Dataset
 }
 
 func (s *Server) evaluationHomeData(r *http.Request) (evaluationHome, error) {
@@ -74,6 +76,10 @@ func (s *Server) evaluationHomeData(r *http.Request) (evaluationHome, error) {
 		return d, err
 	}
 	d.Import = &a
+	d.Datasets, err = w.Datasets(r.Context(), id)
+	if err != nil {
+		return d, err
+	}
 	cs, err := w.ImportCases(r.Context(), id)
 	if err != nil {
 		return d, err

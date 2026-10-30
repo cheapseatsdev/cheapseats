@@ -15,6 +15,8 @@
 {{if and (or .Unresolved .Drafts) (not .Resume)}}<form method="post" action="/evaluation/sessions"><input type="hidden" name="import" value="{{.Import.ID}}"><input type="hidden" name="queue" value="attention"><button class="ghost">Review unresolved cases and drafts</button></form>{{end}}
 </section>
 <h2>Review queue</h2>
+<form method="post" action="/evaluation/datasets/prepare"><input type="hidden" name="import" value="{{.Import.ID}}"><button class="ghost">Preview dataset version</button></form>
+{{if .Datasets}}<details><summary>Approved dataset versions · {{len .Datasets}}</summary>{{range .Datasets}}<p><a href="/evaluation/datasets/{{.ID}}">{{.Name}}</a> · {{len .Members}} / {{.TotalCases}} cases · {{.CreatedAt}}</p>{{end}}</details>{{end}}
 <div class="scroll"><table><thead><tr><th>Buyer question</th><th>Source</th><th>Review state</th><th></th></tr></thead><tbody>{{range .Rows}}<tr><td>{{.Prompt}}<br><span class="muted small">{{.Set}}</span></td><td>{{.Answerer}} {{.Track}}</td><td>{{.State}}</td><td><a href="/evaluation/cases/{{.ID}}?import={{$d.Import.ID}}">Review answer</a></td></tr>{{end}}</tbody></table></div>
 {{if .Import.Blocked}}<details><summary>Blocked rows · {{.Import.Blocked}}</summary><p>Repair the source and import it as new evidence, or record an explicit exclusion when approving a dataset. These rows do not silently disappear.</p>{{range .Import.Rows}}{{if .Error}}<p class="err">Line {{.Line}}: {{.Error}}</p>{{end}}{{end}}</details>{{end}}
 <details><summary>Import accounting</summary><p>{{len .Import.Rows}} nonblank rows: {{.Import.Cases}} unique valid cases, {{.Import.Duplicate}} duplicate rows, {{.Import.Blocked}} blocked rows.</p><p class="mono small">{{.Import.ID}}</p></details>

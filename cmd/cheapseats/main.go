@@ -73,6 +73,8 @@ const usage = `cheapseats: how AI assistants answer your buyers' questions.
                                          grader's golden set, for a human to label (docs/grading.md)
   cheapseats evaluation import [file.jsonl] import saved review evidence (the bundled fixtures
                                          when no file is supplied); no provider calls
+  cheapseats evaluation export <dataset-id> <new-file.jsonl>
+                                         export frozen human labels without overwriting a file
 
 Config: CHEAPSEATS_CONFIG, else the example in examples/cheapseats-config; prompt sets beside it,
 data in ./data (CHEAPSEATS_DATA_DIR). Secrets from the environment or .env: ANTHROPIC_API_KEY

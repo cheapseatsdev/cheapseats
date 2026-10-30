@@ -142,6 +142,23 @@ func (w *Workbench) ImportCases(ctx context.Context, id string) ([]Case, error) 
 }
 
 func (w *Workbench) Grouping(ctx context.Context, importID string) (Grouping, error) {
+	g, err := w.StoredGrouping(ctx, importID)
+	if err == nil || !errors.Is(err, sql.ErrNoRows) {
+		return g, err
+	}
+	cs, err := w.ImportCases(ctx, importID)
+	if err != nil {
+		return Grouping{}, err
+	}
+	g = grouping(cs)
+	b, _ := json.Marshal(g)
+	if _, err := w.DB.ExecContext(ctx, `INSERT OR IGNORE INTO evaluation_groupings VALUES (?,?,?,?)`, importID, GroupingMethod, string(b), store.Now()); err != nil {
+		return Grouping{}, err
+	}
+	return w.StoredGrouping(ctx, importID)
+}
+
+func (w *Workbench) StoredGrouping(ctx context.Context, importID string) (Grouping, error) {
 	var raw string
 	err := w.DB.QueryRowContext(ctx, `SELECT plan FROM evaluation_groupings WHERE import_id=?`, importID).Scan(&raw)
 	if err == nil {
@@ -149,19 +166,7 @@ func (w *Workbench) Grouping(ctx context.Context, importID string) (Grouping, er
 		err := json.Unmarshal([]byte(raw), &g)
 		return g, err
 	}
-	if !errors.Is(err, sql.ErrNoRows) {
-		return Grouping{}, err
-	}
-	cs, err := w.ImportCases(ctx, importID)
-	if err != nil {
-		return Grouping{}, err
-	}
-	g := grouping(cs)
-	b, _ := json.Marshal(g)
-	if _, err := w.DB.ExecContext(ctx, `INSERT OR IGNORE INTO evaluation_groupings VALUES (?,?,?,?)`, importID, GroupingMethod, string(b), store.Now()); err != nil {
-		return Grouping{}, err
-	}
-	return w.Grouping(ctx, importID)
+	return Grouping{}, err
 }
 
 type Session struct {

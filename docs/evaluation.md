@@ -4,6 +4,26 @@ Evaluation keeps saved answer evidence, imported model labels and explicit human
 decisions separate from production runs. Importing records and reviewing them
 does not contact a model or change historical grades.
 
+## Try the review workflow locally
+
+From the app checkout, use a separate test database and the example config,
+whose daily schedule is disabled:
+
+```sh
+CHEAPSEATS_EVALUATION=1 \
+CHEAPSEATS_CONFIG="$PWD/examples/cheapseats-config/cheapseats.toml" \
+CHEAPSEATS_DATA_DIR="$(mktemp -d)" \
+go run ./cmd/cheapseats serve -addr 127.0.0.1:3000
+```
+
+Open `http://127.0.0.1:3000/evaluation`, import the saved review records and start
+a short session. Try saving a judgment, leaving a case unresolved, and ending and
+resuming a draft. Then return to the queue to preview and approve a dataset
+version. Give an exclusion reason for every case you have not finished reviewing.
+The version page downloads the approved JSONL and full manifest. This workflow
+needs no provider keys and makes no model calls. Use the temporary database only
+for testing; it does not change your normal dashboard's data.
+
 ## Import saved evidence
 
 ```sh
@@ -52,6 +72,14 @@ grading rules. The imported model verdict, supporting quote and note are omitted
 from the first-review response entirely. They become available for comparison
 only after an explicit human judgment. A draft never unlocks that comparison.
 
+Hover over a field for a short explanation, or open its help disclosure with a
+click, tap or keyboard. Evidence guidance follows the selected verdict and
+absence reason. For no reference to the intended brand, leave supporting passages
+blank and confirm that you read the complete answer. For an echoed name or an
+unrelated namesake, quote the wording that supports that interpretation. The
+unfinished-review reason and note are required only for **Leave unresolved**;
+leave the reason blank when you can finish the judgment.
+
 Drafts autosave without advancing the queue. **Save and next** commits a validated
 judgment; **Leave unresolved** needs an issue and explanation; **End session** saves
 the unfinished draft and resumes at the same case. Failed or stale saves preserve
@@ -67,7 +95,47 @@ development or held-out partitions. The first pilot draws only development
 cases; later review can annotate either partition. Held-out evidence must not
 inform candidate prompt tuning. The queue does not select on proposed verdicts.
 
-The workbench uses database schema 15. Opening an existing database
+## Approve and export a version
+
+**Preview dataset version** shows the exact included cases, excluded cases,
+blocked rows, current label revisions and grouped partition assignments. Each
+omitted unique case and blocked row needs an explicit exclusion reason. Duplicate
+rows remain accounted for without creating another scored member. Only a current,
+committed, complete judgment under the current rubric can be included. Approval
+records the approving reviewer separately from each label's reviewer.
+
+An approved version freezes membership, full evidence and identity, core labels,
+all supporting passages, label revisions, provenance, exact rules and partitions.
+Changing a current review does not edit an approved version. Approve a new version
+after resolving a changed label; existing comparison reports keep their original
+denominator. These labels are explicitly single human reviews, not independently
+adjudicated decisions.
+
+Export from the version page or with:
+
+```sh
+cheapseats evaluation export <dataset-id> approved.jsonl
+```
+
+The command creates a new private file and refuses to overwrite an existing one.
+The JSONL follows the existing golden contract: original IDs and exact answer text,
+`labeled_by = "human"` only for committed human decisions, the human explanation
+in `note`, and the first human supporting passage in `evidence`. Download the full
+manifest to retain all passages, exclusions and grouped partitions. The legacy
+golden reader uses answer-only IDs and cannot represent one answer in two contexts;
+approval refuses that collision rather than silently dropping a context or changing
+IDs. Use separate dataset versions until a richer runner contract is introduced.
+
+Dataset diagnostics include always-absent and lexical-presence baselines, class
+counts, reference/prediction/correct denominators and missing results. A missing
+prediction is never absent and is never dropped. Zero recall for a represented
+non-absent verdict, positive top pick or namesake-only class fails the critical
+class check. Fewer than two reference cases in any core class is insufficient
+coverage; two is a floor, not a statistical reliability claim. No diagnostic can
+grant release acceptance. In particular, 74/80 agreement from always predicting
+absent cannot pass behind the old 92.5% aggregate threshold.
+
+The workbench uses database schema 16. Opening an existing database
 backs it up before migration; older binaries refuse newer schemas. Rollback
 requires the pre-migration backup, not merely the older binary. Evaluation tables
 are private operational data; a read-only copy is not a redaction of its database.

@@ -1,0 +1,14 @@
+{{define "title"}}Approve dataset version · Evaluation · {{end}}{{define "body"}}
+<p><a href="/evaluation?import={{.Import.ID}}">← Evaluation</a></p>
+<h1>Approve dataset version</h1>
+<p class="sub">Freeze exact evidence, human label revisions, review provenance and grouped partitions. Approval makes no model calls and changes no production grades.</p>
+{{with .Error}}<p class="err" role="alert">{{.}}</p>{{end}}
+<section class="card"><h2>Account for this import</h2><p>{{.Import.Cases}} unique cases, {{.Import.Duplicate}} duplicate rows and {{.Import.Blocked}} blocked rows. Every omitted case or blocked row needs its own exclusion reason.</p><p>Only committed, resolved judgments under the current rules can be included. Drafts, incomplete evidence and unresolved decisions cannot be approved. Included labels are single human reviews; model agreement does not add another human.</p><p class="muted small">Grouping: {{.Grouping}}. Whole groups keep their partition. This sample does not estimate production prevalence. The legacy export contract cannot contain the same answer-only ID in two contexts.</p></section>
+<form method="post" action="/evaluation/datasets">
+<input type="hidden" name="import" value="{{.Import.ID}}">
+<label for="dataset-name">Version name</label><input id="dataset-name" name="name" maxlength="160" required value="{{.Name}}">
+<div class="scroll"><table><thead><tr><th>Include</th><th>Case and review</th><th>Partition</th><th>Reason if excluded</th></tr></thead><tbody>
+{{range .Rows}}<tr><td>{{if ne .State "blocked"}}<label><input type="checkbox" name="member" value="{{.ID}}"{{if .Included}} checked{{end}}> Include<span class="sr"> {{.Prompt}}</span></label><input type="hidden" name="revision_{{.ID}}" value="{{.Revision}}">{{else}}blocked{{end}}</td><td>{{.Prompt}}<br><span class="muted small">{{.State}} · revision {{.Revision}}</span>{{if ne .State "blocked"}}<br><a href="/evaluation/cases/{{.ID}}">Open review</a>{{end}}</td><td>{{.Partition}}<br><span class="mono small">{{short .GroupID}}</span></td><td><label for="exclude-{{.ID}}" class="sr">Exclusion reason for {{.Prompt}}</label><textarea id="exclude-{{.ID}}" name="exclude_{{.ID}}" maxlength="1000" rows="2">{{.Exclusion}}</textarea></td></tr>{{end}}
+</tbody></table></div>
+<p>Approving creates an immutable version. Later label changes require another version and do not rewrite this one.</p><button>Approve dataset version</button>
+</form>{{end}}
