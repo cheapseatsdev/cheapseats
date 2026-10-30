@@ -134,7 +134,22 @@ func (s *Server) mcpHandler() http.Handler {
 			}
 			return nil, fmt.Errorf("run %s has no result %d", a.Run, a.Result)
 		})
-	addTool(srv, "get_quick_wins", "The ranked fixes from the latest run of every prompt set, fastest ranking gain first, each with a ready-to-paste prompt for Claude Code, its status (open, proposed or accepted; dismissed fixes only when asked for) and the work submitted for it or earlier for the same page. A page that several sets' lists ask for is one card, with the other sets' fixes under also_in (each with the run_id and rank mark_fix takes).",
+	addTool(srv, "get_next_steps", "Next steps from each set's latest analysis, separated into verified actions, read-only investigations and market findings. Only actions include implementation prompts. Legacy suggestions without recorded verification remain investigations. Respect the brand's chosen scope: an intentional limitation may need no change. Use kind to focus on one category, and brief to omit action handoffs. Free; uses stored analysis.",
+		func(ctx context.Context, a struct {
+			Set      string `json:"set,omitempty" jsonschema:"only this prompt set"`
+			Kind     string `json:"kind,omitempty" jsonschema:"actions, investigations, market_findings, or empty for all"`
+			Status   string `json:"status,omitempty" jsonschema:"action work status: open, proposed, accepted or dismissed"`
+			Priority string `json:"priority,omitempty" jsonschema:"action priority: urgent, high, medium or low"`
+			Limit    int    `json:"limit,omitempty" jsonschema:"maximum items per category"`
+			Brief    bool   `json:"brief,omitempty" jsonschema:"omit action implementation prompts"`
+		}) (any, error) {
+			steps, err := s.App.NextSteps(ctx)
+			if err != nil {
+				return nil, err
+			}
+			return s.selectNextSteps(steps, app.QuickWinFilter{Set: a.Set, Status: a.Status, Priority: a.Priority}, a.Kind, a.Limit, a.Brief), nil
+		})
+	addTool(srv, "get_quick_wins", "Compatibility view of verified actions only, from the latest analysis of every prompt set. Use get_next_steps for investigations and market findings. Each action has a ready-to-paste prompt for Claude Code, its status (open, proposed or accepted; dismissed fixes only when asked for) and the work submitted for it or earlier for the same page. A page that several sets' lists ask for is one card, with the other sets' fixes under also_in (each with the run_id and rank mark_fix takes).",
 		func(ctx context.Context, a struct {
 			Gap      string `json:"gap,omitempty" jsonschema:"documentation, positioning, third-party or product"`
 			Set      string `json:"set,omitempty" jsonschema:"only fixes from this prompt set"`
@@ -152,15 +167,9 @@ func (s *Server) mcpHandler() http.Handler {
 			if a.Limit > 0 && len(out) > a.Limit {
 				out = out[:a.Limit]
 			}
-			if a.Brief {
-				for i := range out {
-					out[i].ClaudePrompt = ""
-					out[i].Attempts, out[i].Earlier = briefAttempts(out[i].Attempts), briefAttempts(out[i].Earlier)
-				}
-			}
-			return out, nil
+			return actionHandoffs(out, a.Brief), nil
 		})
-	addTool(srv, "mark_fix", "Record work submitted for a fix: the commit or pull request, as proposed (open PR) or accepted (merged). The fix then leaves the open quick wins; a later fix for the same page stays open and shows this attempt and its outcome. Or dismiss a fix the team won't do: state dismissed, no url, and the reason as the note. The analyst is told every dismissal's reason and stops proposing fixes that rest on it.",
+	addTool(srv, "mark_fix", "Record work submitted for a fix: the commit or pull request, as proposed (open PR) or accepted (merged). The fix then leaves the open actions; a later fix for the same page stays open and shows this attempt and its outcome. Or dismiss a fix the team won't do: state dismissed, no url, and the reason as the note. The analyst is told every dismissal's reason and stops proposing fixes that rest on it.",
 		func(ctx context.Context, a struct {
 			Run   string `json:"run" jsonschema:"the run the fix is from (run_id on a quick win)"`
 			Rank  int    `json:"rank" jsonschema:"the fix's rank in that run"`
@@ -242,7 +251,7 @@ func (s *Server) mcpHandler() http.Handler {
 			}
 			return stabilityDigest(cs), nil
 		})
-	addTool(srv, "suggest_prompts", "Draft new buyer questions for a prompt set, across funnel stages, as a TOML snippet in the set file's format, with repeats of existing prompts dropped. Costs one analyst model call (nothing on the claude-code provider). Writes nothing: paste the snippet into the set's file by pull request.",
+	addTool(srv, "suggest_prompts", "Draft buyer questions that earn measurement cost, with buyer, learning, decision and repeat-value notes, as a TOML snippet in the set file's format, with repeats of existing prompts dropped. Costs one analyst model call (nothing on the claude-code provider). Writes nothing: paste the snippet into the set's file by pull request.",
 		func(ctx context.Context, a struct {
 			Set string `json:"set" jsonschema:"prompt set id, from list_prompt_sets"`
 			N   int    `json:"n,omitempty" jsonschema:"how many prompts (default 10, max 50)"`
@@ -306,7 +315,7 @@ func (s *Server) mcpHandler() http.Handler {
 		func(ctx context.Context, a runArg) (any, error) {
 			return map[string]bool{"cancelled": s.App.Runs.Cancel(a.Run)}, nil
 		})
-	addTool(srv, "get_search_queries", "The web searches the assistants ran in a run's search-track answers: per prompt how many answers searched and with what queries, the top queries with whether their results reached the brand's sites or named competitors, names the assistants added to searches the prompt didn't have, the words they add, and queries worth adding as prompts (a TOML entry to paste). From stored answers; costs nothing.",
+	addTool(srv, "get_search_queries", "The web searches the assistants ran in a run's search-track answers: per prompt how many answers searched and with what queries, the top queries with whether their results reached the brand's sites or named competitors, names the assistants added to searches the prompt didn't have, the words they add, and research leads needing buyer, decision and intent review before proposing a prompt. From stored answers; costs nothing.",
 		func(ctx context.Context, a struct {
 			Run   string `json:"run" jsonschema:"run id"`
 			Pool  bool   `json:"pool,omitempty" jsonschema:"also read the set's earlier finished runs asked and graded the same way (up to 7 runs)"`
@@ -724,15 +733,17 @@ func runDigest(d *RunData) any {
 		Prospects      []prospect          `json:"prospects,omitempty"`
 		// Cited pages that started or stopped naming the brand or a competitor since the set's
 		// previous citation check, when both runs were checked; /api/runs/{id} has them all.
-		CitedChanges  []audit.PageFlip `json:"cited_page_changes,omitempty"`
-		Uncited       []string         `json:"found_not_cited"`
-		Pages         []report.Page    `json:"top_pages"`
-		Fixes         []analysis.Fix   `json:"fixes"` // without claude_prompt: get_quick_wins has it
-		Insights      string           `json:"insights"`
-		Opinion       opinion.Report   `json:"opinion"`
-		SecondOpinion *app.Agreement   `json:"second_opinion,omitempty"`
-		Misstatements *app.FactReport  `json:"misstatements,omitempty"` // the fact check, when the run was checked
-		Prompts       []prompt         `json:"prompts"`
+		CitedChanges   []audit.PageFlip        `json:"cited_page_changes,omitempty"`
+		Uncited        []string                `json:"found_not_cited"`
+		Pages          []report.Page           `json:"top_pages"`
+		Fixes          []analysis.Fix          `json:"fixes"` // compatibility: verified actions, without implementation prompts
+		Investigations []app.NextInvestigation `json:"investigations"`
+		MarketFindings []app.NextFinding       `json:"market_findings"`
+		Insights       string                  `json:"insights"`
+		Opinion        opinion.Report          `json:"opinion"`
+		SecondOpinion  *app.Agreement          `json:"second_opinion,omitempty"`
+		Misstatements  *app.FactReport         `json:"misstatements,omitempty"` // the fact check, when the run was checked
+		Prompts        []prompt                `json:"prompts"`
 		// The neutral retrieval baseline's host table, present only when [exa] searched the run's
 		// prompts: per host, the prompts a neutral index ranks it for against the prompts the
 		// assistants found it for, and the reading (content, query, both).
@@ -740,7 +751,7 @@ func runDigest(d *RunData) any {
 
 		Opportunities []report.Opportunity `json:"opportunities"`
 	}{&r, sum.Overall, sum.Slices, sum.Unbranded, sum.BrandedPrompts, sum.BrandRank(), voice, head(sum.HeadToHead, 10), objections,
-		sum.Classes, sum.PageTypes, head(sum.Hosts, 10), head(sum.Outreach, 10), prospects, head(d.CitedChanges, 10), uncited, pages, fixes, d.Insights, op, second, d.Misstatements, prompts, neutral, head(sum.Opportunities, 10)}
+		sum.Classes, sum.PageTypes, head(sum.Hosts, 10), head(sum.Outreach, 10), prospects, head(d.CitedChanges, 10), uncited, pages, fixes, d.Investigations, d.MarketFindings, d.Insights, op, second, d.Misstatements, prompts, neutral, head(sum.Opportunities, 10)}
 }
 
 // auditDigest is audit_sites' answer: each site in a line or two, and the findings without info

@@ -4,6 +4,13 @@ Prompt review finds flat, noisy, off-target, duplicate and branded questions, se
 and coverage gaps. It uses stored results, grades, searches and citations without model calls;
 Jev judgments and proposed edits are optional calls. Review monthly. No review runs on a schedule.
 
+Before interpreting the flags, identify the intended buyer, unresolved learning, a concrete decision
+or action, and why another observation earns its cost. Optional `[brand.advisory]` positioning, goals
+and accepted boundaries guide curation and advice; they are not public facts and never change the
+answer prompt or scoring. Category fit or a possible page suggestion does not establish recurring
+value. Preserve relevant losses, and remove questions with no useful learning rather than rewriting
+them until the brand wins.
+
 - Page: `/sets/<id>/review`, linked from the set page. `?days=30` (the default), `60` or `90`.
 - JSON: `GET /api/sets/<id>/review?days=30`, every prompt's numbers.
 - MCP: `review_prompts` (`set`, optional `days`, `suggest`), with counts and the top five of each
@@ -31,13 +38,13 @@ an instruction to make the brand win.
 
 | Flag | Rule | Current generated suggestion |
 |---|---|---|
-| **Flat**, always absent | No answer named the brand, and no fix attempt made in the window moved this prompt's own named or recommended rate beyond its 95% margin. Another prompt in the same fix moving doesn't count. | Either reword or retire an unwinnable question, or keep it as an important gap and work its fixes. |
-| **Flat**, always recommended | Every answer recommended the brand (for an info prompt, named it). | At the ceiling, it only tells you when something breaks: reword it harder, or retire it to save answers. |
-| **Noisy**, drift | For answerer × track cells with two or more samples: a χ² homogeneity test, Σ (h − n·p̂)² / (n·p̂(1−p̂)) over runs, with runs − 1 degrees of freedom per cell, summed over cells, gives **p < 0.01**; between-run variance D has standard deviation at least **15 points**. | Specify who is asking and for what; more samples don't steady drift. |
-| **Noisy**, disagreement | A single answer's within-run variance S is at least **0.20** (answers in one run split about 30/70 or closer) and the per-run sampling error sqrt(S/n) is still at least **15 points**. | Reword it to be more specific, or add samples. |
-| **Off target** | Any of: with 3 or more competitors configured and at least **5** product mentions, under **30%** of them are the brand or a configured competitor; one product that's neither is named in at least **50%** of the answers and more than the brand and every competitor; at least **25%** of the answers are graded as using the brand's name for another product (`other_product`). The top unexpected products are listed with counts. | Add context to the prompt (the category, who is asking), or add the product to the competitors if it is one. |
-| **Duplicate** | Two prompts of the same intent whose answers name nearly the same products, each product weighted by the share of answers naming it (weighted Jaccard, Σmin/Σmax, at least **0.75**), and whose verdict shares (recommended, mentioned, absent) differ by at most **15 points** (total variation). | Merge them to save answers: keep one, retire the other. |
-| **Rewritten by the assistant** | Over at least **5** searches, both from prompt (the share of a search's words in the prompt) and prompt kept (the share of the prompt's words in the search) average under **25%** ([how words are compared](searches.md)). | The assistants search for different words (the top ones it adds are listed); consider phrasing the prompt that way. |
+| **Flat**, always absent | No answer named the brand, and no fix attempt made in the window moved this prompt's own named or recommended rate beyond its 95% margin. Another prompt in the same fix moving doesn't count. | Keep a worthwhile loss; inspect buyer fit, unresolved decisions, actual answers and retrieval before proposing work. Do not narrow it to win. |
+| **Flat**, always recommended | Every answer recommended the brand (for an info prompt, named it). | Keep useful regression anchors; review their decision and cadence instead of automatically making them harder or retiring them. |
+| **Noisy**, drift | For answerer × track cells with two or more samples: a χ² homogeneity test, Σ (h − n·p̂)² / (n·p̂(1−p̂)) over runs, with runs − 1 degrees of freedom per cell, summed over cells, gives **p < 0.01**; between-run variance D has standard deviation at least **15 points**. | Investigate changing answers and retrieval; drift may be the signal being measured. Clarify only genuinely missing buyer context. |
+| **Noisy**, disagreement | A single answer's within-run variance S is at least **0.20** (answers in one run split about 30/70 or closer) and the per-run sampling error sqrt(S/n) is still at least **15 points**. | Inspect disagreement and sampling limits; additional samples must serve an unresolved decision. Preserve the buyer question. |
+| **Off target** | Any of: with 3 or more competitors configured and at least **5** product mentions, under **30%** of them are the brand or a configured competitor; one product that's neither is named in at least **50%** of the answers and more than the brand and every competitor; at least **25%** of the answers are graded as using the brand's name for another product (`other_product`). The top unexpected products are listed with counts. | Inspect real alternatives and buyer fit. Manual workflows and unconfigured products can be legitimate alternatives; do not steer wording toward the configured roster. |
+| **Duplicate** | Two prompts of the same intent whose answers name nearly the same products, each product weighted by the share of answers naming it (weighted Jaccard, Σmin/Σmax, at least **0.75**), and whose verdict shares (recommended, mentioned, absent) differ by at most **15 points** (total variation). | Inspect whether the buyer need and decision are the same before merging; shared products or a shared answer alone do not prove redundancy. |
+| **Rewritten by the assistant** | Over at least **5** searches, both from prompt (the share of a search's words in the prompt) and prompt kept (the share of the prompt's words in the search) average under **25%** ([how words are compared](searches.md)). | Inspect the assistant's query rewriting as retrieval evidence, not buyer demand or a reason to replace the buyer question. |
 | **Branded leak** | Outside `head-to-heads`: the prompt names the brand or an alias as a whole word (`cheapseats check` refuses these, so it's for prompts from before), or at least **2** of its searches and **20%** of them add the brand's name. | Reword it as a buyer who hasn't heard of the brand would ask. For searches, check the prompt doesn't point at the brand (a term only it uses); if not, the assistants found it on their own. |
 
 The noise split matches [sample advice](statistics.md#a-sets-prompts): per cell, S is mean
@@ -70,13 +77,12 @@ without calls.
 
 | Flag | Question | Suggestion |
 |---|---|---|
-| **duplicate** | Over each pair of prompts of the same intent that share a meaningful word: one good answer would serve both. | Merge them to save answers: keep one, retire the other. |
-| **off_target** | Per prompt, with `brand.category` and `brand.audience` in state: the prompt asks about something other than the category. Not asked without `brand.category`: against the product description in `brand.about` it flags every prompt that isn't about this one product. | Add context to the prompt (the category, who is asking), or retire it. |
-| **intent** | Per prompt, a Choice over `selection` (the useful answer points to a category product, including how-to jobs the category serves even when no product was requested) and `info` (an explanation without products); flagged when it reads as the other intent from the one it's set to. | Set or drop `intent = "info"`. |
+| **duplicate** | Over each pair of prompts of the same intent that share a meaningful word: one good answer would serve both. | Inspect whether the buyer need and decision are the same before merging; shared products or a shared answer alone do not prove redundancy. |
+| **off_target** | Per prompt, with `brand.category` and `brand.audience` in state: the prompt asks about something other than the category. Not asked without `brand.category`: against the product description in `brand.about` it flags every prompt that isn't about this one product. | Review genuine buyer/category context. Category fit alone does not justify recurring tracking or adding a product request. |
+| **intent** | Per prompt, a Choice over `selection` (product choice or comparison is required) and `info` (a complete explanation or manual/API workflow can satisfy the question without selecting a product); flagged when it reads as the other configured intent. | Set or drop `intent = "info"`. |
 | **branded** | Per prompt outside `head-to-heads`, with the brand's name, aliases, description and sites in state: the prompt names the brand, a product of its maker or its domain in any spelling ("cheapseats.dev", "cheap-seats"). | Reword it as a buyer who hasn't heard of the brand would ask. |
 
-The current Jev selection criterion is broad: it can treat a category's how-to job as selection
-without an explicit request to choose a product. Review ambiguous cases yourself. Ask whether
+A product being able to do the job does not make a how-to selection. Review ambiguous cases: ask whether
 a complete, useful answer requires choosing, ranking or comparing products. If an explanation
 can fully satisfy the buyer without one, use `intent = "info"`; an optional product example
 does not make the question selection. Correct the label instead of adding a request for a tool
@@ -101,15 +107,13 @@ What the set's answers and searches keep coming back to that no prompt names, at
   searches and the answers citing a page on its site.
 - **Product**: a product named in at least 20% of the answers, in two or more prompts' answers,
   that is neither the brand nor a configured competitor and isn't in any prompt. Comes with a
-  `[[competitors]]` entry as well as a prompt.
+  `[[competitors]]` entry for review, not an automatic buyer question.
 - **Topic**: a word the searches add to their prompt in at least **5** searches across **2** or
   more prompts that no prompt uses, with the most-run search that has it.
 
-Each gap includes a buyer-worded `[[prompts]]` entry with no search operators and an unused id:
-"What are the best alternatives to X?" for products, or the search as a question for topics.
-Review the wording before committing; ids are permanent.
-These are gaps in the observed answer/search coverage, not independent evidence that buyers ask
-the proposed questions. Validate the need and its weighting against buyer research when available.
+Gaps remain research leads with their observed counts and examples. They no longer emit ready-to-paste
+buyer-question TOML. Before proposing a candidate, establish its target buyer, unresolved decision,
+intent and repeat value. Search frequency and a missing term are not independent buyer-demand evidence.
 Keep closed comparisons between other brands outside the scored prompt library: every set
 still grades the configured brand and generates fixes for it, so expected absence is not an
 actionable visibility gap. Open requests for alternatives to a competitor remain useful discovery
@@ -122,9 +126,9 @@ numbers to `[analyst]`, returning a diff against the set's file. Calls use the d
 budget; `claude-code` records $0 API spend on the subscription. Web-derived names and search
 words are fenced as data, quoted on one line and capped at 60 characters.
 
-- **Rewrites** replace a prompt's `text` and keep its `id`, so its history reads on as a reword.
+- **Rewrites** require an explicit `meaning_changed: false` attestation and the unchanged selection/info intent. Missing attestations, material changes and intent-changing rewrites are dropped with reasons. This is an analyst judgment to inspect, not proof of semantic equivalence.
 - **Retirements** are comments: delete the table by hand to stop asking it; the id stays retired.
-- **Additions** are new `[[prompts]]` tables with ids that don't collide with any set's.
+- **Additions** need nonempty `buyer`, `learning`, `decision` and `repeat_value` rationales, including a review/stopping condition. Missing rationales are dropped. The diff preserves the rationale as TOML comments. Zero additions is valid; stages are organizational labels, not coverage quotas.
 
 Keep an id for a wording clarification that preserves the buyer need. A different buying question
 needs a new id, even if a proposed rewrite reused the old one. Assess proposed changes against the
@@ -135,3 +139,10 @@ Proposals are dropped, with reasons, for nonexistent targets, unchanged rewrites
 across sets, search operators, quotes, links, text over 300 characters, brand names outside
 `head-to-heads` or missing brand names inside it. A copy of the edited sets must also pass
 validation. Nothing is written; apply reviewed changes through a config-repo pull request.
+
+New suggestions through `suggest-prompts` and MCP `suggest_prompts` use the same decision gate and
+rationale fields, returning at most the requested count. Neither the existence of rationale text
+nor a model attestation independently validates its truth; inspect evidence and buyer fit before
+activation. These optional authoring calls receive advisory context, which is not sent to answerers. If both
+audience and advisory context are missing, new-question generation returns none with an explanatory
+note and makes no model call; complete the target-buyer context first.

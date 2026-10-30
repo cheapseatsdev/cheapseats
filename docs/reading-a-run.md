@@ -2,8 +2,39 @@
 
 Run reports use stored answers and grades without model calls. The same metrics are in the JSON
 export (`/runs/<id>/export.json`, under `Summary`), `cheapseats report -json <run-id>` and MCP
-`get_run`. MCP keeps top rows and omits the snapshot and fixes' Claude prompts; `get_quick_wins`
-includes those prompts. [Run and result states](states.md).
+`get_run`. MCP keeps top rows and omits the snapshot and implementation prompts; `get_next_steps`
+includes implementation prompts for verified actions. [Run and result states](states.md).
+
+## Next steps
+
+The dashboard's **Next steps** page (`/next-steps`) keeps three tabs together:
+
+- **Actions:** verified, in-scope changes with supporting evidence, completion criteria and an
+  implementation prompt. Existing work status and attempt history remain attached to the action.
+- **Investigations:** bounded read-only checks to resolve a premise, eligibility question or
+  decision before proposing work. Historical suggestions without recorded verification appear
+  here with their prior work status, rather than an implementation prompt.
+- **Market findings:** supported observations about fit, alternatives or tradeoffs. An intentional
+  product boundary can call for no change.
+
+Run reports show the same three categories for that run, including historical reports. When no
+verified action is available, Next steps opens Investigations if any exist. A completion criterion
+is a check of work under the team's control; later model answers and citations remain observations.
+
+`GET /api/next-steps` and MCP `get_next_steps` return `actions`, `investigations` and
+`market_findings` from each set's latest completed analysis. Both accept `set`; `kind` selects
+`actions`, `investigations` or `market_findings`, and `limit` caps each category. `brief=true`
+omits action implementation prompts. Action status and priority filters do not filter findings
+or investigations. The JSON API also accepts the existing action `gap` and `site` filters.
+
+`/quick-wins` remains a route alias. `/api/quick-wins` and MCP `get_quick_wins` remain
+compatibility views of verified actions only. They do not expose unverified historical suggestions
+as ready work. `get_run` and `GET /api/runs/{id}` include investigations and market findings alongside
+verified actions; the existing `fixes` view contains verified actions only.
+
+MCP `get_started` includes the current `advisory` positioning, goals and intentional boundaries
+for deciding what to do next. This context does not alter measured answers or grades. With no open
+verified actions, it points to investigations or market findings and allows a no-action conclusion.
 
 ## Scores
 

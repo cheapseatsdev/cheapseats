@@ -1,7 +1,7 @@
 {{define "title"}}{{end}}{{define "body"}}
 <div class="page-heading">
-  <div><p class="eyebrow">Dashboard / {{brand}}</p><h1>Does AI recommend {{brand}}?</h1><p class="sub">See which buyer questions you win, then decide what to fix.</p></div>
-  <div class="page-actions"><a class="btn" href="/quick-wins">View quick wins →</a></div>
+  <div><p class="eyebrow">Dashboard / {{brand}}</p><h1>Does AI recommend {{brand}}?</h1><p class="sub">See which buyer questions you win, then decide what to do next.</p></div>
+  <div class="page-actions"><a class="btn" href="/next-steps">View next steps →</a></div>
 </div>
 <div class="meta-row">
   <span>{{len .Rows}} prompt sets</span>
@@ -38,12 +38,14 @@
 </section>
 
 <section aria-labelledby="first-fixes">
-<div class="section-heading"><div><h2 id="first-fixes">Fix these first</h2><p class="section-note">The top fixes from each set's latest finished run.</p></div><a href="/quick-wins">All quick wins →</a></div>
+<div class="section-heading"><div><h2 id="first-fixes">Next steps</h2><p class="section-note">Verified actions, open investigations and market findings from the latest analyses.</p></div><a href="/next-steps">All next steps →</a></div>
 {{if .QuickWins}}<div class="fix-list">{{range .QuickWins}}
 <article class="fix-item">
   <div class="fix-title"><a href="/runs/{{.RunID}}#fix-{{.Rank}}">{{.Title}}</a><div class="fix-meta"><span class="mono">{{.Target}}</span><span>{{.Gap}} · {{.SetName}}</span></div></div>
-  <div class="fix-facts"><span class="chip p-{{.Priority}} fix-priority">{{.Priority}}</span><span>Effort {{.Effort}}</span><span>Could flip {{len .Prompts}} {{if eq (len .Prompts) 1}}prompt{{else}}prompts{{end}}</span></div>
+  <div class="fix-facts"><span class="chip p-{{.Priority}} fix-priority">{{.Priority}}</span><span>Effort {{.Effort}}</span><span>Targets {{len .Prompts}} {{if eq (len .Prompts) 1}}prompt{{else}}prompts{{end}}</span></div>
 </article>
-{{end}}</div>{{else}}<p class="muted">Fix lists appear after a run finishes.</p>{{end}}
+{{end}}</div>{{else}}<p class="muted">No verified actions yet. Review the investigations before choosing work.</p>{{end}}
+{{if .Investigations}}<h3>Investigations</h3>{{template "next-investigations" .Investigations}}{{end}}
+{{if .MarketFindings}}<h3>Market findings</h3>{{template "next-findings" .MarketFindings}}{{end}}
 </section>
 {{end}}

@@ -20,7 +20,6 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/cheapseatsdev/cheapseats/internal/analysis"
 	"github.com/cheapseatsdev/cheapseats/internal/app"
 	"github.com/cheapseatsdev/cheapseats/internal/config"
 	"github.com/cheapseatsdev/cheapseats/internal/env"
@@ -48,7 +47,8 @@ const usage = `cheapseats: how AI assistants answer your buyers' questions.
   cheapseats migrate-config [dir]           give every prompt an id (prompt sets from before ids)
   cheapseats run <set-id>                   run one set and wait for it (costs money)
   cheapseats report <run-id> [-json]        rates, share of voice and top pages for a run
-  cheapseats fixes <run-id> [-rebuild]      the run's fix list as markdown
+  cheapseats next-steps <run-id> [-rebuild] actions, investigations and market findings as markdown
+  cheapseats fixes <run-id> [-rebuild]      alias for next-steps
   cheapseats themes <run-id> [-rebuild]     what the run's answers praise and object to, grouped
   cheapseats regrade <set-id|run-id> [-since 28d] [-dry-run=false]
                                          grade stored answers again with today's grader, brand
@@ -340,9 +340,9 @@ func dispatch(ctx context.Context, cmd string, args []string) error {
 			return err
 		}
 		return printReport(a, fs.Arg(0), *js)
-	case "fixes":
+	case "fixes", "next-steps":
 		fs := flag.NewFlagSet("fixes", flag.ExitOnError)
-		rebuild := fs.Bool("rebuild", false, "rebuild the list first (one Opus call)")
+		rebuild := fs.Bool("rebuild", false, "generate and verify next steps first (analyst calls and bounded page checks)")
 		fs.Parse(args)
 		if fs.NArg() != 1 {
 			return errors.New("usage: cheapseats fixes <run-id>")
@@ -365,9 +365,29 @@ func dispatch(ctx context.Context, cmd string, args []string) error {
 			return err
 		}
 		if fe != nil {
-			fmt.Fprintln(os.Stderr, "fix list error:", *fe)
+			fmt.Fprintln(os.Stderr, "next steps analysis error:", *fe)
 		}
-		fmt.Print(analysis.Markdown(r.Snapshot.Set, fx))
+		next, err := a.RunNextSteps(ctx, r.ID)
+		if err != nil {
+			return err
+		}
+		if fx == nil && len(next.Investigations) == 0 && len(next.Findings) == 0 {
+			fmt.Println("No completed Next steps analysis yet.")
+			return nil
+		}
+		fmt.Printf("# Next steps: %s\n\n%d actions · %d investigations · %d market findings\n\n", r.Snapshot.Set.Name, len(next.Actions), len(next.Investigations), len(next.Findings))
+		fmt.Println("## Actions")
+		for _, q := range next.Actions {
+			fmt.Printf("\n- **%s**\n  - Change: %s\n  - Where: %s\n  - Done when: %s\n  - Verification: %s\n", q.Title, q.Claim, q.Target, q.DoneWhen, q.Verification.Summary)
+		}
+		fmt.Println("\n## Investigations")
+		for _, inv := range next.Investigations {
+			fmt.Printf("\n- **%s**\n  - Why: %s\n  - Read-only check: %s\n  - Decision: %s\n", inv.Title, inv.Why, inv.Check, inv.Decision)
+		}
+		fmt.Println("\n## Market findings")
+		for _, f := range next.Findings {
+			fmt.Printf("\n- **%s**: %s\n  - Evidence: %s\n", f.Title, f.Detail, f.Evidence)
+		}
 		return nil
 	case "themes":
 		fs := flag.NewFlagSet("themes", flag.ExitOnError)
@@ -409,6 +429,9 @@ func dispatch(ctx context.Context, cmd string, args []string) error {
 		res, err := a.SuggestPrompts(ctx, fs.Arg(0), *n)
 		if err != nil {
 			return err
+		}
+		if res.Note != "" {
+			fmt.Fprintln(os.Stderr, res.Note)
 		}
 		fmt.Print(res.Snippet)
 		fmt.Fprintf(os.Stderr, "%d prompts for %s (%d dropped as repeats), $%.3f. Paste into its file and open a pull request.\n", len(res.Prompts), fs.Arg(0), res.Dropped, res.CostUSD)

@@ -1,7 +1,7 @@
 // Mark the nav link for the current section.
 for (const a of document.querySelectorAll("header nav a")) {
   const href = a.getAttribute("href");
-  if (href === "/" ? location.pathname === "/" : location.pathname.startsWith(href)) a.setAttribute("aria-current", "page");
+  if (href === "/" ? location.pathname === "/" : (location.pathname.startsWith(href) || (href === "/next-steps" && location.pathname === "/quick-wins"))) a.setAttribute("aria-current", "page");
 }
 
 // The theme: light until the toggle picks another, cycling light, dark, system. The layout's head

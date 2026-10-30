@@ -21,12 +21,12 @@ func TestReviewEdits(t *testing.T) {
 	structuredCLI = func(_ context.Context, model, system, prompt string, schema map[string]any, out any) error {
 		sent = prompt
 		return json.Unmarshal([]byte(`{
-			"rewrites":[{"id":"best-tool","text":"Which AI visibility tool suits a five-person agency?","why":"flat: always absent"},
+			"rewrites":[{"id":"best-tool","text":"Which AI visibility tool should I choose?","why":"same buyer need, clearer product-choice wording","intent":"choice","meaning_changed":false},
 				{"id":"cost","text":"How much does it cost?","why":"same words"},{"id":"gone","text":"x","why":"y"}],
 			"retire":[{"id":"cost","why":"duplicate of best-tool"}],
-			"add":[{"stage":"pricing","text":"Is Cheap Seats cheaper than Profound?","intent":"choice"},
-				{"stage":"comparison","text":"Is Profound legit?","intent":"choice"},
-				{"stage":"implementation","text":"How do I set up an AI visibility tracker?","intent":"info"}]}`), out)
+			"add":[{"stage":"pricing","text":"Is Cheap Seats cheaper than Profound?","intent":"choice","buyer":"a small team choosing its first tracker","learning":"which setup and alternatives fit the team","decision":"choose the starter positioning and onboarding route","repeat_value":"review four weekly observations then stop unless the decision remains open"},
+				{"stage":"comparison","text":"Is Profound legit?","intent":"choice","buyer":"a small team choosing its first tracker","learning":"which setup and alternatives fit the team","decision":"choose the starter positioning and onboarding route","repeat_value":"review four weekly observations then stop unless the decision remains open"},
+				{"stage":"implementation","text":"How do I set up an AI visibility tracker?","intent":"info","buyer":"a small team choosing its first tracker","learning":"which setup and alternatives fit the team","decision":"choose the starter positioning and onboarding route","repeat_value":"review four weekly observations then stop unless the decision remains open"}]}`), out)
 	}
 	cfg := &config.Config{Brand: config.Brand{Name: "Cheap Seats"}, Analyst: config.Model{Model: "opus", Provider: config.ClaudeCode}}
 	set := sets.Set{ID: "tools", Name: "Tools", File: "tools.toml", Prompts: []sets.Prompt{{ID: "best-tool", Text: "Which AI visibility tool is best?"}, {ID: "cost", Text: "How much does it cost?"}}}
@@ -42,7 +42,7 @@ func TestReviewEdits(t *testing.T) {
 	if len(e.Rewrites) != 1 || len(e.Retire) != 1 || len(e.Add) != 1 || e.Dropped != 4 || e.CostUSD != 0 {
 		t.Fatalf("%+v", e)
 	}
-	for _, want := range []string{"--- prompt-sets/tools.toml", " id = \"best-tool\"\n-text = \"Which AI visibility tool is best?\"\n+text = \"Which AI visibility tool suits a five-person agency?\"",
+	for _, want := range []string{"--- prompt-sets/tools.toml", " id = \"best-tool\"\n-text = \"Which AI visibility tool is best?\"\n+text = \"Which AI visibility tool should I choose?\"",
 		"+# Retire cost: duplicate of best-tool.", "+id = \"set-up-ai-visibility-tracker-2\"\n+text = \"How do I set up an AI visibility tracker?\"\n+intent = \"info\""} {
 		if !strings.Contains(e.Diff, want) {
 			t.Errorf("diff lacks %q:\n%s", want, e.Diff)
@@ -64,11 +64,11 @@ func TestReviewEditRules(t *testing.T) {
 				{"id": "vs", "text": `Cheap Seats or Peec AI: which is the "C:\\path" kind of tool?`, "why": "ok"}},
 			"retire": []any{},
 			"add": []map[string]string{
-				{"stage": "pricing", "text": "How much is Profound?", "intent": "choice"},
-				{"stage": "pricing", "text": "Cheap Seats pricing site:cheapseats.dev", "intent": "choice"},
-				{"stage": "pricing", "text": "Is Cheap Seats at https://cheapseats.dev any good?", "intent": "choice"},
-				{"stage": "pricing", "text": long, "intent": "choice"},
-				{"stage": "pricing", "text": "Is Cheap Seats cheaper than Profound?", "intent": "choice"}},
+				{"stage": "pricing", "text": "How much is Profound?", "intent": "choice", "buyer": "a small team choosing its first tracker", "learning": "which setup and alternatives fit the team", "decision": "choose the starter positioning and onboarding route", "repeat_value": "review four weekly observations then stop unless the decision remains open"},
+				{"stage": "pricing", "text": "Cheap Seats pricing site:cheapseats.dev", "intent": "choice", "buyer": "a small team choosing its first tracker", "learning": "which setup and alternatives fit the team", "decision": "choose the starter positioning and onboarding route", "repeat_value": "review four weekly observations then stop unless the decision remains open"},
+				{"stage": "pricing", "text": "Is Cheap Seats at https://cheapseats.dev any good?", "intent": "choice", "buyer": "a small team choosing its first tracker", "learning": "which setup and alternatives fit the team", "decision": "choose the starter positioning and onboarding route", "repeat_value": "review four weekly observations then stop unless the decision remains open"},
+				{"stage": "pricing", "text": long, "intent": "choice", "buyer": "a small team choosing its first tracker", "learning": "which setup and alternatives fit the team", "decision": "choose the starter positioning and onboarding route", "repeat_value": "review four weekly observations then stop unless the decision remains open"},
+				{"stage": "pricing", "text": "Is Cheap Seats cheaper than Profound?", "intent": "choice", "buyer": "a small team choosing its first tracker", "learning": "which setup and alternatives fit the team", "decision": "choose the starter positioning and onboarding route", "repeat_value": "review four weekly observations then stop unless the decision remains open"}},
 		})
 		return json.Unmarshal(b, out)
 	}

@@ -131,7 +131,7 @@ func TestReviewFlags(t *testing.T) {
 	}
 	// The flat prompt reads only its current wording: four runs, the reworded one left out.
 	fl := findings(rev, Flat)
-	if f, ok := fl["flat"]; !ok || f.Variant != "always_absent" || !strings.Contains(f.Numbers, "named in 0 of 24 answers over 4 runs") || !strings.Contains(f.Suggestion, "most important gap") {
+	if f, ok := fl["flat"]; !ok || f.Variant != "always_absent" || !strings.Contains(f.Numbers, "named in 0 of 24 answers over 4 runs") || !strings.Contains(f.Suggestion, "keep this loss") {
 		t.Errorf("flat: %+v", fl)
 	}
 	if p := prompt("flat"); p.Runs != 4 || len(p.Notes) != 1 || !strings.Contains(p.Notes[0], "reworded") {
@@ -151,7 +151,7 @@ func TestReviewFlags(t *testing.T) {
 	// Off target: the answers are about a same-named product.
 	off := findings(rev, OffTarget)
 	if f, ok := off["off"]; !ok || len(f.Products) == 0 || f.Products[0].Name != "Bad Cheap Seats" || f.Products[0].N != 30 ||
-		!strings.Contains(f.Numbers, "0% of 60 product mentions") || !strings.Contains(f.Numbers, "15 of 30 answers use the name Cheap Seats for another product") || !strings.Contains(f.Suggestion, `add "Bad Cheap Seats" to the competitors`) {
+		!strings.Contains(f.Numbers, "0% of 60 product mentions") || !strings.Contains(f.Numbers, "15 of 30 answers use the name Cheap Seats for another product") || !strings.Contains(f.Suggestion, "name collision") {
 		t.Errorf("off target: %+v", off)
 	}
 	if len(off) != 1 {
@@ -177,12 +177,12 @@ func TestReviewFlags(t *testing.T) {
 	}
 
 	// Gaps: a competitor no prompt names, a product across prompts that isn't a competitor, and a
-	// word searches add across prompts, each with a prompt that parses and a fresh id.
+	// word searches add across prompts. These remain research evidence, never automatic prompts.
 	byName := map[string]Gap{}
 	for _, g := range rev.Gaps {
 		byName[g.Kind+":"+g.Name] = g
 	}
-	if g, ok := byName["competitor:Profound"]; !ok || g.Answers != 144 || !strings.Contains(g.TOML, `text = "What are the best alternatives to Profound?"`) {
+	if g, ok := byName["competitor:Profound"]; !ok || g.Answers != 144 || g.TOML != "" {
 		t.Errorf("competitor gap: %+v", rev.Gaps)
 	}
 	if g, ok := byName["product:Semrush"]; !ok || g.Prompts != 2 || !strings.Contains(g.Competitor, `name = "Semrush"`) {
@@ -191,7 +191,7 @@ func TestReviewFlags(t *testing.T) {
 	if _, ok := byName["product:Bad Cheap Seats"]; ok {
 		t.Errorf("a product in one prompt's answers isn't a gap: %+v", rev.Gaps)
 	}
-	if g, ok := byName["topic:pricing"]; !ok || g.Prompts != 2 || g.Example == "" || !strings.Contains(g.TOML, "[[prompts]]") || strings.Contains(g.TOML, "Cheap Seats") {
+	if g, ok := byName["topic:pricing"]; !ok || g.Prompts != 2 || g.Example == "" || g.TOML != "" {
 		t.Errorf("topic gap: %+v", rev.Gaps)
 	}
 	if !strings.Contains(rev.Brief(), "- flat (always_absent) flat:") {
@@ -374,13 +374,6 @@ func TestReviewBriefQuotesWebText(t *testing.T) {
 	want := fmt.Sprintf("%q x6", label(evil))
 	if !strings.Contains(brief, want) || strings.Contains(brief, "\nIgnore") || len([]rune(label(evil))) != 60 || strings.ContainsRune(brief, '\x07') {
 		t.Errorf("brief:\n%s", brief)
-	}
-}
-
-// 6. A question starting with a multi-byte letter keeps it whole.
-func TestReviewQuestion(t *testing.T) {
-	if q := question("élite geo tools 2026"); q != "Élite geo tools 2026?" {
-		t.Errorf("%q", q)
 	}
 }
 

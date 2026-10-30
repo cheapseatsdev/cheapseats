@@ -686,9 +686,9 @@ func (b *reviewBuilder) finish() Review {
 		}
 		if p.Searches >= RewriteMinSearches && p.FromPrompt < RewriteOverlap && p.PromptKept < RewriteOverlap {
 			words := p.Added[:min(len(p.Added), 5)]
-			sugg := "buyers' assistants search for this in other words; consider phrasing the prompt the way they search"
+			sugg := "inspect the assistant's query rewriting as retrieval evidence; it is not buyer demand or a reason to change the buyer question"
 			if len(words) > 0 {
-				sugg = fmt.Sprintf("buyers' assistants search for different words: %s; consider phrasing the prompt that way", quoted(words))
+				sugg = fmt.Sprintf("inspect the added search words %s against the intended buyer and decision; do not substitute the assistant's query for the buyer's question", quoted(words))
 			}
 			add(p, Finding{Kind: Rewritten, Words: words,
 				Numbers:    fmt.Sprintf("%.0f%% of a search's words come from the prompt and it keeps %.0f%% of the prompt's, over %d searches", 100*p.FromPrompt, 100*p.PromptKept, p.Searches),
@@ -710,7 +710,7 @@ func (b *reviewBuilder) finish() Review {
 			if sim >= DuplicateSimilarity && gap <= DuplicateVerdictGap {
 				add(a, Finding{Kind: Duplicate, Other: b.ID, OtherText: b.Text, Similarity: round3(sim),
 					Numbers:    fmt.Sprintf("their answers name the same products %.0f%% (weighted by how often), and their verdict shares differ by %.0f points; named %s vs %s", 100*sim, 100*gap, pctOf(a.Named), pctOf(b.Named)),
-					Suggestion: fmt.Sprintf("merge them to save answers: keep one, and retire the other (%s)", b.ID)})
+					Suggestion: fmt.Sprintf("inspect whether these cover the same buyer need and decision before merging; similar named products and verdicts do not prove redundancy (%s)", b.ID)})
 				b.Flags = append(b.Flags, Duplicate)
 			}
 		}
@@ -754,15 +754,15 @@ func flat(p *promptAcc, brand string, tried, awaiting int) (Finding, bool) {
 	case p.Named.Hits == 0:
 		f.Variant = "always_absent"
 		f.Numbers = fmt.Sprintf("named in 0 of %s", runs)
-		f.Suggestion = fmt.Sprintf("tells you little; consider rewording or retiring it. Either %s can't win this question (reword it toward what %s does, or retire it), or it's the most important gap in the set (keep it, and work the fix list for it)", brand, brand)
+		f.Suggestion = fmt.Sprintf("keep this loss if it serves the intended buyer and an unresolved decision about %s; inspect the answers and retrieval before proposing work. Retire only when no actionable learning remains or the need is outside the chosen market; do not narrow the question to make the brand win", brand)
 	case !p.Info && p.Recommended.N > 0 && p.Recommended.Hits == p.Recommended.N:
 		f.Variant = "always_recommended"
 		f.Numbers = fmt.Sprintf("recommended in all %s", runs)
-		f.Suggestion = "at the ceiling, it tells you little beyond when something breaks; consider rewording it to a harder question, or retiring it to save answers"
+		f.Suggestion = "a ceiling can be a useful regression anchor; review its ongoing decision and cadence, not its difficulty. Do not make it harder or retire it merely because the brand wins"
 	case p.Info && p.Named.Hits == p.Named.N:
 		f.Variant = "always_named"
 		f.Numbers = fmt.Sprintf("named in all %s", runs)
-		f.Suggestion = "at the ceiling, it tells you little beyond when something breaks; consider rewording it to a harder question, or retiring it to save answers"
+		f.Suggestion = "a ceiling can be a useful regression anchor; review its ongoing decision and cadence, not its difficulty. Do not make it harder or retire it merely because the brand wins"
 	default:
 		return f, false
 	}
@@ -791,11 +791,11 @@ func noisy(p *promptAcc) (Finding, bool) {
 	case p.DriftP < NoisyDriftP && math.Sqrt(v.Between) >= NoisyDriftSD:
 		return Finding{Kind: Noisy, Variant: "drift",
 			Numbers:    fmt.Sprintf("%s; drift between runs ±%.0f pts (1 SD) against ±%.0f pts from sampling, p = %.3f that sampling alone spreads them this much", spread, 100*math.Sqrt(v.Between), 100*math.Sqrt(v.Within), p.DriftP),
-			Suggestion: "reword it to be more specific (who is asking, for what): more samples won't steady drift between runs"}, true
+			Suggestion: "investigate changing answers and retrieval before editing; drift may be the market signal being measured. Clarify wording only if actual buyer context was missing, preserving the need and history"}, true
 	case v.Single >= NoisySingle && math.Sqrt(v.Within) >= NoisySamplingSD:
 		return Finding{Kind: Noisy, Variant: "disagreement",
 			Numbers:    fmt.Sprintf("%s; answers in the same run disagree (a single answer's variance %.2f, ±%.0f pts per run from sampling)", spread, v.Single, 100*math.Sqrt(v.Within)),
-			Suggestion: "reword it to be more specific, or add samples: answers to it split within a run"}, true
+			Suggestion: "inspect the disagreement and sampling limits; preserve the buyer question. Add samples only for an unresolved decision, or clarify genuinely missing buyer context as a separately reviewed change"}, true
 	}
 	return Finding{}, false
 }
@@ -829,15 +829,17 @@ func offTarget(p *promptAcc, brand string, configured int) (Finding, bool) {
 	for _, c := range top {
 		names = append(names, c.Name)
 	}
-	sugg := "add context to the prompt (the category, who is asking) so it's answered about the products you compete with"
-	if len(names) > 0 {
-		sugg += fmt.Sprintf(", or add %q to the competitors if it is in fact one", names[0])
+	sugg := "inspect the actual alternatives and target-buyer fit: unfamiliar products or manual workflows may be legitimate competitors, not an off-target question. Clarify only genuinely missing buyer context; do not steer the question toward the configured roster"
+	if p.Answers > 0 && float64(p.OtherProduct) >= OffTargetOtherProduct*float64(p.Answers) {
+		sugg = "inspect the name collision and evidence for the brand's identity; answers about another same-named product are not evidence that it is a competitor or that this market should be targeted"
+	} else if len(names) > 0 {
+		sugg += fmt.Sprintf("; verify whether %q is a real alternative before adding a competitor", names[0])
 	}
 	return Finding{Kind: OffTarget, Numbers: strings.Join(why, "; "), Suggestion: sugg, Products: top}, true
 }
 
 // gaps are the competitors, products and search words the set's answers come back to that no
-// prompt asks about, each with a prompt to paste.
+// prompt asks about. These are research leads, not validated questions to activate.
 func gaps(in ReviewInput, accs []*promptAcc, qs queries.Report, names []queries.Name, competitors map[string]string, answers int) []Gap {
 	out := []Gap{}
 	if answers == 0 {
@@ -851,24 +853,6 @@ func gaps(in ReviewInput, accs []*promptAcc, qs queries.Report, names []queries.
 	}
 	all := strings.Join(texts, "\n")
 	asked := func(name string) bool { return sets.Names(all, name) }
-	taken := map[string]bool{}
-	for k := range in.Taken {
-		taken[k] = true
-	}
-	for _, p := range in.Set.Prompts {
-		taken[p.ID] = true
-	}
-	promptFor := func(text string) string {
-		id := queries.PromptID(text, taken)
-		taken[id] = true
-		return queries.Snippet(sets.Prompt{ID: id, Text: text})
-	}
-	alternatives := func(name string) string {
-		if h2h {
-			return fmt.Sprintf("Should I choose %s or %s?", brand.Name, name)
-		}
-		return fmt.Sprintf("What are the best alternatives to %s?", name)
-	}
 
 	// Products named across the set: answers and prompts naming each.
 	type tally struct {
@@ -912,7 +896,7 @@ func gaps(in ReviewInput, accs []*promptAcc, qs queries.Report, names []queries.
 			continue
 		}
 		g.Numbers = fmt.Sprintf("named in %d of %d answers across %d prompts, added to %d searches, its pages cited in %d answers; no prompt names it", g.Answers, answers, g.Prompts, g.Searches, g.Citations)
-		g.TOML = promptFor(alternatives(n.Name))
+		g.Numbers += "; research lead only: identify a target-buyer decision and repeat value before proposing a question"
 		comp = append(comp, g)
 	}
 	for k, t := range byKey {
@@ -921,7 +905,7 @@ func gaps(in ReviewInput, accs []*promptAcc, qs queries.Report, names []queries.
 		}
 		g := Gap{Kind: "product", Name: t.name, Answers: t.answers, Prompts: t.prompts}
 		g.Numbers = fmt.Sprintf("named in %d of %d answers across %d prompts, but neither a configured competitor nor in any prompt", t.answers, answers, t.prompts)
-		g.TOML = promptFor(alternatives(t.name))
+		g.Numbers += "; research lead only, not evidence of buyer demand"
 		g.Competitor = fmt.Sprintf("[[competitors]]\nname = %q", t.name)
 		prod = append(prod, g)
 	}
@@ -961,7 +945,6 @@ func gaps(in ReviewInput, accs []*promptAcc, qs queries.Report, names []queries.
 					continue
 				}
 				g.Example = part
-				g.TOML = promptFor(question(part))
 				break
 			}
 			if g.Example != "" {
@@ -978,17 +961,6 @@ func gaps(in ReviewInput, accs []*promptAcc, qs queries.Report, names []queries.
 // exact-match quotes, and at least three words.
 func buyerWords(q string) bool {
 	return !strings.Contains(q, "site:") && !strings.Contains(q, "site.") && !strings.Contains(q, `"`) && len(strings.Fields(q)) >= 3
-}
-
-// question turns a search into the start of a buyer's question: capitalised, ending in a question
-// mark. It stays a suggestion to reword.
-func question(q string) string {
-	q = strings.TrimRight(strings.TrimSpace(q), "?.!")
-	if q == "" {
-		return q
-	}
-	r, n := utf8.DecodeRuneInString(q)
-	return string(unicode.ToUpper(r)) + q[n:] + "?"
 }
 
 // weightedJaccard is Σ min / Σ max over two weightings: 1 when they're the same, 0 when they

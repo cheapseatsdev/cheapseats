@@ -207,7 +207,7 @@ the set must reach to cover them).
 
 ## Quick wins
 
-Fixes are ranked by expected gain: `speed × mean over the fix's prompts of (1 − p)`. Speed is
+Verified actions in [Next steps](next-steps.md) are ranked by expected gain: `speed × mean over the fix's prompts of (1 − p)`. Speed is
 prompts per working day. `p` is the prompt's recommended rate (named, for an info prompt), pooled
 over the set's same-method runs of the last 14 days, under the same wording. With no data, its
 headroom weight is 1. A prompt already won in most answers adds little. The API returns `gain`

@@ -22,13 +22,13 @@ func TestSuggestions(t *testing.T) {
 	structuredCLI = func(_ context.Context, model, system, prompt string, schema map[string]any, out any) error {
 		sent = prompt
 		return json.Unmarshal([]byte(`{"prompts":[
-			{"stage":"pricing","text":"How much do AI visibility trackers cost per month?","intent":"choice"},
-			{"stage":"awareness","text":"What is   GEO, and should I care?","intent":"info"},
-			{"stage":"comparison","text":"Which AI visibility tool is best?!","intent":"choice"},
-			{"stage":"comparison","text":"Is Cheap Seats better than Profound?","intent":"choice"},
-			{"stage":"pricing","text":"how much do AI visibility trackers cost per month","intent":"choice"},
-			{"stage":"reputation","text":"Is Profound trustworthy?","intent":"choice"},
-			{"stage":"implementation","text":"How long does it take to set up an AI visibility tracker?","intent":"info"}]}`), out)
+			{"stage":"pricing","text":"How much do AI visibility trackers cost per month?","intent":"info","buyer":"a small team choosing its first tracker","learning":"which setup and alternatives fit the team","decision":"choose the starter positioning and onboarding route","repeat_value":"review four weekly observations then stop unless the decision remains open"},
+			{"stage":"awareness","text":"How can a small   startup begin checking AI recommendations?","intent":"info","buyer":"a small team choosing its first tracker","learning":"which setup and alternatives fit the team","decision":"choose the starter positioning and onboarding route","repeat_value":"review four weekly observations then stop unless the decision remains open"},
+			{"stage":"comparison","text":"Which AI visibility tool is best?!","intent":"choice","buyer":"a small team choosing its first tracker","learning":"which setup and alternatives fit the team","decision":"choose the starter positioning and onboarding route","repeat_value":"review four weekly observations then stop unless the decision remains open"},
+			{"stage":"comparison","text":"Is Cheap Seats better than Profound?","intent":"choice","buyer":"a small team choosing its first tracker","learning":"which setup and alternatives fit the team","decision":"choose the starter positioning and onboarding route","repeat_value":"review four weekly observations then stop unless the decision remains open"},
+			{"stage":"pricing","text":"how much do AI visibility trackers cost per month","intent":"choice","buyer":"a small team choosing its first tracker","learning":"which setup and alternatives fit the team","decision":"choose the starter positioning and onboarding route","repeat_value":"review four weekly observations then stop unless the decision remains open"},
+			{"stage":"reputation","text":"Is Profound trustworthy?","intent":"choice","buyer":"a small team choosing its first tracker","learning":"which setup and alternatives fit the team","decision":"choose the starter positioning and onboarding route","repeat_value":"review four weekly observations then stop unless the decision remains open"},
+			{"stage":"implementation","text":"How long does it take to set up an AI visibility tracker?","intent":"info","buyer":"a small team choosing its first tracker","learning":"which setup and alternatives fit the team","decision":"choose the starter positioning and onboarding route","repeat_value":"review four weekly observations then stop unless the decision remains open"}]}`), out)
 	}
 	cfg := &config.Config{Brand: config.Brand{Name: "Cheap Seats", Aliases: []string{"cheapseats.dev"}, About: "a tracker", Audience: "a marketer"},
 		Analyst: config.Model{Model: "opus", Provider: config.ClaudeCode}}
@@ -39,7 +39,7 @@ func TestSuggestions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"Who asks: a marketer", "- Which AI visibility tool is best?", "Never name Cheap Seats", "Competitors: Profound;", "Write 6 new questions"} {
+	for _, want := range []string{"Who asks: a marketer", "- Which AI visibility tool is best?", "Never name Cheap Seats", "Competitors: Profound;", "Return at most 3 new questions"} {
 		if !strings.Contains(sent, want) {
 			t.Errorf("prompt lacks %q", want)
 		}
@@ -47,7 +47,7 @@ func TestSuggestions(t *testing.T) {
 	if len(res.Prompts) != 3 || res.Dropped != 3 || res.CostUSD != 0 {
 		t.Fatalf("%+v", res)
 	}
-	if strings.Index(res.Snippet, "# Awareness") > strings.Index(res.Snippet, "# Pricing") || !strings.Contains(res.Snippet, `text = "What is GEO, and should I care?"`+"\nintent = \"info\"") {
+	if strings.Index(res.Snippet, "# Awareness") > strings.Index(res.Snippet, "# Pricing") || !strings.Contains(res.Snippet, `text = "How can a small startup begin checking AI recommendations?"`+"\nintent = \"info\"") {
 		t.Errorf("snippet:\n%s", res.Snippet)
 	}
 	// It pastes into a set file as it is.

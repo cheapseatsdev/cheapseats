@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cheapseatsdev/cheapseats/internal/analysis"
 	"github.com/cheapseatsdev/cheapseats/internal/app"
 	"github.com/cheapseatsdev/cheapseats/internal/llm"
 	"github.com/cheapseatsdev/cheapseats/internal/store"
@@ -32,7 +33,7 @@ func fixFixture(t *testing.T) (a *app.App, db *store.DB, execute func() string, 
 		s := string(body)
 		var text string
 		switch {
-		case strings.Contains(s, "sharp growth lead"):
+		case strings.Contains(s, "evidence-led product and market analyst"):
 			mu.Lock()
 			analystSaw = append(analystSaw, s)
 			mu.Unlock()
@@ -68,6 +69,7 @@ func fixFixture(t *testing.T) (a *app.App, db *store.DB, execute func() string, 
 		if err := a.Runs.Execute(context.Background(), r.ID); err != nil {
 			t.Fatal(err)
 		}
+		storeVerifiedServerActions(t, a, r.ID, analysis.Fix{Rank: 1, Type: analysis.NewPage, Title: "Write a credential-gateway guide", Target: "https://docs.cheapseats.example/guides/keys-off-the-box/", Claim: "how", DoneWhen: "page live", Evidence: "e (prompt 1)", Prompts: []int{1, 2, 3, 4, 5, 6, 7}, Effort: "S"})
 		return r.ID
 	}
 	analyst = func() []string {

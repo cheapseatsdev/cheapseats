@@ -26,7 +26,7 @@ func TestObjectionSourcesReachEverySurface(t *testing.T) {
 	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
 		mu.Lock()
-		if strings.Contains(string(body), "sharp growth lead") {
+		if strings.Contains(string(body), "evidence-led product and market analyst") {
 			analystSaw = string(body)
 		}
 		mu.Unlock()

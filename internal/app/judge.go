@@ -38,7 +38,7 @@ const (
 // JudgeKinds are the four questions, in the order they're asked and listed.
 var JudgeKinds = []struct{ Kind, Title, What string }{
 	{JudgeDuplicate, "Duplicates", "Two prompts of the same intent that one good answer would serve."},
-	{JudgeOffTarget, "Off target", "A prompt that asks about something other than the brand's category (brand.category; not asked without it)."},
+	{JudgeOffTarget, "Category fit", "A wording check against brand.category, not a judgment of target-market relevance or recurring value (not asked without category)."},
 	{JudgeIntent, "Intent", "A prompt that reads as the other intent from the one it's set to: the answer that serves the buyer names a product in the category (selection) or names none (info)."},
 	{JudgeBranded, "Branded", "Outside head-to-heads, a prompt that names the brand, a product of its maker or its domain, in any spelling."},
 }
@@ -257,10 +257,10 @@ func (a *App) readJudgments(s sets.Set, qs []judgeQuestion, rows map[[2]string]j
 		switch q.kind {
 		case JudgeDuplicate:
 			f.Line = ids + " may ask the same thing"
-			f.Suggestion = "Merge them to save answers: keep one, retire the other."
+			f.Suggestion = "Inspect whether they serve the same buyer need and decision before merging; a shared answer does not alone establish redundant measurement."
 		case JudgeOffTarget:
 			f.Line = fmt.Sprintf("%s may ask about something other than %s", ids, category)
-			f.Suggestion = "Add context to the prompt (the category, who is asking), or retire it."
+			f.Suggestion = "Inspect the buyer need and category context. Category fit does not establish recurring value; clarify only genuinely missing context, and do not add a product request to an informational question."
 		case JudgeIntent:
 			// A flag only when Jev reads the prompt as the other intent from the one it's set to.
 			if (r.choice == sets.Info) == q.prompts[0].Info() {
@@ -346,14 +346,13 @@ func judgeQuestions(brand config.Brand, s sets.Set) []judgeQuestion {
 			})
 		}
 	}
-	// Intent is about what the grader scores, not the grammar: a how-do-I question from a buyer
-	// with a job that products in the category do is a selection, since the answer that serves
-	// the buyer names one.
+	// Intent is what satisfying the question requires, not whether a product could help.
+	// A complete manual/API method can serve a buyer without selecting a product.
 	for _, p := range s.Prompts {
 		q := typesafe.Question{Type: "choice", Instructions: "`prompt` is a question a buyer asks an AI assistant, and `category` is a kind of product. Which kind of answer serves the buyer?",
 			Criteria: map[string]any{
-				"selection": "an answer that names a product or tool in `category`: the buyer asks which to use, for the best ones, for alternatives to one, for a comparison, or how to do a job that products in `category` exist to do (how do I measure X, is there a way to Y, can I run Z), so the useful answer points at a product even when none was asked for",
-				sets.Info:   "an answer that names no product in `category`: the buyer asks what something is, how it works, whether a practice is worth doing, about a named product's own details, or how to do something no product in `category` does",
+				"selection": "product choice or comparison is required to satisfy the question: the buyer asks which products to use, for a shortlist, for alternatives or to choose between products. Do not infer selection merely because products in the category can do the job",
+				sets.Info:   "a complete explanation, practical manual/API method, criteria or implementation workflow can satisfy the question without selecting a product, even if products in the category could help and optional examples might name them. Classify the needed answer, not opening words or the chance of a brand mention",
 			}}
 		out = append(out, judgeQuestion{
 			kind: JudgeIntent, key: judgeKey(JudgeIntent, q, p.Text, category), prompts: []sets.Prompt{p},

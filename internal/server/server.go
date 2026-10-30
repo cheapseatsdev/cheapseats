@@ -318,6 +318,7 @@ func (s *Server) Handler() http.Handler {
 	// Open without auth (see auth): a shared run's report, and nothing else.
 	mux.HandleFunc("GET /share/{token}", s.sharePage)
 	mux.HandleFunc("GET /rankings", s.rankingsPage)
+	mux.HandleFunc("GET /next-steps", s.quickWinsPage)
 	mux.HandleFunc("GET /quick-wins", s.quickWinsPage)
 	mux.HandleFunc("GET /api/sets", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, s.App.Sets()) })
 	mux.HandleFunc("GET /api/sets/{id}", s.apiSet)
@@ -330,6 +331,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/runs/{id}/fixes", s.apiRebuildFixes)
 	mux.HandleFunc("POST /api/runs/{id}/cancel", s.apiCancel)
 	mux.HandleFunc("POST /api/runs/{id}/retry", s.apiRetry)
+	mux.HandleFunc("GET /api/next-steps", s.apiNextSteps)
 	mux.HandleFunc("GET /api/quick-wins", s.apiQuickWins)
 	mux.HandleFunc("GET /api/rankings", s.apiRankings)
 	mux.HandleFunc("GET /search", s.searchPage)
@@ -734,14 +736,17 @@ type RunData struct {
 	Progress *app.Progress
 	Insights string
 	// Tone, praise and objections over the answers naming the brand, and the theme pass.
-	Opinion   opinion.Report `json:"opinion"`
-	Run       *run.Run
-	Active    bool
-	Summary   report.Summary
-	Results   []run.Result
-	Fixes     []analysis.Fix
-	FixError  *string
-	Answerers []string
+	Opinion        opinion.Report `json:"opinion"`
+	Run            *run.Run
+	Active         bool
+	Summary        report.Summary
+	Results        []run.Result
+	Fixes          []analysis.Fix          // compatibility: verified actions only
+	Actions        []app.QuickWin          `json:"actions"`
+	Investigations []app.NextInvestigation `json:"investigations"`
+	MarketFindings []app.NextFinding       `json:"market_findings"`
+	FixError       *string
+	Answerers      []string
 	// The coverage check's pages per prompt (index), when [exa] has checked this run.
 	Coverage map[int]*app.CoverageRow `json:"coverage,omitempty"`
 	// The neutral retrieval baseline (pages per prompt and the host table), when [exa] has
@@ -825,8 +830,18 @@ func (s *Server) runData(ctx context.Context, id string) (*RunData, error) {
 	if err != nil {
 		return nil, err
 	}
-	fx, fe, _ := s.App.Fixes(ctx, id)
-	d := &RunData{Run: r, Active: s.App.Runs.IsActive(id), Summary: s.App.Summary(r, res), Results: res, Fixes: fx, FixError: fe, Attempts: s.App.FixAttempts(ctx)}
+	_, fe, _ := s.App.Fixes(ctx, id)
+	steps, err := s.App.RunNextSteps(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	steps.Actions = actionHandoffs(steps.Actions, false)
+	steps.Investigations = readOnlyInvestigations(steps.Investigations)
+	fx := make([]analysis.Fix, 0, len(steps.Actions))
+	for _, action := range steps.Actions {
+		fx = append(fx, action.Fix)
+	}
+	d := &RunData{Actions: steps.Actions, Investigations: steps.Investigations, MarketFindings: steps.Findings, Run: r, Active: s.App.Runs.IsActive(id), Summary: s.App.Summary(r, res), Results: res, Fixes: fx, FixError: fe, Attempts: s.App.FixAttempts(ctx)}
 	var insights, fixesAt sql.NullString
 	s.App.DB.QueryRowContext(ctx, `SELECT insights, fixes_at FROM runs WHERE id=?`, id).Scan(&insights, &fixesAt)
 	d.Insights, d.FixesAt = insights.String, fixesAt.String
@@ -952,8 +967,8 @@ func (s *Server) spend(ctx context.Context) map[string]any {
 
 func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	qw, _ := s.App.QuickWins(ctx)
-	qw = s.App.FilterQuickWins(qw, app.QuickWinFilter{})
+	steps, _ := s.App.NextSteps(ctx)
+	qw := s.App.FilterQuickWins(steps.Actions, app.QuickWinFilter{})
 	if len(qw) > 5 {
 		qw = qw[:5]
 	}
@@ -971,7 +986,7 @@ func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 	for _, c := range s.cards(ctx, progress) {
 		rows = append(rows, HomeRow{SetCard: c, Search: latest[c.Set.ID+"/search"], Recall: latest[c.Set.ID+"/recall"]})
 	}
-	s.render(w, "home", map[string]any{"Progress": progress, "Rows": rows, "QuickWins": qw, "Spend": s.spend(ctx)})
+	s.render(w, "home", map[string]any{"Progress": progress, "Rows": rows, "QuickWins": qw, "Investigations": head(steps.Investigations, 3), "MarketFindings": head(steps.Findings, 3), "Spend": s.spend(ctx)})
 }
 
 // RunRow is one run in a set's runs table, with its search-track scores when it finished.
@@ -1165,7 +1180,7 @@ func (s *Server) attemptStateForm(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	http.Redirect(w, r, back(r, "/quick-wins"), http.StatusSeeOther)
+	http.Redirect(w, r, back(r, "/next-steps"), http.StatusSeeOther)
 }
 
 func (s *Server) cancelForm(w http.ResponseWriter, r *http.Request) {
@@ -1205,7 +1220,7 @@ func windowLinks(r *http.Request, current int) []filterOption {
 
 func atoi(s string) int { n, _ := strconv.Atoi(s); return n }
 
-// filterRow is one row of filter links on the quick wins page.
+// filterRow is one row of filter links on the Next steps page.
 type filterRow struct {
 	Name    string
 	Options []filterOption
@@ -1219,14 +1234,19 @@ type filterOption struct {
 }
 
 func (s *Server) quickWinsPage(w http.ResponseWriter, r *http.Request) {
-	all, _ := s.App.QuickWins(r.Context())
+	steps, err := s.App.NextSteps(r.Context())
+	if err != nil {
+		httpErr(w, err, 500)
+		return
+	}
+	all := steps.Actions
 	q := r.URL.Query()
 	f := app.QuickWinFilter{Site: q.Get("site"), Gap: q.Get("gap"), Set: q.Get("set"), Status: q.Get("status"), Priority: q.Get("priority")}
 	// A row per dimension. Each count applies the other rows' choices, so a link never leads to
 	// an empty list; "all" clears just that row.
 	href := func(param, value string) string {
 		v := url.Values{}
-		for _, p := range []string{"status", "priority", "site", "gap", "set"} {
+		for _, p := range []string{"status", "priority", "site", "gap", "set", "view"} {
 			if x := q.Get(p); x != "" && p != param {
 				v.Set(p, x)
 			}
@@ -1235,9 +1255,9 @@ func (s *Server) quickWinsPage(w http.ResponseWriter, r *http.Request) {
 			v.Set(param, value)
 		}
 		if len(v) == 0 {
-			return "/quick-wins"
+			return "/next-steps"
 		}
-		return "/quick-wins?" + v.Encode()
+		return "/next-steps?" + v.Encode()
 	}
 	row := func(name, param, current string, values, labels []string, with func(string) app.QuickWinFilter) filterRow {
 		fr := filterRow{Name: name}
@@ -1276,7 +1296,10 @@ func (s *Server) quickWinsPage(w http.ResponseWriter, r *http.Request) {
 	for _, q := range shown {
 		submitted = append(submitted, shownFix{q.RunID, q.Fix, q.Status})
 	}
-	s.render(w, "quickwins", map[string]any{"QuickWins": shown, "Landings": s.landings(r.Context(), submitted), "Rows": rows, "Total": len(all), "Back": r.URL.RequestURI()})
+	selected := s.selectNextSteps(steps, f, "", 0, true)
+	view := nextStepsView(q.Get("view"), selected)
+	tabs := []filterOption{{"Actions", len(selected.Actions), view == "actions", href("view", "actions")}, {"Investigations", len(selected.Investigations), view == "investigations", href("view", "investigations")}, {"Market findings", len(selected.Findings), view == "market-findings", href("view", "market-findings")}}
+	s.render(w, "quickwins", map[string]any{"View": view, "Tabs": tabs, "Investigations": selected.Investigations, "MarketFindings": selected.Findings, "QuickWins": shown, "Landings": s.landings(r.Context(), submitted), "Rows": rows, "Total": len(all), "Back": r.URL.RequestURI()})
 }
 
 // --- API ---
@@ -1398,12 +1421,12 @@ func (s *Server) apiRun(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) apiFixes(w http.ResponseWriter, r *http.Request) {
-	fx, fe, err := s.App.Fixes(r.Context(), r.PathValue("id"))
+	d, err := s.runData(r.Context(), r.PathValue("id"))
 	if err != nil {
 		httpErr(w, err, 404)
 		return
 	}
-	writeJSON(w, map[string]any{"fixes": fx, "error": fe})
+	writeJSON(w, map[string]any{"fixes": d.Fixes, "actions": d.Actions, "investigations": d.Investigations, "market_findings": d.MarketFindings, "error": d.FixError})
 }
 
 func (s *Server) apiRebuildFixes(w http.ResponseWriter, r *http.Request) {
@@ -1425,7 +1448,7 @@ func (s *Server) apiAttempts(w http.ResponseWriter, r *http.Request) {
 		httpErr(w, err, 500)
 		return
 	}
-	writeJSON(w, at)
+	writeJSON(w, briefAttempts(at))
 }
 
 func (s *Server) apiMarkFix(w http.ResponseWriter, r *http.Request) {
@@ -1440,7 +1463,7 @@ func (s *Server) apiMarkFix(w http.ResponseWriter, r *http.Request) {
 		httpErr(w, err, 400)
 		return
 	}
-	writeJSON(w, at)
+	writeJSON(w, briefAttempts([]app.Attempt{at})[0])
 }
 
 func (s *Server) apiAttemptState(w http.ResponseWriter, r *http.Request) {
@@ -1476,7 +1499,7 @@ func (s *Server) apiQuickWins(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q := r.URL.Query()
-	writeJSON(w, s.App.FilterQuickWins(qw, app.QuickWinFilter{Gap: q.Get("gap"), Set: q.Get("set"), Site: q.Get("site"), Status: q.Get("status"), Priority: q.Get("priority")}))
+	writeJSON(w, actionHandoffs(s.App.FilterQuickWins(qw, app.QuickWinFilter{Gap: q.Get("gap"), Set: q.Get("set"), Site: q.Get("site"), Status: q.Get("status"), Priority: q.Get("priority")}), false))
 }
 
 func (s *Server) apiRankings(w http.ResponseWriter, r *http.Request) {

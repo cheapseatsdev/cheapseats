@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cheapseatsdev/cheapseats/internal/analysis"
 	"github.com/cheapseatsdev/cheapseats/internal/answer"
 	"github.com/cheapseatsdev/cheapseats/internal/audit"
 	"github.com/cheapseatsdev/cheapseats/internal/config"
@@ -115,7 +116,11 @@ func TestFixShowsWhetherItLanded(t *testing.T) {
 		return fmt.Sprintf(`{"rank":%d,"type":"fix-page","title":"Fix %d","target":"%s%s","claim":"Say plans start at $49.","done_when":"d","evidence":"e","prompts":[1],"effort":"S","displaces":null,"site":"%s"}`, rank, rank, srv.URL, path, srv.URL)
 	}
 	fixes := "[" + fix(1, "/pricing") + "," + fix(2, "/private/pricing") + "," + fix(3, "/untouched") + "]"
-	db.Exec(`UPDATE runs SET status='done', fixes=?, fixes_at=? WHERE id=?`, fixes, store.Now(), r.ID)
+	var stored []analysis.Fix
+	if err := json.Unmarshal([]byte(fixes), &stored); err != nil {
+		t.Fatal(err)
+	}
+	storeVerifiedServerActions(t, a, r.ID, stored...)
 	fx, _, _ := a.Fixes(ctx, r.ID)
 	for _, f := range fx[:2] {
 		if _, err := a.MarkFix(ctx, r.ID, f.Rank, "https://github.com/acme/site/pull/1", "proposed", "", "test"); err != nil {

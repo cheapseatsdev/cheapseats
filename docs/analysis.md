@@ -1,0 +1,52 @@
+# From run evidence to next steps
+
+A finished run produces three kinds of advice:
+
+- **Actions:** a material remaining change supported by current artifacts and the product brief.
+- **Investigations:** a bounded check needed before recommending work, with the decision it changes.
+- **Market findings:** what the answers teach, including legitimate reasons to choose another product and intentional limits worth keeping.
+
+Zero actions is a valid result. A brand missing from an answer does not establish a missing page, a bad claim, or a feature to build. A returned search result is not proof that the assistant read its page; a citation does not establish what caused the recommendation. Results from memory do not establish what a website says today.
+
+## Keep the intended market explicit
+
+`[brand.advisory]` supplies positioning, goals and boundaries for advice. These fields constrain proposed work; they do not change how buyer answers are asked or graded. Keep public capability claims in `brand.facts`. A supported capability does not imply that expanding it is an intended goal.
+
+The analyst also receives the audience, category and prompt-set description. A valid competitor recommendation can remain a finding. For example, a product intentionally covering only two model families need not add every surface a broader competitor measures.
+
+## Generate candidates, then verify
+
+The first analyst call reads graded results with raw answer excerpts and result IDs. It keeps search queries, returned results, fetched URLs and citations distinct. It suggests at most eight candidates and can instead return investigations or findings. Each candidate must earn its place with evidence, a bounded read-only check naming the artifact and specific unknown, and a concrete business decision that the answer could change. Weak ideas are omitted with a short explanation; they do not become research work by default.
+
+Before a candidate becomes work, the app's reader checks a bounded shortlist of current targets and brand pages. Analysis requests at most 12 pages and supplies at most 12,000 characters of each page to a separate verification call. Page text goes to the configured analyst provider as evidence. A failed, blocked or empty read remains unknown.
+
+The verification checks:
+
+| Check | What it must establish |
+| --- | --- |
+| Existing work | What the current relevant artifact already supplies |
+| Remaining change | The specific material difference still needed |
+| Capability | The claims are supported without blurring collection methods or operating costs |
+| Strategy | The change fits the stated advisory goals and boundaries |
+| Eligibility | Submission rules and qualifications permit the proposed outreach; or why these do not apply to owned work |
+| Completion | The team can complete and check the work without requiring a future recommendation or another publisher's acceptance |
+
+Each passing check needs a source, an exact quote and a reason specific to the candidate. The app checks that the source was actually supplied and that its quote occurs in that source. Existing-page and outreach changes require a readable current target. The strategy check must cite the advisory brief; a product change must quote an explicit goal, rather than general positioning or a boundary. A new-page proposal stays an investigation until the relevant existing-content inventory has been checked; a few sampled pages cannot establish that no equivalent content exists.
+
+These checks support an editorial decision; they do not prove that a proposed change will improve visibility. A verifier can still misinterpret quoted evidence. Inspect its reasons before taking a consequential action.
+
+Only verified actions receive an implementation handoff. It includes the product brief and verification evidence, keeps the change within scope and asks the implementer to check that it is still needed. Outreach handoffs prepare drafts; they do not send messages or open third-party pull requests.
+
+If verification cannot complete, only candidates with a useful specific check and decision remain investigations. Their cards retain that exact check, the decision, the reason it matters and supporting evidence. There is no generic “read the page and promote if useful” fallback. Standalone investigations also require a rationale, check, decision and evidence. If work already exists, or the proposal conflicts with an accepted boundary, the result can be a finding.
+
+## Separate completion from later results
+
+An action's completion check describes the work itself: for example, a corrected link passes a local check, or a factual submission draft meets the published requirements. Later runs can show whether an answer found the page or recommended the product. Those observations are separate from completion and do not establish that the change caused them.
+
+Verification readiness is separate from the existing work states (`open`, `proposed`, `accepted`, `dismissed`). A recorded pull request does not prove improved visibility. Changing the product facts or advisory brief invalidates an earlier verification without calling a model from a report page.
+
+## Historical results and cost
+
+Advice is stored as a versioned envelope containing actions, investigations and market findings. On read, a ready action must retain all six distinct checks, their quotes and reasons, recorded source URLs and product context. A status or digest alone does not establish readiness; incomplete records stay unverified without fetching pages again. Old fix arrays remain readable as historical, unverified suggestions; they do not acquire executable handoffs just because an old prompt was stored with them. Rebuilding advice does not re-ask buyer questions or change stored grades.
+
+The analyst uses its configured API or subscription provider. A run with candidates and readable current artifacts normally makes two analyst calls, generation and verification. No-candidate runs, missing advisory briefs and unreadable evidence can stop before the second call. Both calls use the existing accounting context; subscription usage still consumes the plan's allowance.

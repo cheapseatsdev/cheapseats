@@ -70,6 +70,31 @@ type Brand struct {
 	// HR lead"). The answerers are told they're answering this person's question; empty means
 	// anyone's.
 	Audience string `toml:"audience" json:",omitempty"`
+	// Advisory guides question curation and advice only. It is never a public fact,
+	// buyer instruction or grading criterion.
+	Advisory Advisory `toml:"advisory" json:"-"`
+}
+
+// Advisory records the team's positioning and deliberate product boundaries separately
+// from what the product is and what buyers actually said.
+type Advisory struct {
+	Positioning string   `toml:"positioning" json:"positioning,omitempty"`
+	Goals       []string `toml:"goals" json:"goals,omitempty"`
+	Boundaries  []string `toml:"boundaries" json:"boundaries,omitempty"`
+}
+
+func (a Advisory) Text() string {
+	var b strings.Builder
+	if a.Positioning != "" {
+		fmt.Fprintf(&b, "Positioning: %s\n", a.Positioning)
+	}
+	for _, g := range a.Goals {
+		fmt.Fprintf(&b, "Decision or goal: %s\n", g)
+	}
+	for _, limit := range a.Boundaries {
+		fmt.Fprintf(&b, "Accepted boundary: %s\n", limit)
+	}
+	return b.String()
 }
 
 type Site struct {

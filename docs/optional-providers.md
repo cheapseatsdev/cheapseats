@@ -327,3 +327,12 @@ prompt_review = false   # disable after-run and check-time judgments; explicit c
 For new provider work, preserve the budget, storage and data boundaries above. Existing tables
 reserve `source = 'manual'`, but no manual override workflow writes it yet. Jev supplies typed
 judgments; generated product lists, reasoning, objections and fix prose remain core-model work.
+
+## Advice verification
+
+Coverage, neutral retrieval, citation checks and prospects supply observations, not permission to
+create a page, add a feature or contact a publisher. [Next steps](next-steps.md) verifies proposed
+changes against current artifacts, capability claims, advisory boundaries and any eligibility
+rules. Bounded current-page excerpts are sent to the configured analyst provider for this check;
+keep private information out of the advisory brief and public facts. Unreadable content and
+missing metadata remain unknown. Only verified actions receive implementation handoffs.

@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/BurntSushi/toml"
 	"github.com/cheapseatsdev/cheapseats/internal/answer"
 	"github.com/cheapseatsdev/cheapseats/internal/config"
 	"github.com/cheapseatsdev/cheapseats/internal/grade"
@@ -139,13 +138,11 @@ func TestBuild(t *testing.T) {
 	if len(rep.Suggested) != 1 || rep.Suggested[0].File != "ai-search-visibility.toml" {
 		t.Fatalf("suggested: %+v", rep.Suggested)
 	}
-	// The snippet parses as a set's [[prompts]] entry.
-	var parsed struct {
-		Prompts []sets.Prompt `toml:"prompts"`
+	// A closed competitor comparison in a model search is evidence, not an activatable prompt.
+	if rep.Suggested[0].TOML != "" || !strings.Contains(rep.Suggested[0].Review, "not buyer demand") {
+		t.Errorf("unreviewed search became a prompt: %+v", rep.Suggested[0])
 	}
-	if _, err := toml.Decode(rep.Suggested[0].TOML, &parsed); err != nil || len(parsed.Prompts) != 1 || parsed.Prompts[0].ID != "peec-ai-vs-profound" || parsed.Prompts[0].Text != "Peec AI vs Profound" {
-		t.Errorf("snippet %q: %+v %v", rep.Suggested[0].TOML, parsed, err)
-	}
+
 	if b := rep.Brief(); !strings.Contains(b, "Peec AI (2 searches, 1 prompts)") || !strings.Contains(b, "Words searches add") {
 		t.Errorf("brief: %s", b)
 	}

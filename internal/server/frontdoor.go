@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/cheapseatsdev/cheapseats/internal/app"
+	"github.com/cheapseatsdev/cheapseats/internal/config"
 	"github.com/cheapseatsdev/cheapseats/internal/run"
 	"github.com/cheapseatsdev/cheapseats/internal/sets"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -39,8 +40,11 @@ type FrontDoor struct {
 	Readiness app.Readiness `json:"readiness"`
 	Audit     *doorAudit    `json:"latest_audit"` // null when the sites were never audited
 	// Fixes from the latest runs nobody has submitted work for, and the urgent ones among them.
-	OpenFixes   int `json:"open_fixes"`
-	UrgentFixes int `json:"open_urgent_fixes"`
+	OpenFixes      int             `json:"open_fixes"`
+	UrgentFixes    int             `json:"open_urgent_fixes"`
+	Investigations int             `json:"investigations"`
+	MarketFindings int             `json:"market_findings"`
+	Advisory       config.Advisory `json:"advisory"`
 	// Work submitted for fixes whose outcome isn't measured yet (the set hasn't run since, or not
 	// for long enough).
 	AwaitingOutcome int `json:"attempts_awaiting_outcome"`
@@ -130,7 +134,7 @@ func (s *Server) everyDays(st sets.Set) int {
 
 func (s *Server) frontDoor(ctx context.Context) FrontDoor {
 	now := time.Now().UTC()
-	fd := FrontDoor{Brand: s.App.Cfg.Brand.Name, Sites: []doorSite{}, Sets: []doorSet{}, Readiness: s.App.Readiness(), Prompts: mcpPrompts}
+	fd := FrontDoor{Brand: s.App.Cfg.Brand.Name, Advisory: s.App.Cfg.Brand.Advisory, Sites: []doorSite{}, Sets: []doorSet{}, Readiness: s.App.Readiness(), Prompts: mcpPrompts}
 	for _, st := range s.App.Cfg.Brand.AllSites() {
 		fd.Sites = append(fd.Sites, doorSite{st.URL, st.Kind})
 	}
@@ -185,8 +189,9 @@ func (s *Server) frontDoor(ctx context.Context) FrontDoor {
 	if a, _ := s.App.LatestAudit(ctx); a != nil {
 		fd.Audit = &doorAudit{At: a.At, AgeDays: ageDays(a.At, now), Errors: a.Errors(), Warnings: a.Warnings()}
 	}
-	qw, _ := s.App.QuickWins(ctx)
-	for _, q := range qw {
+	steps, _ := s.App.NextSteps(ctx)
+	fd.Investigations, fd.MarketFindings = len(steps.Investigations), len(steps.Findings)
+	for _, q := range steps.Actions {
 		if q.Status == app.Open {
 			fd.OpenFixes++
 			if q.Priority == "urgent" {
@@ -248,13 +253,17 @@ func (fd FrontDoor) steps(running, never, stale, fresh []doorSet) []nextStep {
 	}
 	// The newest finished report, fresh sets first.
 	if done := append(append([]doorSet(nil), fresh...), stale...); len(done) > 0 {
-		add("get_run", map[string]any{"run": done[0].LastFinished.ID}, "The latest finished report for %s: rates, share of voice, fixes and one line per prompt.", done[0].Name)
+		add("get_run", map[string]any{"run": done[0].LastFinished.ID}, "The latest finished report for %s: rates, share of voice, next steps and one line per prompt.", done[0].Name)
 	}
 	switch {
 	case fd.UrgentFixes > 0:
-		add("get_quick_wins", map[string]any{"status": "open", "priority": "urgent", "brief": true}, "%d urgent fixes are open. Pick one, then get it again with limit to read its Claude Code prompt.", fd.UrgentFixes)
+		add("get_next_steps", map[string]any{"kind": "actions", "status": "open", "priority": "urgent", "brief": true}, "%d urgent verified actions are open. Read the evidence and completion criteria before choosing work.", fd.UrgentFixes)
 	case fd.OpenFixes > 0:
-		add("get_quick_wins", map[string]any{"status": "open", "brief": true, "limit": 5}, "%d fixes are open; these are the fastest ranking gains.", fd.OpenFixes)
+		add("get_next_steps", map[string]any{"kind": "actions", "status": "open", "brief": true, "limit": 5}, "%d verified actions are open; inspect their evidence before choosing work.", fd.OpenFixes)
+	case fd.Investigations > 0:
+		add("get_next_steps", map[string]any{"kind": "investigations", "limit": 5}, "No verified action is open. Start with %d read-only investigations; resolve the premise or decision before changing anything.", fd.Investigations)
+	case fd.MarketFindings > 0:
+		add("get_next_steps", map[string]any{"kind": "market_findings", "limit": 5}, "Review %d market findings. An intentional boundary or a supported tradeoff can call for no change.", fd.MarketFindings)
 	}
 	switch {
 	case fd.Audit == nil:
@@ -299,9 +308,9 @@ func addPrompts(srv *mcp.Server) {
 1. Call get_started. If data_state is no_runs or stale, say so first and offer the dry run it suggests; don't start a run without asking.
 2. Call get_rankings with last_days=14 (and set, if one is named). Report the change in named and recommended over the week, and say plainly when a change is within_noise.
 3. Call get_run on the newest finished run of each set: the headline (unbranded) rates, the share-of-voice leaders, and the top two objections.
-4. Call get_quick_wins with status=open, brief=true, limit=5, and list_attempts for work whose outcome came in.
+4. Call get_next_steps with brief=true, limit=5, and list_attempts for work whose outcome came in. Keep verified actions, read-only investigations and market findings separate. Read the advisory positioning and boundaries from get_started; these guide advice, never the interpretation of measured answers.
 
-Write it as five bullets at most, then "This week:" with the one or two fixes to take on and why. No tables, no rates without their intervals.`, scope(req.Params.Arguments))), nil
+Write it as five bullets at most, then "This week:" with a verified action or read-only investigation worth taking on and why. If no work is justified, say so. Respect intentional boundaries; do not invent a fix to fill the section. No tables, no rates without their intervals.`, scope(req.Params.Arguments))), nil
 		})
 	srv.AddPrompt(&mcp.Prompt{Name: "competitor_radar", Title: "Competitor radar", Description: "Who is winning which prompts, and from which sources.",
 		Arguments: []*mcp.PromptArgument{setArg, {Name: "competitor", Description: "focus on this competitor (default: the leaders)"}}},
@@ -312,23 +321,23 @@ Write it as five bullets at most, then "This week:" with the one or two fixes to
 			}
 			return text("Competitor radar", fmt.Sprintf(`Build a competitor radar for %s, focused on %s.
 
-1. Call list_runs (with set, if one is named) and take the newest run with status done for each set.
+1. Call get_started for the brand's advisory positioning and boundaries, then list_runs (with set, if one is named) and take the newest run with status done for each set.
 2. Call get_run on it. From share_of_voice and head_to_head, rank the competitors; from prompts, list the prompts each one is the top pick for while the brand isn't recommended.
 3. From top_hosts and outreach, name the sources that cite them and never the brand.
 4. Call get_rankings with last_days=28 to say whether each lead is growing or shrinking (and when that's within noise).
 
-Answer as one short section per competitor: the prompts it wins, the sources behind it, and the trend. End with the single source or page most worth getting the brand onto.`, scope(req.Params.Arguments), focus)), nil
+Answer as one short section per competitor: the observed prompts it wins, associated citations and the trend. A citation does not establish the cause of a preference. Consult get_next_steps before proposing work; an intentional scope limit can remain a market finding with no action. Do not assume a cited page accepts submissions or needs the brand added.`, scope(req.Params.Arguments), focus)), nil
 		})
 	srv.AddPrompt(&mcp.Prompt{Name: "why_not_recommended", Title: "Why not recommended", Description: "Why the assistants don't recommend the brand for one prompt, and what would change that.",
 		Arguments: []*mcp.PromptArgument{{Name: "prompt", Description: "the prompt's text, or its number in the set", Required: true}, setArg}},
 		func(ctx context.Context, req *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
 			return text("Why not recommended", fmt.Sprintf(`Explain why the assistants don't recommend the brand for this prompt: %q (in %s).
 
-1. Call list_runs and get_run on the newest finished run of the set it's in; find the prompt in prompts (match the text or the number).
+1. Call get_started for advisory positioning and boundaries, then list_runs and get_run on the newest finished run of the set it's in; find the prompt in prompts (match the text or the number). Check whether it is informational or supplies the brand; do not claim a discovery loss for a branded question or a recommendation loss for an explanation.
 2. For two or three of its results, call get_result: read what each answer recommended instead, its why_not_top and objections, and which pages its searches surfaced and cited.
 3. Call get_search_queries on the run for what the assistants searched for this prompt, and whether the brand's pages came up.
-4. Call get_quick_wins with brief=true and check whether an open fix already targets this prompt.
+4. Call get_next_steps with brief=true and inspect any action, investigation or market finding targeting this prompt.
 
-Answer with: who wins it and why (quote the answers), whether it's a documentation, positioning or third-party gap, and the one change most likely to flip it. If a fix exists, name it instead of inventing one.`, req.Params.Arguments["prompt"], scope(req.Params.Arguments))), nil
+Answer with what the answers actually say, supported by result IDs and short quotes. Separate observed objections from hypotheses about causes. State what remains unknown and whether the situation is an intentional market boundary. Propose only a verified action already supported by evidence, a read-only investigation, or no change; do not force a fix or promise it will flip a result.`, req.Params.Arguments["prompt"], scope(req.Params.Arguments))), nil
 		})
 }

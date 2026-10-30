@@ -95,7 +95,7 @@ func TestFrontDoor(t *testing.T) {
 	if st := stepTo(fd, "get_run"); st == nil || st.Args["run"] != id {
 		t.Errorf("ready should read the first set's latest run: %+v", fd.NextSteps)
 	}
-	if st := stepTo(fd, "get_quick_wins"); st == nil || st.Args["priority"] != "urgent" || st.Args["status"] != "open" {
+	if st := stepTo(fd, "get_next_steps"); st == nil || st.Args["priority"] != "urgent" || st.Args["status"] != "open" {
 		t.Errorf("an urgent fix should be next: %+v", fd.NextSteps)
 	}
 	if stepTo(fd, "start_run") != nil {
@@ -154,8 +154,14 @@ func TestFrontDoor(t *testing.T) {
 		if err != nil || len(p.Messages) != 1 {
 			t.Fatalf("%s: %v", name, err)
 		}
-		if text := p.Messages[0].Content.(*mcp.TextContent).Text; !strings.Contains(text, want) || !strings.Contains(text, "ai-search-visibility") {
+		text := p.Messages[0].Content.(*mcp.TextContent).Text
+		if !strings.Contains(text, want) || !strings.Contains(text, "ai-search-visibility") || !strings.Contains(text, "get_started") || !strings.Contains(text, "get_next_steps") {
 			t.Errorf("%s: %s", name, text)
+		}
+		for _, old := range []string{"one change most likely to flip it", "End with the single source", "one or two fixes to take on"} {
+			if strings.Contains(text, old) {
+				t.Errorf("%s forces a fix: %s", name, old)
+			}
 		}
 	}
 }

@@ -50,7 +50,7 @@ func TestSiteChecks(t *testing.T) {
 		s := string(body)
 		var text string
 		switch {
-		case strings.Contains(s, "sharp growth lead"):
+		case strings.Contains(s, "evidence-led product and market analyst"):
 			mu.Lock()
 			analystPrompt = s
 			mu.Unlock()

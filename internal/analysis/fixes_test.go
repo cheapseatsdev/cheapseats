@@ -39,14 +39,14 @@ func TestPriorityWeighsReachAgainstEffort(t *testing.T) {
 	}
 }
 
-func TestBuildTriagesTheAnalystsList(t *testing.T) {
+func TestBuildKeepsUnverifiedCandidatesOutOfActions(t *testing.T) {
 	var sent string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
 		sent = string(body)
 		out := `{"insights":"## Why Cheap Seats lost\nCoder is GA.","fixes":[` +
-			`{"rank":2,"type":"outreach","title":"Get into the roundup","target":"https://example.com/roundup","claim":"c","done_when":"d","evidence":"e","prompts":[2,2,9],"effort":"S","displaces":""},` +
-			`{"rank":1,"type":"new-page","title":"Publish the devcontainer page","target":"cheapseats.example/docs/devcontainers","claim":"c","done_when":"d","evidence":"e","prompts":[1,2],"effort":"M","displaces":"https://coder.com/docs"},` +
+			`{"rank":2,"type":"outreach","title":"Get into the roundup","target":"https://example.com/roundup","claim":"c","done_when":"d","check":"Inspect https://example.com/roundup for current inclusion and the publisher eligibility rules.","decision":"Choose whether this specific publisher is an eligible distribution route for our starter product.","evidence":"e","prompts":[2,2,9],"effort":"S","displaces":""},` +
+			`{"rank":1,"type":"new-page","title":"Publish the devcontainer page","target":"cheapseats.example/docs/devcontainers","claim":"c","done_when":"d","check":"Inspect cheapseats.example/docs/devcontainers to determine whether the existing setup instructions already answer this question.","decision":"Decide whether our existing setup instructions need a material change before recommending this entry route.","evidence":"e","prompts":[1,2],"effort":"M","displaces":"https://coder.com/docs"},` +
 			`{"rank":3,"type":"product","title":"Nothing real","target":"x","claim":"c","done_when":"d","evidence":"e","prompts":[7],"effort":"L","displaces":null}]}`
 		json.NewEncoder(w).Encode(map[string]any{"content": []any{map[string]any{"type": "text", "text": out}}, "usage": map[string]any{"input_tokens": 10, "output_tokens": 10}})
 	}))
@@ -70,7 +70,7 @@ func TestBuildTriagesTheAnalystsList(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"PUBLIC-FACT", "Prompt 1: first question", "preferred Coder", "Cheap Seats pages seen: NONE", "https://coder.com/docs", "named 0/1, recommended 0/1", "a prompt's count is noisy"} {
+	for _, want := range []string{"PUBLIC-FACT", "Prompt 1: first question", "preferred Coder", "no first-party URL recorded; not proof of a missing or defective page", "https://coder.com/docs", "named 0/1, recommended 0/1", "a prompt's count is noisy"} {
 		if !strings.Contains(sent, want) {
 			t.Errorf("analyst input lacks %q", want)
 		}
@@ -78,15 +78,11 @@ func TestBuildTriagesTheAnalystsList(t *testing.T) {
 	if !strings.Contains(a.Insights, "Coder is GA") {
 		t.Error(a.Insights)
 	}
-	if len(a.Fixes) != 2 {
-		t.Fatalf("a fix citing no real prompt should be dropped: %+v", a.Fixes)
+	if len(a.Fixes) != 0 || len(a.Investigations) != 2 {
+		t.Fatalf("unverified candidates must be checks, not actions: %+v", a)
 	}
-	page, roundup := a.Fixes[0], a.Fixes[1]
-	if page.Gap != GapDocs || page.Owner != "docs" || page.Priority != "urgent" || !strings.Contains(page.ClaudePrompt, "second question") {
-		t.Errorf("page: %+v", page)
-	}
-	if roundup.Gap != GapThirdParty || roundup.Owner != "growth" || len(roundup.Prompts) != 1 || roundup.Displaces != nil {
-		t.Errorf("roundup: %+v", roundup)
+	if a.Investigations[0].Target != "cheapseats.example/docs/devcontainers" || len(a.Investigations[1].Prompts) != 1 {
+		t.Errorf("candidate sorting and prompt cleanup: %+v", a.Investigations)
 	}
 }
 
@@ -119,7 +115,7 @@ func TestMisstatementsReachTheAnalyst(t *testing.T) {
 	}
 	ctx := WithMisstatements(context.Background(), []string{`Fact 2 ("It is self-hosted.") is contradicted by 2 answers, on prompts 1, 4.`})
 	got := misstatementsText(ctx, "X")
-	for _, want := range []string{"Answers that named X contradicted these public facts", `- Fact 2 ("It is self-hosted.") is contradicted by 2 answers, on prompts 1, 4.`, "no answer to prompts N, M contradicts fact X"} {
+	for _, want := range []string{"Answers that named X contradicted these public facts", `- Fact 2 ("It is self-hosted.") is contradicted by 2 answers, on prompts 1, 4.`, "make done_when a team-controlled check", "separately as observations, not completion requirements"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q in:\n%s", want, got)
 		}
