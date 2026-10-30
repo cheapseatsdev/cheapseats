@@ -75,7 +75,8 @@ type Server struct {
 	publicURL string
 	// A read-only copy (CHEAPSEATS_READONLY), such as a public demo: it serves pages and the JSON
 	// API, refuses every change and MCP, and hides the controls that would make one.
-	readOnly bool
+	readOnly   bool
+	evaluation bool
 	// The shared-report page, which has its own layout (no navigation to pages behind auth), and
 	// the limit on unknown tokens asked for.
 	share      *template.Template
@@ -85,6 +86,7 @@ type Server struct {
 func New(a *app.App) (*Server, error) {
 	s := &Server{App: a, cookie: "cheapseats_token_" + a.Cfg.Brand.Slug(), authHeader: strings.TrimSpace(env.Get("AUTH_HEADER")),
 		publicURL: strings.TrimRight(strings.TrimSpace(env.Get("PUBLIC_URL")), "/"), readOnly: env.Get("READONLY") != ""}
+	s.evaluation = env.Get("EVALUATION") == "1" && !s.readOnly
 	for _, t := range strings.Split(env.Get("TOKENS"), ",") {
 		if t = strings.TrimSpace(t); t != "" {
 			s.tokens = append(s.tokens, t)
@@ -115,9 +117,10 @@ func New(a *app.App) (*Server, error) {
 		"pct":   func(p float64) string { return fmt.Sprintf("%.0f%%", 100*p) },
 		"neg":   func(n int) int { return -n },
 		// An answer's grade key for the seat meter (see gradeKey), and its words.
-		"gradekey": func(g *grade.Grade) string { return gradeKey(g, a.Cfg.Brand.Name) },
-		"glabel":   func(k string) string { return strings.ReplaceAll(k, "-", " ") },
-		"readonly": func() bool { return s.readOnly },
+		"gradekey":   func(g *grade.Grade) string { return gradeKey(g, a.Cfg.Brand.Name) },
+		"glabel":     func(k string) string { return strings.ReplaceAll(k, "-", " ") },
+		"readonly":   func() bool { return s.readOnly },
+		"evaluation": func() bool { return s.evaluation },
 		// A commit, abbreviated.
 		"short": func(rev string) string {
 			if len(rev) > 10 {
@@ -217,7 +220,7 @@ func New(a *app.App) (*Server, error) {
 		},
 	}
 	s.pages = map[string]*template.Template{}
-	for _, p := range []string{"home", "set", "run", "rankings", "quickwins", "search", "login", "searches", "audit", "crawlers", "regrade", "review"} {
+	for _, p := range []string{"home", "set", "run", "rankings", "quickwins", "search", "login", "searches", "audit", "crawlers", "regrade", "review", "evaluation", "evaluation-case"} {
 		t, err := template.New(p).Funcs(funcs).ParseFS(assets, "templates/layout.html", "templates/"+p+".html")
 		if err != nil {
 			return nil, fmt.Errorf("template %s: %w", p, err)
@@ -278,6 +281,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /{$}", s.home)
 	mux.HandleFunc("GET /api/status", s.apiStatus)
 	mux.HandleFunc("GET /api/version", s.apiVersion)
+	if s.evaluation {
+		s.evaluationRoutes(mux)
+	}
 	// For a container's liveness probe: open without a token, and says nothing but that it's up.
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok\n")) })
 	mux.HandleFunc("GET /api/live", s.apiLive)

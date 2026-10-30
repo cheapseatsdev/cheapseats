@@ -265,6 +265,48 @@ func TestEvaluationUpgradeKeepsProductionEvidenceAndRequiresNewWriter(t *testing
 	}
 }
 
+func TestEvaluationSessionsUpgradeKeepsSavedHumanDecision(t *testing.T) {
+	data := t.TempDir()
+	old, err := store.OpenAt(data, 14)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Schema 14's current annotation and event history must survive separately.
+	for _, query := range []string{
+		`INSERT INTO evaluation_cases VALUES ('case','{}','now')`,
+		`INSERT INTO evaluation_rubrics VALUES ('rules','original rules','now')`,
+		`INSERT INTO evaluation_reviews VALUES ('case',1,'reviewed','{"verdict":"absent"}','reviewer','now')`,
+		`INSERT INTO evaluation_events VALUES ('case',1,'judgment','{"verdict":"absent"}','reviewer','rules','now')`,
+	} {
+		if _, err := old.Exec(query); err != nil {
+			t.Fatal(err)
+		}
+	}
+	old.Close()
+	db, err := store.Open(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	var current, historical string
+	if err := db.QueryRow(`SELECT judgment FROM evaluation_reviews WHERE case_id='case'`).Scan(&current); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.QueryRow(`SELECT judgment FROM evaluation_events WHERE case_id='case'`).Scan(&historical); err != nil {
+		t.Fatal(err)
+	}
+	if current != `{"verdict":"absent"}` || current != historical {
+		t.Fatal("session migration rewrote annotations")
+	}
+	if _, err := os.Stat(filepath.Join(data, "cheapseats.db.bak-v14")); err != nil {
+		t.Fatal(err)
+	}
+	if older, err := store.OpenAt(data, 14); err == nil {
+		older.Close()
+		t.Fatal("older writer opened sessions schema")
+	}
+}
+
 // Crawl counts from before 4xx responses were pooled under crawl.ErrorPath keep their own rows and
 // still count: a 404 counted under its path by an older release reads beside the pooled row new
 // imports write, a new 5xx still lands on its own page, and the totals hold all of them.

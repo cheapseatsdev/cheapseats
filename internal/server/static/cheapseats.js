@@ -49,7 +49,7 @@ window.addEventListener("hashchange", revealSource);
 // and swap in its <main>, keeping open sections and the scroll position. Fast while a run or fix
 // list is in progress, slow otherwise, paused while the tab is hidden or you're typing.
 (function () {
-  if (/^\/(search|login)/.test(location.pathname)) return;
+  if (/^\/(search|login|evaluation)/.test(location.pathname)) return;
   let version = null;
   let timer = null;
   const badge = document.querySelector("header .live") ?? document.createElement("span");
