@@ -1,0 +1,9 @@
+{{define "title"}}Review session complete · Evaluation · {{end}}{{define "body"}}
+<h1>Review session complete</h1>
+<p class="sub">You reached the end of {{.Total}} cases. Your saved work remains available when you return.</p>
+<section class="card"><h2>What you saved</h2><p>Current state of this session's cases: {{.Reviewed}} / {{.Total}} finished human judgments · {{.Unresolved}} unresolved · {{.Drafts}} drafts.</p><p>Only a finished judgment is ready for an independent check. Unresolved decisions and drafts stay editable.</p></section>
+<section class="card"><h2>Next: check your saved judgments</h2><p>A separate model can assess the same answers without seeing your labels. You decide whether to keep or change your judgment when it disagrees. No assessment has started automatically.</p>
+{{if .Reviewed}}<p><a class="btn" href="/evaluation/checks?import={{.ImportID}}">Check saved judgments</a></p>{{else}}<p><a class="btn" href="/evaluation?import={{.ImportID}}">Return to review queue</a></p>{{end}}
+<p>Then approve a dataset version to freeze the reviewed answers for comparing grader prompts. Your reviews do not automatically change production grades.</p>
+<p><a href="/evaluation?import={{.ImportID}}">Back to Evaluation</a></p></section>
+{{end}}

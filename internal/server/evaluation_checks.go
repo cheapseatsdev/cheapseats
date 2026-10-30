@@ -4,7 +4,9 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
+	"net/url"
 	"strconv"
+	"strings"
 
 	"github.com/cheapseatsdev/cheapseats/internal/evaluation"
 )
@@ -13,18 +15,20 @@ func (s *Server) evaluationAssessor() evaluation.Assessor {
 	return evaluation.Assessor{Cfg: s.App.Cfg, Budget: s.App.Runs.Budget}
 }
 func (s *Server) evaluationCheckRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("GET /evaluation/checks", s.evaluationChecksPage)
 	mux.HandleFunc("GET /evaluation/checks/{id}", s.evaluationCheckPreview)
 	mux.HandleFunc("POST /evaluation/checks/{id}", s.evaluationCheckRun)
 	mux.HandleFunc("GET /evaluation/cases/{id}/resolve", s.evaluationResolve)
 }
 
 type evaluationCheckData struct {
-	ID, Question, ReadyError, Error string
-	Plan                            evaluation.CheckPlan
-	Check                           *evaluation.Check
-	Estimate                        float64
-	Reservation                     float64
-	Subscription                    bool
+	ID, Question, ReadyError, Error, ImportID string
+	Plan                                      evaluation.CheckPlan
+	Check                                     *evaluation.Check
+	Estimate                                  float64
+	Reservation                               float64
+	Subscription                              bool
+	Confirmation                              evaluationConfirmation
 }
 
 func (s *Server) evaluationCheckData(r *http.Request) (evaluationCheckData, error) {
@@ -37,6 +41,11 @@ func (s *Server) evaluationCheckData(r *http.Request) (evaluationCheckData, erro
 		return evaluationCheckData{}, errors.New("save a human judgment before requesting a check; drafts and unresolved reviews remain editable from the case page")
 	}
 	d := evaluationCheckData{ID: c.ID, Question: c.Record.Prompt, Reservation: a.Budget.Allowance(), Subscription: a.Cfg.Grader.Via() == "claude-code"}
+	d.ImportID, err = s.evaluationCheckImport(r.Context(), r.FormValue("import"), c.ID)
+	if err != nil {
+		return d, err
+	}
+	d.Confirmation = s.evaluationConfirmation(r)
 	d.Plan = a.CheckPlan(c.ID, 5*d.Reservation)
 	d.Estimate = a.Estimate(c.Record, d.Plan.Prompt)
 	if err := a.Ready(); err != nil {
@@ -93,7 +102,8 @@ func (s *Server) evaluationCheckRun(w http.ResponseWriter, r *http.Request) {
 		s.render(w, "evaluation-check", d)
 		return
 	}
-	http.Redirect(w, r, "/evaluation/cases/"+d.ID+"/resolve", http.StatusSeeOther)
+	q := url.Values{"import": {d.ImportID}, "checks": {"1"}}.Encode()
+	http.Redirect(w, r, "/evaluation/cases/"+d.ID+"/resolve?"+q, http.StatusSeeOther)
 }
 func (s *Server) evaluationResolve(w http.ResponseWriter, r *http.Request) {
 	d, err := s.evaluationCaseData(r, r.PathValue("id"), nil)
@@ -110,5 +120,41 @@ func (s *Server) evaluationResolve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	d.Resolution = len(d.Pending) > 0
+	d.CheckQueue = true
+	if err := s.evaluationCheckNavigation(r, &d); err != nil {
+		http.Error(w, err.Error(), evaluationCode(err))
+		return
+	}
 	s.render(w, "evaluation-case", d)
+}
+
+func (s *Server) evaluationCheckNavigation(r *http.Request, d *evaluationCaseData) error {
+	var err error
+	d.ImportID, err = s.evaluationCheckImport(r.Context(), d.ImportID, d.ID)
+	if err != nil {
+		return err
+	}
+	q := r.URL.Query()
+	q.Set("import", d.ImportID)
+	r.URL.RawQuery = q.Encode()
+	home, err := s.evaluationHomeData(r)
+	if err != nil {
+		return err
+	}
+	d.CheckTotal = len(home.Flow.Rows)
+	d.CheckDone, d.CheckPending = home.Flow.Done, home.Flow.Pending
+	for i, row := range home.Flow.Rows {
+		if row.ID == d.ID {
+			d.CheckPosition = i + 1
+		}
+	}
+	d.NextCheckURL, err = s.evaluationNextCheck(r, d.ImportID, d.ID)
+	if err != nil {
+		return err
+	}
+	d.NextCheckAction = "Continue to next check"
+	if strings.HasPrefix(d.NextCheckURL, "/evaluation/checks?") {
+		d.NextCheckAction = "Finish checking"
+	}
+	return nil
 }
