@@ -10,6 +10,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/cheapseatsdev/cheapseats/internal/grade"
 	"github.com/cheapseatsdev/cheapseats/internal/store"
 )
 
@@ -38,15 +39,40 @@ func bigrams(s string) map[string]bool {
 	return bs
 }
 
+type groupEvidence struct {
+	question, answer string
+	pairs            map[string]bool
+}
+
+func prepareGroupEvidence(r grade.GoldenRecord) groupEvidence {
+	return groupEvidence{strings.Join(words(r.Prompt), " "), r.Answer, bigrams(r.Answer)}
+}
+func relatedEvidence(a, b groupEvidence) bool {
+	if a.question == b.question || a.answer == b.answer {
+		return true
+	}
+	if len(a.pairs) < 10 || len(b.pairs) < 10 {
+		return false
+	}
+	shared := 0
+	for pair := range a.pairs {
+		if b.pairs[pair] {
+			shared++
+		}
+	}
+	union := len(a.pairs) + len(b.pairs) - shared
+	return shared > 0 && float64(shared)/float64(union) >= .9
+}
+
 // Related questions stay together. High-overlap answer word pairs are an
 // additional conservative grouping rule, not a claim of semantic deduplication.
 func grouping(cs []Case) Grouping {
 	sort.Slice(cs, func(i, j int) bool { return cs[i].ID < cs[j].ID })
 	parent := make([]int, len(cs))
-	bs := make([]map[string]bool, len(cs))
+	evidence := make([]groupEvidence, len(cs))
 	for i := range cs {
 		parent[i] = i
-		bs[i] = bigrams(cs[i].Record.Answer)
+		evidence[i] = prepareGroupEvidence(cs[i].Record)
 	}
 	var root func(int) int
 	root = func(i int) int {
@@ -57,18 +83,7 @@ func grouping(cs []Case) Grouping {
 	}
 	for i := range cs {
 		for j := 0; j < i; j++ {
-			sameQuestion := strings.Join(words(cs[i].Record.Prompt), " ") == strings.Join(words(cs[j].Record.Prompt), " ")
-			sameAnswer := cs[i].Record.Answer == cs[j].Record.Answer
-			shared := 0
-			if !sameQuestion && !sameAnswer && len(bs[i]) >= 10 && len(bs[j]) >= 10 {
-				for b := range bs[i] {
-					if bs[j][b] {
-						shared++
-					}
-				}
-			}
-			union := len(bs[i]) + len(bs[j]) - shared
-			if sameQuestion || sameAnswer || shared > 0 && float64(shared)/float64(union) >= .9 {
+			if relatedEvidence(evidence[i], evidence[j]) {
 				a, b := root(i), root(j)
 				if a > b {
 					a, b = b, a

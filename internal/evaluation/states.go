@@ -18,3 +18,19 @@ var CheckTransitions = state.Table[CheckState]{
 	CheckRunning: {CheckDone, CheckFailed},
 	CheckFailed:  {CheckRunning},
 }
+
+type ReviewState string
+
+const (
+	ReviewDraft      ReviewState = "draft"
+	ReviewReviewed   ReviewState = "reviewed"
+	ReviewUnresolved ReviewState = "unresolved"
+)
+
+var ReviewStates = []ReviewState{ReviewDraft, ReviewReviewed, ReviewUnresolved}
+var ReviewTransitions = state.Table[ReviewState]{
+	state.Start:      {ReviewDraft, ReviewReviewed, ReviewUnresolved},
+	ReviewDraft:      {ReviewReviewed, ReviewUnresolved},
+	ReviewReviewed:   {ReviewDraft, ReviewUnresolved},
+	ReviewUnresolved: {ReviewDraft, ReviewReviewed},
+}

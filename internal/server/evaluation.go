@@ -43,6 +43,7 @@ func (s *Server) evaluationRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/evaluation/cases/{id}/draft", s.evaluationDraft)
 	s.evaluationDatasetRoutes(mux)
 	s.evaluationCheckRoutes(mux)
+	s.evaluationExperimentRoutes(mux)
 }
 
 type evaluationRow struct {
@@ -195,6 +196,7 @@ type evaluationCaseData struct {
 	Resolutions                                             []evaluation.ResolutionRecord
 	Resolution                                              bool
 	ResolutionNote                                          string
+	RequireNote                                             bool
 }
 
 type evaluationPassage struct {

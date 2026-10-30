@@ -133,10 +133,16 @@ func (s *Server) evaluationDataset(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), evaluationCode(err))
 		return
 	}
+	experiments, err := s.evaluationStore().Experiments(r.Context(), d.ID)
+	if err != nil {
+		http.Error(w, err.Error(), evaluationCode(err))
+		return
+	}
 	s.render(w, "evaluation-dataset", struct {
-		Dataset   evaluation.Dataset
-		Baselines []evaluation.Baseline
-	}{d, evaluation.Baselines(d)})
+		Dataset     evaluation.Dataset
+		Baselines   []evaluation.Baseline
+		Experiments []evaluation.Experiment
+	}{d, evaluation.Baselines(d), experiments})
 }
 func (s *Server) evaluationDatasetExport(w http.ResponseWriter, r *http.Request) {
 	d, err := s.evaluationStore().Dataset(r.Context(), r.PathValue("id"))

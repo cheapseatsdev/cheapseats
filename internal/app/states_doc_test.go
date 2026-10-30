@@ -81,7 +81,7 @@ func statesDoc() string {
 		"status columns are text; these are their values, and the arrows are every move the code makes.",
 		"",
 		"Generated from the transition tables in the code (`run.RunTransitions`, `run.ResultTransitions`,",
-		"`app.AttemptTransitions`, `budget.Transitions`, `evaluation.CheckTransitions`) by",
+		"`app.AttemptTransitions`, `budget.Transitions`, `evaluation.CheckTransitions`, `evaluation.ReviewTransitions`) by",
 		"`go test ./internal/app -run TestStatesDocIsCurrent -update`; the test fails while this file is",
 		"stale. Every status write goes through a helper that checks the move against its table, and the",
 		"`run` package's tests fail on a move the table doesn't list.",
@@ -139,6 +139,19 @@ func statesDoc() string {
 		"resolution events are stored separately; none of these states is human approval.",
 		"",
 		strings.TrimRight(evaluation.CheckTransitions.Mermaid(evaluation.CheckStates), "\n"),
+		"",
+		"Comparison predictions (`evaluation_predictions.state`) use the same check lifecycle, with",
+		"each case, grader and repetition claimed and saved separately. Done predictions survive resume.",
+		"",
+		"## Evaluation decisions (`evaluation_reviews.state`)",
+		"",
+		"A human decision starts as **draft**, **reviewed** or **unresolved**. Draft is unfinished work,",
+		"reviewed is an explicit validated judgment, and unresolved records the decision still needed.",
+		"Each change appends history and requires the previous revision. Comparison reviews use reviewed",
+		"or unresolved in `evaluation_experiment_reviews.state`; their unfinished edits stay in the",
+		"browser rather than autosaving over the human reference. Approved dataset versions stay frozen.",
+		"",
+		strings.TrimRight(evaluation.ReviewTransitions.Mermaid(evaluation.ReviewStates), "\n"),
 	)
 	return b.String()
 }
