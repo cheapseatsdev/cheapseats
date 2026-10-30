@@ -1158,7 +1158,15 @@ func (s *Server) who(r *http.Request, via string) string {
 
 // back is where a form returns to: a path on this Cheap Seats, never another site.
 func back(r *http.Request, fallback string) string {
-	if b := r.FormValue("back"); strings.HasPrefix(b, "/") && !strings.HasPrefix(b, "//") && !strings.HasPrefix(b, "/\\") {
+	b := r.FormValue("back")
+	// Browsers discard literal tabs/newlines and treat backslashes as slashes.
+	// Redirect also cleans dot segments, which can move a later backslash into
+	// the authority position. Parse controls strictly and reject backslashes
+	// before either transformation; Parse alone doesn't check fragment controls.
+	// Keep safe query strings and fragments intact.
+	u, err := url.Parse(b)
+	controls := strings.IndexFunc(b, func(r rune) bool { return r < 0x20 || r == 0x7f }) >= 0
+	if err == nil && !controls && u.Scheme == "" && u.Host == "" && strings.HasPrefix(b, "/") && !strings.HasPrefix(b, "//") && !strings.ContainsRune(b, '\\') {
 		return b
 	}
 	return fallback
