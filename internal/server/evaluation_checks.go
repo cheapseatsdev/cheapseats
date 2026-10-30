@@ -156,5 +156,19 @@ func (s *Server) evaluationCheckNavigation(r *http.Request, d *evaluationCaseDat
 	if strings.HasPrefix(d.NextCheckURL, "/evaluation/checks?") {
 		d.NextCheckAction = "Finish checking"
 	}
+	if d.CheckBatchID != "" {
+		b, e := s.evaluationBatchCase(r, d.CheckBatchID, d.ID)
+		if e != nil {
+			return e
+		}
+		d.CheckTotal = len(b.Plan.Cases)
+		for i, c := range b.Plan.Cases {
+			if c.CaseID == d.ID {
+				d.CheckPosition = i + 1
+			}
+		}
+		d.NextCheckURL = "/evaluation/check-batches/" + b.Plan.ID + "#case-" + d.ID
+		d.NextCheckAction = "Back to all independent checks"
+	}
 	return nil
 }

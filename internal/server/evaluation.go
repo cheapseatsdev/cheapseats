@@ -44,6 +44,7 @@ func (s *Server) evaluationRoutes(mux *http.ServeMux) {
 	s.evaluationDatasetRoutes(mux)
 	s.evaluationCheckRoutes(mux)
 	s.evaluationExperimentRoutes(mux)
+	s.evaluationBatchRoutes(mux)
 }
 
 type evaluationRow struct {
@@ -64,6 +65,8 @@ type evaluationHome struct {
 	ReviewFinished               bool
 	Confirmation                 evaluationConfirmation
 	Datasets                     []evaluation.Dataset
+	BatchOffer                   *evaluation.CheckBatchOffer
+	Batches                      []evaluation.CheckBatch
 }
 
 func (s *Server) evaluationHomeData(r *http.Request) (evaluationHome, error) {
@@ -122,6 +125,17 @@ func (s *Server) evaluationHomeData(r *http.Request) (evaluationHome, error) {
 			row.Answerer, row.Track = c.Record.Source.Answerer, c.Record.Source.Track
 		}
 		d.Rows = append(d.Rows, row)
+	}
+	if d.Flow.Eligible > 0 && d.Flow.Eligible <= 500 {
+		offer, e := w.PrepareCheckBatch(r.Context(), s.evaluationAssessor(), id, "", s.evaluationActor(r))
+		if e != nil {
+			return d, e
+		}
+		d.BatchOffer = &offer
+	}
+	d.Batches, err = w.CheckBatches(r.Context(), id, s.evaluationActor(r))
+	if err != nil {
+		return d, err
 	}
 	d.Resume, err = w.Resume(r.Context(), id, s.evaluationActor(r))
 	if d.Resume != nil {
@@ -207,6 +221,7 @@ type evaluationCaseData struct {
 	ResolutionNote                                          string
 	RequireNote                                             bool
 	CheckQueue                                              bool
+	CheckBatchID                                            string
 	SavedJudgment                                           evaluation.Judgment
 	NextCheckURL, NextCheckAction                           string
 	CheckPosition, CheckTotal                               int
@@ -249,6 +264,7 @@ func (s *Server) evaluationCaseData(r *http.Request, id string, session *evaluat
 	}
 	d := evaluationCaseData{ID: c.ID, Prompt: c.Record.Prompt, Brand: c.Record.Brand.Name, About: c.Record.Brand.About, Aliases: c.Record.Brand.Aliases, Intent: c.Record.Intent, Answer: c.Record.Answer, Actor: s.evaluationActor(r), Rubric: evaluation.Rubric(), Judgment: c.Review.Judgment, Revision: c.Review.Revision, State: c.Review.State, FirstReviewed: c.FirstReviewed, Session: session, ImportID: r.URL.Query().Get("import")}
 	d.CheckQueue = r.URL.Query().Get("checks") == "1" || r.FormValue("checks") == "1"
+	d.CheckBatchID = r.FormValue("batch")
 	d.SavedJudgment = c.Review.Judgment
 	d.Confirmation = s.evaluationConfirmation(r)
 	if d.Intent == "" {
@@ -395,6 +411,10 @@ func (s *Server) evaluationSave(w http.ResponseWriter, r *http.Request) {
 	if action == "end" {
 		kind = "draft"
 	}
+	batchID := r.FormValue("batch")
+	if err == nil && batchID != "" {
+		_, err = s.evaluationBatchCase(r, batchID, id)
+	}
 	checkImportID := ""
 	if err == nil && r.FormValue("checks") == "1" && session == nil {
 		checkImportID, err = s.evaluationCheckImport(r.Context(), r.FormValue("import"), id)
@@ -432,6 +452,10 @@ func (s *Server) evaluationSave(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, target, http.StatusSeeOther)
 			return
 		}
+	}
+	if err == nil && batchID != "" {
+		http.Redirect(w, r, evaluationBatchReturn(batchID, id, revision), http.StatusSeeOther)
+		return
 	}
 	if err == nil && r.FormValue("checks") == "1" && session == nil {
 		var target string

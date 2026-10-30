@@ -183,6 +183,7 @@ func (s *Server) evaluationChecksPage(w http.ResponseWriter, r *http.Request) {
 type evaluationSessionSummary struct {
 	ImportID                            string
 	Total, Reviewed, Unresolved, Drafts int
+	BatchOffer                          *evaluation.CheckBatchOffer
 }
 
 func (s *Server) evaluationSessionFinished(w http.ResponseWriter, r *http.Request, session evaluation.Session) {
@@ -201,6 +202,14 @@ func (s *Server) evaluationSessionFinished(w http.ResponseWriter, r *http.Reques
 		case "draft":
 			d.Drafts++
 		}
+	}
+	if d.Reviewed > 0 {
+		offer, err := s.evaluationStore().PrepareCheckBatch(r.Context(), s.evaluationAssessor(), session.ImportID, session.ID, s.evaluationActor(r))
+		if err != nil {
+			http.Error(w, err.Error(), evaluationCode(err))
+			return
+		}
+		d.BatchOffer = &offer
 	}
 	s.render(w, "evaluation-session", d)
 }

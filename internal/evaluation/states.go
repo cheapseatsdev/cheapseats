@@ -19,6 +19,14 @@ var CheckTransitions = state.Table[CheckState]{
 	CheckFailed:  {CheckRunning},
 }
 
+var CheckBatchTransitions = state.Table[CheckState]{
+	state.Start:  {CheckReady},
+	CheckReady:   {CheckRunning},
+	CheckRunning: {CheckDone, CheckFailed},
+	CheckFailed:  {CheckRunning},
+	CheckDone:    {CheckRunning}, // explicit retry of failed items only
+}
+
 type ReviewState string
 
 const (

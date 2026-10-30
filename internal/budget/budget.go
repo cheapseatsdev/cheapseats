@@ -9,17 +9,20 @@ import (
 	"github.com/cheapseatsdev/cheapseats/internal/state"
 	"github.com/cheapseatsdev/cheapseats/internal/store"
 	"math"
+	"strings"
 	"time"
 )
 
-var ErrExhausted = errors.New("daily admission budget exhausted")
+var ErrExhausted = errors.New("admission budget exhausted")
 
 type Controller struct {
-	Cfg   *config.Config
-	DB    *store.DB
-	gate  chan struct{}
-	scope string
-	limit float64
+	Cfg        *config.Config
+	DB         *store.DB
+	gate       chan struct{}
+	scope      string
+	limit      float64
+	kinds      []string
+	groupLimit float64
 }
 
 func New(c *config.Config, d *store.DB) *Controller {
@@ -36,7 +39,40 @@ func (c *Controller) Scoped(kind string, limit float64) (*Controller, error) {
 	if kind == "" || limit <= 0 || math.IsNaN(limit) || math.IsInf(limit, 0) {
 		return nil, fmt.Errorf("an operation and positive admission budget are required")
 	}
-	return &Controller{Cfg: c.Cfg, DB: c.DB, gate: c.gate, scope: kind, limit: limit}, nil
+	next := *c
+	next.scope, next.limit = kind, limit
+	return &next, nil
+}
+
+// WithinKinds adds one shared admission ceiling without replacing per-operation
+// or daily limits. Kinds retain their existing ledger identities across resumes.
+func (c *Controller) WithinKinds(kinds []string, limit float64) (*Controller, error) {
+	if len(kinds) == 0 || len(kinds) > 500 || len(c.kinds) != 0 || limit <= 0 || math.IsNaN(limit) || math.IsInf(limit, 0) {
+		return nil, fmt.Errorf("choose up to 500 operations and a positive group admission budget")
+	}
+	seen := map[string]bool{}
+	for _, kind := range kinds {
+		if kind == "" || seen[kind] {
+			return nil, fmt.Errorf("operation identities must be distinct and nonempty")
+		}
+		seen[kind] = true
+	}
+	next := *c
+	next.kinds, next.groupLimit = append([]string(nil), kinds...), limit
+	return &next, nil
+}
+
+func (c *Controller) SpentKinds(ctx context.Context, kinds []string) (float64, error) {
+	if len(kinds) == 0 {
+		return 0, nil
+	}
+	args := make([]any, len(kinds))
+	for i, kind := range kinds {
+		args[i] = kind
+	}
+	var spent float64
+	err := c.DB.QueryRowContext(ctx, `SELECT COALESCE(SUM(amount_usd),0) FROM spend_events WHERE kind IN (`+strings.TrimSuffix(strings.Repeat("?,", len(kinds)), ",")+`)`, args...).Scan(&spent)
+	return spent, err
 }
 
 type Lease struct {
@@ -50,6 +86,15 @@ func (c *Controller) Reserve(ctx context.Context, kind, model string, amount flo
 	if c.scope != "" && kind != c.scope {
 		return nil, fmt.Errorf("operation does not match its admission budget")
 	}
+	if len(c.kinds) > 0 {
+		member := false
+		for _, k := range c.kinds {
+			member = member || k == kind
+		}
+		if !member {
+			return nil, fmt.Errorf("operation is outside this group admission budget")
+		}
+	}
 	if amount <= 0 || math.IsNaN(amount) || math.IsInf(amount, 0) {
 		return nil, fmt.Errorf("invalid reservation")
 	}
@@ -60,7 +105,16 @@ func (c *Controller) Reserve(ctx context.Context, kind, model string, amount flo
 	}
 	day := time.Now().UTC().Format("2006-01-02")
 	Transitions.Check("spend_events", state.Start, Reserved)
-	res, err := c.DB.ExecContext(ctx, `INSERT INTO spend_events(created_at,kind,model,amount_usd,state) SELECT ?,?,?,?,? WHERE (?<=0 OR (SELECT COALESCE(SUM(amount_usd),0) FROM spend_events WHERE substr(created_at,1,10)=?)+?<=?) AND (?='' OR (SELECT COALESCE(SUM(amount_usd),0) FROM spend_events WHERE kind=?)+?<=?)`, store.Now(), kind, model, amount, Reserved, c.Cfg.Budget.DailyUSD, day, amount, c.Cfg.Budget.DailyUSD, c.scope, c.scope, amount, c.limit)
+	query := `INSERT INTO spend_events(created_at,kind,model,amount_usd,state) SELECT ?,?,?,?,? WHERE (?<=0 OR (SELECT COALESCE(SUM(amount_usd),0) FROM spend_events WHERE substr(created_at,1,10)=?)+?<=?) AND (?='' OR (SELECT COALESCE(SUM(amount_usd),0) FROM spend_events WHERE kind=?)+?<=?)`
+	args := []any{store.Now(), kind, model, amount, Reserved, c.Cfg.Budget.DailyUSD, day, amount, c.Cfg.Budget.DailyUSD, c.scope, c.scope, amount, c.limit}
+	if len(c.kinds) > 0 {
+		query += ` AND (SELECT COALESCE(SUM(amount_usd),0) FROM spend_events WHERE kind IN (` + strings.TrimSuffix(strings.Repeat("?,", len(c.kinds)), ",") + `))+?<=?`
+		for _, k := range c.kinds {
+			args = append(args, k)
+		}
+		args = append(args, amount, c.groupLimit)
+	}
+	res, err := c.DB.ExecContext(ctx, query, args...)
 	if err != nil {
 		<-c.gate
 		return nil, err
