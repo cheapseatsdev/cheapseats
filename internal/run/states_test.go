@@ -152,6 +152,9 @@ func TestStatesSQLLiteralsAreKnown(t *testing.T) {
 	for _, s := range evaluation.CheckStates {
 		known[string(s)] = true
 	}
+	for _, s := range evaluation.ReviewStates {
+		known[string(s)] = true
+	}
 	for _, s := range []string{"proposed", "accepted", "withdrawn", "dismissed"} { // app.AttemptStates: app imports this package
 		known[s] = true
 	}

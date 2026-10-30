@@ -12,7 +12,7 @@ whose daily schedule is disabled:
 ```sh
 CHEAPSEATS_EVALUATION=1 \
 CHEAPSEATS_CONFIG="$PWD/examples/cheapseats-config/cheapseats.toml" \
-CHEAPSEATS_DATA_DIR="$(mktemp -d)" \
+CHEAPSEATS_DATA_DIR="$PWD/data/evaluation" \
 go run ./cmd/cheapseats serve -addr 127.0.0.1:3000
 ```
 
@@ -21,8 +21,11 @@ a short session. Try saving a judgment, leaving a case unresolved, and ending an
 resuming a draft. Then return to the queue to preview and approve a dataset
 version. Give an exclusion reason for every case you have not finished reviewing.
 The version page downloads the approved JSONL and full manifest. This workflow
-needs no provider keys and makes no model calls. Use the temporary database only
-for testing; it does not change your normal dashboard's data.
+needs no provider keys and makes no model calls. Use this separate database for testing; it does not change your normal dashboard's
+data. Reuse the same directory when restarting so your saved reviews remain
+available. If you already reviewed cases in a temporary directory, keep that
+directory or use the original build's backup command to preserve it before moving
+the database; changing directories does not transfer reviews automatically.
 
 ## Import saved evidence
 
@@ -170,7 +173,83 @@ coverage; two is a floor, not a statistical reliability claim. No diagnostic can
 grant release acceptance. In particular, 74/80 agreement from always predicting
 absent cannot pass behind the old 92.5% aggregate threshold.
 
-The workbench uses database schema 17. Opening an existing database
+## Compare grader prompts
+
+Open an approved version and choose **Create a grader comparison**. Select a
+partition and one or two candidate prompts. The production control comes from the
+version's saved rubric. The configured model, transport, evaluator source digest,
+answers, brand identity and competitors stay fixed. A candidate must preserve the
+rubric's meaning; a changed measurement definition needs separate review.
+
+The preview counts every selected case, grader and repetition, estimates an output
+allowance, and shows the admission budget. Each grader runs twice, including the
+control. Nothing runs until **Run remaining assessments**. API usage uses both the
+global daily ledger and the comparison's fixed admission limit across resumes and
+HTTP retries. Settled costs can exceed reservations; limits are not hard billing
+ceilings. Subscription calls still use the configured subscription.
+
+The web worker continues when you leave the page, and pauses after 30 minutes,
+exhausted admission budget or process shutdown. Completed predictions stay saved.
+**Stop this worker** cancels the worker on the current server. Refresh the report
+for progress. Resume can explicitly retry failed or expired claims once; late
+workers cannot overwrite newer results. A resumed run requires the original model,
+transport, evaluator and rules. Missing/failed predictions retain their denominator
+and are never changed to absent. Each repetition is a separate model call, not a
+cached copy of the other repetition.
+
+Creating a held-out comparison requires declaring all candidates frozen and the
+held-out cases/disputes unused for tuning. Creation reserves and consumes those
+groups even if no provider call finishes; resume that comparison to finish it.
+Evidence used in any earlier comparison, including development, cannot become
+fresh held-out validation through a new dataset version or import. The guard checks
+group IDs, normalized questions and answers, and the same lexical near-duplicate
+rule used for grouping. It is bounded to 10,000 previously exposed cases and does
+not establish semantic independence. The declaration also covers uses outside
+this software, which the system cannot observe. New candidates informed by these
+results need fresh untouched validation evidence.
+
+Reports show per-class reference, prediction and correct counts; precision/recall
+and verdict macro recall appear only with sufficient class coverage. Two examples
+per class is a minimum floor, not a reliability claim. Paired improvements and
+regressions compare the four frozen core fields; repeated-run differences expose
+variation in the control and candidates. Quote checks establish occurrence, not
+logical support. Baselines and failures remain visible. Reports do not crown an
+automatic winner or change the production grader.
+
+**Review masked results** omits candidate identities and the frozen reference label
+from the response until that reviewer commits a judgment. Stable per-case A/B/C
+ordering is derived from the random comparison ID. It is masking on the review
+page, not access control against information elsewhere. A required note explains
+the judgment; unresolved reviews keep identities hidden. Each reviewer has separate
+revisioned history. Comparison reviews do not edit the benchmark or count as
+independent human adjudication automatically. If the reference should change,
+review the current case, approve a new version and recompute the comparison.
+
+The same execution and report are available from the CLI, using the workbench's
+existing data directory:
+
+```sh
+CHEAPSEATS_DATA_DIR="$PWD/data/evaluation" \
+go run ./cmd/cheapseats evaluation run-comparison <comparison-id>
+
+CHEAPSEATS_DATA_DIR="$PWD/data/evaluation" \
+go run ./cmd/cheapseats evaluation comparison-report <comparison-id>
+```
+
+Add `--retry` to `run-comparison` only when you intend to retry failed or expired
+assessments.
+
+`comparison-report <id> --gate 1` exits nonzero while the first candidate lacks
+conservative release-review prerequisites: complete results, untouched held-out
+use with frozen candidates, class coverage, nonzero recall in every represented core class, valid quoted
+spans, an observed paired improvement, no paired regressions and no increase in
+repeat variation. Candidate 2 is the second candidate. Passing is a prerequisite
+for human release review, not statistical proof, automatic deployment or a
+replacement for the repository's real-provider golden test. The existing golden
+CI corpus still needs explicitly approved human labels before that gate can
+represent this reviewed benchmark.
+
+The workbench uses database schema 18. Opening an existing database
 backs it up before migration; older binaries refuse newer schemas. Rollback
 requires the pre-migration backup, not merely the older binary. Evaluation tables
 are private operational data; a read-only copy is not a redaction of its database.
