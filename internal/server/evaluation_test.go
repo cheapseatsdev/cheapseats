@@ -59,7 +59,7 @@ func TestEvaluationGatedAndModelProposalNeverSentBeforeJudgment(t *testing.T) {
 	s, wb := evaluationServer(t)
 	_, id := evaluationFixture(t, wb)
 	h := s.Handler()
-	for _, path := range []string{"/evaluation", "/evaluation/cases/" + id} {
+	for _, path := range []string{"/evaluation", "/evaluation/checks", "/evaluation/cases/" + id} {
 		r := evaluationRequest(h, "GET", path, nil)
 		if r.Code != 200 {
 			t.Fatalf("%s: %d %s", path, r.Code, r.Body.String())
@@ -172,6 +172,17 @@ func TestEvaluationSessionEndResumeAndSavedDecisionRecovery(t *testing.T) {
 	if finished.State != "done" || finished.Cursor != 1 {
 		t.Fatalf("finish: %+v", finished)
 	}
+	summary := evaluationRequest(h, "GET", "/evaluation/sessions/"+session.ID, nil)
+	if summary.Code != 200 || !strings.Contains(summary.Body.String(), "Review session complete") || !strings.Contains(summary.Body.String(), "0 / 1 finished human judgments · 1 unresolved") || strings.Contains(summary.Body.String(), `class="btn" href="/evaluation/checks`) {
+		t.Fatalf("unfinished cases offered as checkable judgments: %d %s", summary.Code, summary.Body.String())
+	}
+	foreignSummary := httptest.NewRequest("GET", "http://localhost/evaluation/sessions/"+session.ID, nil)
+	foreignSummary.Header.Set("Authorization", "Bearer another-reviewer")
+	foreignResult := httptest.NewRecorder()
+	h.ServeHTTP(foreignResult, foreignSummary)
+	if foreignResult.Code != 404 {
+		t.Fatalf("another actor opened the session summary: %d", foreignResult.Code)
+	}
 	r = evaluationRequest(h, "POST", "/evaluation/cases/"+id, values)
 	if r.Code != 409 {
 		t.Fatalf("double submission advanced: %d", r.Code)
@@ -278,7 +289,7 @@ func TestEvaluationCheckPreviewAndExplicitKeepResolution(t *testing.T) {
 		t.Fatalf("resolved approval: %+v %v", d, err)
 	}
 	s.evaluation = false
-	for _, path := range []string{"/evaluation/checks/" + id, "/evaluation/cases/" + id + "/resolve"} {
+	for _, path := range []string{"/evaluation/checks", "/evaluation/checks/" + id, "/evaluation/cases/" + id + "/resolve"} {
 		r = evaluationRequest(s.Handler(), "GET", path, nil)
 		if r.Code != 404 {
 			t.Fatalf("disabled check exposed: %s %d", path, r.Code)

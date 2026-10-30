@@ -1,5 +1,5 @@
 {{define "title"}}Review saved answer · Evaluation · {{end}}{{define "body"}}
-<p><a href="/evaluation{{with .ImportID}}?import={{.}}{{end}}">← Review queue</a></p>
+{{if .CheckQueue}}<p><a href="/evaluation/checks?import={{.ImportID}}">← Continue checking saved judgments</a></p>{{else}}<p><a href="/evaluation{{with .ImportID}}?import={{.}}{{end}}">← Review queue</a></p>{{end}}
 <h1 id="case-heading" tabindex="-1">Review saved answer{{with .Session}} · case {{$.Position}} of {{len .CaseIDs}}{{end}}</h1>
 <p class="sub">{{.State}} · rule version <span class="mono">{{short .Rubric}}</span>. {{if not .FirstReviewed}}The previous model label stays hidden until you save a judgment.{{end}}</p>
 {{with .Error}}<p class="err" role="alert" data-eval-error>{{.}}</p><p><a href="{{if $.Session}}/evaluation/sessions/{{$.Session.ID}}{{else}}/evaluation/cases/{{$.ID}}?import={{$.ImportID}}{{end}}">Reload saved fields to reconcile</a>. Copy your changes first, or restore this tab’s local draft after comparing it.</p>{{end}}
@@ -11,13 +11,14 @@
 <details><summary>Raw answer text</summary><pre>{{.Answer}}</pre></details>
 </article>
 <section class="card"><h2>Your judgment</h2>
-{{if .FirstReviewed}}<p><a href="/evaluation/checks/{{.ID}}">Preview an independent check</a>{{if and .Pending (not .Resolution)}} · <a href="/evaluation/cases/{{.ID}}/resolve">Resolve check differences</a>{{end}}</p>
+{{if .FirstReviewed}}{{if eq .State "reviewed"}}<p><a href="/evaluation/checks/{{.ID}}?import={{.ImportID}}">Preview an independent check</a>{{if and .Pending (not .Resolution)}} · <a href="/evaluation/cases/{{.ID}}/resolve?import={{.ImportID}}">Resolve check differences</a>{{end}}</p>{{else}}<p>Finish saving your judgment before running or resolving independent checks.</p>{{end}}
 {{if .Checks}}<details{{if .Resolution}} open{{end}}><summary>Independent assessments · {{len .Checks}}</summary><p class="muted small">These checks were made without your judgment. They cannot approve labels or change your saved decision.</p>{{range .Checks}}<p><b>{{.Plan.Model}}</b> · {{.State}} · {{.UpdatedAt}}{{if .Stale}} · older evaluator, not a current check{{end}}{{if .Resolved}} · human resolution recorded for this revision{{end}}</p>{{with .Grade}}<p>Model: {{.Verdict}} · top pick {{with .TopPick}}{{.}}{{else}}none{{end}} · namesake only {{.OtherProduct}}{{with .Tone}} · tone {{.}}{{end}}</p><p>{{.Reasoning}}</p>{{with .Evidence}}<blockquote class="evidence">{{.}}</blockquote>{{end}}{{end}}{{with .Fields}}<p>Needs a decision: {{range $i,$v:=.}}{{if $i}}, {{end}}{{$v}}{{end}}.</p>{{end}}{{with .Error}}<p class="err">{{.}}</p>{{end}}{{end}}</details>{{end}}{{end}}
 {{if .Resolution}}<p class="warn">Resolve these checks against your saved human judgment. Keep it as it is, or edit the fields and save a revised judgment. Neither action accepts a model label automatically. Resolution fields stay local until you submit.</p>{{end}}
 <details><summary>Grading rules</summary>{{range .Rules}}<p><b>{{.Name}}:</b> {{.Definition}}</p>{{end}}<p>Judge the whole answer. Tone and recommendation are separate. A namesake-only flag means every use refers to another entity. A citation alone is not an endorsement.</p></details>
 <form method="post" action="/evaluation/cases/{{.ID}}" data-evaluation-review data-case="{{.ID}}" data-actor="{{.Actor}}"{{if .Resolution}} data-resolution{{end}}>
 {{if .Resolution}}<input type="hidden" name="resolving" value="1">{{range .Pending}}<input type="hidden" name="check" value="{{.}}">{{end}}{{end}}
 <input type="hidden" name="revision" value="{{.Revision}}"><input type="hidden" name="rubric" value="{{.Rubric}}"><input type="hidden" name="import" value="{{.ImportID}}">
+{{if .CheckQueue}}<input type="hidden" name="checks" value="1">{{end}}
 {{with .Session}}<input type="hidden" name="session" value="{{.ID}}"><input type="hidden" name="cursor" value="{{.Cursor}}">{{end}}
 {{template "evaluation-fields" .}}
 <p class="muted small" role="status" aria-live="polite" data-draft-status>Only an explicit judgment counts as human reviewed.</p>

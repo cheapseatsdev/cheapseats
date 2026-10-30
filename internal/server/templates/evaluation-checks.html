@@ -1,0 +1,21 @@
+{{define "title"}}Check saved judgments · Evaluation · {{end}}{{define "body"}}
+<p><a href="/evaluation{{with .Import}}?import={{.ID}}{{end}}">← Evaluation</a></p>
+<h1>Check saved judgments</h1>
+<p class="sub">Your reviews are saved. Compare a separate model assessment with your judgment, then decide any differences yourself.</p>
+{{if not .Import}}<section class="card"><h2>Start with saved answers</h2><p>Import evidence and save your own judgments before running checks.</p><a class="btn" href="/evaluation">Go to Evaluation</a></section>{{else}}
+<section class="card"><h2>What to do next</h2>
+{{if .Flow.Eligible}}
+<p>{{.Flow.Done}} / {{.Flow.Eligible}} saved judgments have a completed check for the current grader. {{.Flow.Unchecked}} not checked · {{.Flow.Failed}} failed · {{.Flow.Running}} running. {{.Flow.Pending}} cases need your decision about differences.</p>
+{{if .Flow.NextURL}}<p><a class="btn" href="{{.Flow.NextURL}}">{{.Flow.NextAction}}</a></p>
+<p>Previewing is free of model calls. Starting an assessment is a separate action with provider and budget details. If it differs, keep or revise your judgment and explain why. Completed results are reused for the same evidence and grader configuration.</p>
+{{else}}<p>All {{.Flow.Eligible}} saved judgments have completed checks for the current grader, with no differences awaiting a decision. Model agreement remains model agreement; it does not add another human review.</p>
+<form method="post" action="/evaluation/datasets/prepare"><input type="hidden" name="import" value="{{.Import.ID}}"><button>Preview dataset version</button></form>
+{{end}}
+{{else}}<p>No finished human judgments are ready for a check. Save a judgment on an answer first; drafts and unresolved decisions remain in the review queue.</p><p><a class="btn" href="/evaluation?import={{.Import.ID}}">Return to review queue</a></p>{{end}}
+</section>
+{{if .Flow.Eligible}}<h2>Saved judgments · {{.Flow.Eligible}}</h2><p class="muted small">This list includes finished judgments in the selected evidence import. Rows show checks for the configured grader. Other running assessments and differences awaiting your decision stay listed.</p>
+<div class="scroll"><table><thead><tr><th>Buyer question</th><th>Check status</th><th>Next action</th></tr></thead><tbody>{{range .Flow.Rows}}<tr><td>{{.Prompt}}</td><td>{{.Status}}</td><td><a href="{{.URL}}">{{.Action}}<span class="sr"> for {{.Prompt}}</span></a></td></tr>{{end}}</tbody></table></div>{{end}}
+<section class="card"><h2>After checking: approve a dataset version</h2><p>A dataset version is a frozen set of answers and your expected grades. It lets us test candidate prompts against the same reference. Approval does not change production grading.</p><p>Checks are optional. If provider access is unavailable, you can continue manual review and preview a version. Running checks and unresolved check differences must be settled before those cases can be included. Every excluded case still needs an explicit reason.</p>
+{{if .Flow.NextURL}}<form method="post" action="/evaluation/datasets/prepare"><input type="hidden" name="import" value="{{.Import.ID}}"><button class="ghost">Preview dataset version</button></form>{{else if not .Flow.Eligible}}<p><a href="/evaluation?import={{.Import.ID}}">Return to review queue</a></p>{{end}}
+<p>After approval, choose <b>Create a grader comparison</b> on the version page. Candidate prompts are measured against your saved expectations; results do not deploy a change.</p></section>
+{{end}}{{end}}

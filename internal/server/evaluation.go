@@ -57,6 +57,7 @@ type evaluationHome struct {
 	Rows                         []evaluationRow
 	Reviewed, Unresolved, Drafts int
 	Pending                      int
+	Flow                         evaluationFlow
 	Resume                       *evaluation.Session
 	ResumePosition               int
 	Error                        string
@@ -100,11 +101,16 @@ func (s *Server) evaluationHomeData(r *http.Request) (evaluationHome, error) {
 		}
 		row := evaluationRow{ID: c.ID, Prompt: c.Record.Prompt, Set: c.Record.Set, State: c.Review.State}
 		if c.FirstReviewed {
-			ids, err := w.PendingChecks(r.Context(), c)
+			views, err := w.CheckViews(r.Context(), c)
 			if err != nil {
 				return d, err
 			}
-			row.Pending = len(ids) > 0
+			for _, v := range views {
+				if v.State == evaluation.CheckDone && !v.Stale && !v.Resolved && len(v.Fields) > 0 {
+					row.Pending = true
+				}
+			}
+			d.Flow.add(c, views, s.evaluationAssessor().CheckPlan(c.ID, 0).ID, id)
 			if row.Pending {
 				d.Pending++
 			}
@@ -197,6 +203,7 @@ type evaluationCaseData struct {
 	Resolution                                              bool
 	ResolutionNote                                          string
 	RequireNote                                             bool
+	CheckQueue                                              bool
 }
 
 type evaluationPassage struct {
@@ -233,6 +240,7 @@ func (s *Server) evaluationCaseData(r *http.Request, id string, session *evaluat
 		return evaluationCaseData{}, err
 	}
 	d := evaluationCaseData{ID: c.ID, Prompt: c.Record.Prompt, Brand: c.Record.Brand.Name, About: c.Record.Brand.About, Aliases: c.Record.Brand.Aliases, Intent: c.Record.Intent, Answer: c.Record.Answer, Actor: s.evaluationActor(r), Rubric: evaluation.Rubric(), Judgment: c.Review.Judgment, Revision: c.Review.Revision, State: c.Review.State, FirstReviewed: c.FirstReviewed, Session: session, ImportID: r.URL.Query().Get("import")}
+	d.CheckQueue = r.URL.Query().Get("checks") == "1" || r.FormValue("checks") == "1"
 	if d.Intent == "" {
 		d.Intent = "choice"
 	}
@@ -278,7 +286,7 @@ func (s *Server) evaluationSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if session.Cursor >= len(session.CaseIDs) {
-		http.Redirect(w, r, "/evaluation?import="+url.QueryEscape(session.ImportID)+"&session=finished", http.StatusSeeOther)
+		s.evaluationSessionFinished(w, r, session)
 		return
 	}
 	d, err := s.evaluationCaseData(r, session.CaseIDs[session.Cursor], &session)
@@ -406,6 +414,9 @@ func (s *Server) evaluationSave(w http.ResponseWriter, r *http.Request) {
 	target := fmt.Sprintf("/evaluation/cases/%s?import=%s&saved=1", id, url.QueryEscape(r.FormValue("import")))
 	if action == "resolve-keep" || action == "resolve-change" {
 		target += fmt.Sprintf("&resolved_revision=%d", revision)
+	}
+	if r.FormValue("checks") == "1" {
+		target += "&checks=1"
 	}
 	http.Redirect(w, r, target, http.StatusSeeOther)
 }

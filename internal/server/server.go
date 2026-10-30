@@ -223,7 +223,7 @@ func New(a *app.App) (*Server, error) {
 		},
 	}
 	s.pages = map[string]*template.Template{}
-	for _, p := range []string{"home", "set", "run", "rankings", "quickwins", "search", "login", "searches", "audit", "crawlers", "regrade", "review", "evaluation", "evaluation-case", "evaluation-approval", "evaluation-dataset", "evaluation-check", "evaluation-experiment-new", "evaluation-experiment", "evaluation-experiment-review"} {
+	for _, p := range []string{"home", "set", "run", "rankings", "quickwins", "search", "login", "searches", "audit", "crawlers", "regrade", "review", "evaluation", "evaluation-case", "evaluation-approval", "evaluation-dataset", "evaluation-check", "evaluation-checks", "evaluation-session", "evaluation-experiment-new", "evaluation-experiment", "evaluation-experiment-review"} {
 		t, err := template.New(p).Funcs(funcs).ParseFS(assets, "templates/layout.html", "templates/evaluation-fields.html", "templates/"+p+".html")
 		if err != nil {
 			return nil, fmt.Errorf("template %s: %w", p, err)

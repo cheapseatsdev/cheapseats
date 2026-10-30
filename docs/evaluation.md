@@ -90,6 +90,12 @@ typed fields. A local backup stays in that browser tab's session storage until
 confirmed saved or discarded. Restoring it is explicit, and cannot silently
 replace a newer server revision. Live dashboard refresh is disabled on review pages.
 
+Finishing a session opens **Review session complete**, with the current number of
+finished judgments, unresolved decisions and drafts among that session's cases.
+Choose **Check saved judgments** to continue. The Evaluation overview also shows
+this action whenever finished judgments have checks or differences to handle;
+you do not need to reopen each answer to discover the next step.
+
 Before the first short session, the import's grouping plan is stored. The same
 normalized buyer question, exact answers and answer bigrams with at least 90%
 Jaccard overlap stay together. This is a conservative lexical heuristic, not
@@ -100,14 +106,29 @@ inform candidate prompt tuning. The queue does not select on proposed verdicts.
 
 ## Independent checks and resolutions
 
-After committing your own judgment, use **Preview an independent check** to see
-the configured grader, estimated allowance and admission budget. **Run one
+After committing your own judgment, choose **Check saved judgments** on the
+Evaluation overview or session summary, then **Preview check**. The preview shows
+the configured grader, estimated allowance and admission budget. The same preview
+is linked from an individual finished review as **Preview an independent check**. **Run one
 independent assessment** explicitly starts the call; viewing a page never does.
 The assessment receives the complete saved question/answer, brand identity,
 competitors and rubric, with imported and human labels, notes and evidence quotes
 removed. It uses the same transport and normalization as production grading.
 This is label independence, not a claim that the model is statistically independent
 of the model that produced the original proposal.
+
+**Check saved judgments** lists finished judgments for the selected evidence
+import. It shows completed, unchecked, failed and running checks for the current
+grader configuration and links directly to each next action. Differences needing
+a human decision take priority. A changed grader configuration needs a new check;
+an old completed assessment is not counted as current. Drafts and unresolved
+reviews remain in the review queue. Return with **Continue checking saved
+judgments** after inspecting a result or resolving differences. Opening the list
+or a preview makes no model calls. Once all current checks are complete and no
+differences remain, the main action becomes **Preview dataset version**. Checks
+remain optional: the list also explains how to continue manual approval when
+provider access is unavailable. Approval still blocks running checks and pending
+differences for included cases.
 
 Results are cached by immutable evidence, rubric, model, transport and evaluator
 source digest. The check's fixed admission budget covers HTTP retries and an
