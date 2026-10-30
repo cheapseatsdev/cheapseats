@@ -5,6 +5,8 @@
   const status = form.querySelector("[data-draft-status]");
   const revision = form.elements.namedItem("revision");
   const rubric = form.elements.namedItem("rubric");
+  const evidenceHelp = form.querySelector("[data-evidence-help]");
+  const generalEvidenceHelp = evidenceHelp.textContent;
   const key = `cheapseats-evaluation:${form.dataset.actor}:${form.dataset.case}`;
   const editable = new Set(["verdict", "top_pick", "tone", "absence_reason", "full_answer", "incomplete", "issue", "note", "evidence"]);
   let timer, pending = Promise.resolve(), dirty = false, submitting = false, changes = 0;
@@ -15,6 +17,16 @@
       group.hidden = !show;
       for (const el of group.querySelectorAll("input,select,textarea")) el.disabled = !show;
     }
+    let help = generalEvidenceHelp;
+    if (verdict === "absent") {
+      const reason = form.elements.namedItem("absence_reason").value;
+      if (reason === "not-named") help = "No quote is needed. Leave the supporting passages blank, read the complete saved answer, and check the confirmation above that you found no statement about the intended brand.";
+      else if (reason === "echo") help = "Quote the wording that only repeats the brand’s name to say it cannot find, verify or identify it. For example: ‘I could not find reliable information about this product.’ Copy the actual wording from the saved answer, not this example.";
+      else if (reason === "namesake") help = "Quote the passage showing that the name refers to a different product or company. Check the intended brand’s identity above; if you cannot tell which product is meant, leave the review unresolved instead of guessing.";
+      else help = "Choose why the brand is absent. No reference needs whole-answer confirmation without a quote. An echoed name or an unrelated namesake needs a quote showing that wording.";
+    } else if (verdict) help = "Copy a short passage exactly from the saved answer that supports your verdict. Add another passage if the ending changes its interpretation. Put your own explanation in the review note.";
+    if (evidenceHelp.textContent !== help) evidenceHelp.textContent = help;
+    for (const passage of form.querySelectorAll('textarea[name="evidence"]')) passage.title = help;
   }
   conditionalFields();
   function values() {

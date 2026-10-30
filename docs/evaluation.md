@@ -72,6 +72,14 @@ grading rules. The imported model verdict, supporting quote and note are omitted
 from the first-review response entirely. They become available for comparison
 only after an explicit human judgment. A draft never unlocks that comparison.
 
+Hover over a field for a short explanation, or open its help disclosure with a
+click, tap or keyboard. Evidence guidance follows the selected verdict and
+absence reason. For no reference to the intended brand, leave supporting passages
+blank and confirm that you read the complete answer. For an echoed name or an
+unrelated namesake, quote the wording that supports that interpretation. The
+unfinished-review reason and note are required only for **Leave unresolved**;
+leave the reason blank when you can finish the judgment.
+
 Drafts autosave without advancing the queue. **Save and next** commits a validated
 judgment; **Leave unresolved** needs an issue and explanation; **End session** saves
 the unfinished draft and resumes at the same case. Failed or stale saves preserve
