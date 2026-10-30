@@ -229,3 +229,59 @@ func TestEvaluationApprovalExportsFrozenHumanVersion(t *testing.T) {
 		}
 	}
 }
+
+func TestEvaluationCheckPreviewAndExplicitKeepResolution(t *testing.T) {
+	s, wb := evaluationServer(t)
+	a, id := evaluationFixture(t, wb)
+	h := s.Handler()
+	t.Setenv("ANTHROPIC_API_KEY", "")
+	t.Setenv("CHEAPSEATS_ANTHROPIC_BASE_URL", "")
+	r := evaluationRequest(h, "GET", "/evaluation/checks/"+id, nil)
+	if r.Code != 400 {
+		t.Fatal("unreviewed evidence opened model assessment")
+	}
+	yes := true
+	j := evaluation.Judgment{Verdict: grade.Recommended, TopPick: &yes, Tone: grade.Positive, Evidence: []string{"Use **Example Tracker** for the pilot."}, Note: "My original human note"}
+	if _, err := wb.Save(context.Background(), id, 0, "judgment", j, "human", evaluation.Rubric()); err != nil {
+		t.Fatal(err)
+	}
+	r = evaluationRequest(h, "GET", "/evaluation/checks/"+id, nil)
+	if r.Code != 200 || !strings.Contains(r.Body.String(), "Provider unavailable") {
+		t.Fatalf("unavailable preview: %d %s", r.Code, r.Body.String())
+	}
+	var count int
+	wb.DB.QueryRow(`SELECT count(*) FROM evaluation_checks`).Scan(&count)
+	if count != 0 {
+		t.Fatal("GET preview scheduled a provider call")
+	}
+	p := s.evaluationAssessor().CheckPlan(id, 3)
+	if _, err := wb.RunCheck(context.Background(), p, "operator", false, func(context.Context, grade.GoldenRecord, string, string, float64) (grade.Grade, float64, error) {
+		return grade.Grade{Verdict: grade.Absent}, 0, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	r = evaluationRequest(h, "GET", "/evaluation/cases/"+id+"/resolve", nil)
+	if r.Code != 200 || !strings.Contains(r.Body.String(), "data-resolution") || !strings.Contains(r.Body.String(), "Keep my saved judgment") {
+		t.Fatalf("resolve: %d %s", r.Code, r.Body.String())
+	}
+	values := url.Values{"revision": {"1"}, "rubric": {evaluation.Rubric()}, "resolving": {"1"}, "check": {p.ID}, "action": {"resolve-keep"}, "resolution_note": {"The answer explicitly says to use the intended product."}, "verdict": {"absent"}}
+	r = evaluationRequest(h, "POST", "/evaluation/cases/"+id, values)
+	if r.Code != 303 {
+		t.Fatalf("keep: %d %s", r.Code, r.Body.String())
+	}
+	c, _ := wb.Case(context.Background(), id)
+	if c.Review.Judgment.Expected() != j.Expected() || c.Review.Judgment.Note != j.Note {
+		t.Fatal("keep copied edited form or model fields over saved judgment")
+	}
+	d, err := wb.Approve(context.Background(), evaluation.Approval{ImportID: a.ID, Name: "resolved", Members: map[string]int{id: c.Review.Revision}}, "approver")
+	if err != nil || len(d.Members[0].Resolutions) != 1 {
+		t.Fatalf("resolved approval: %+v %v", d, err)
+	}
+	s.evaluation = false
+	for _, path := range []string{"/evaluation/checks/" + id, "/evaluation/cases/" + id + "/resolve"} {
+		r = evaluationRequest(s.Handler(), "GET", path, nil)
+		if r.Code != 404 {
+			t.Fatalf("disabled check exposed: %s %d", path, r.Code)
+		}
+	}
+}

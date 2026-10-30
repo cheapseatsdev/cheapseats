@@ -15,9 +15,11 @@ import (
 var ErrExhausted = errors.New("daily admission budget exhausted")
 
 type Controller struct {
-	Cfg  *config.Config
-	DB   *store.DB
-	gate chan struct{}
+	Cfg   *config.Config
+	DB    *store.DB
+	gate  chan struct{}
+	scope string
+	limit float64
 }
 
 func New(c *config.Config, d *store.DB) *Controller {
@@ -25,7 +27,16 @@ func New(c *config.Config, d *store.DB) *Controller {
 	if n < 1 {
 		n = 1
 	}
-	return &Controller{c, d, make(chan struct{}, n)}
+	return &Controller{Cfg: c, DB: d, gate: make(chan struct{}, n)}
+}
+
+// Scoped shares the daily ledger and concurrency gate while also limiting one
+// explicit operation across every process, provider retry and calendar day.
+func (c *Controller) Scoped(kind string, limit float64) (*Controller, error) {
+	if kind == "" || limit <= 0 || math.IsNaN(limit) || math.IsInf(limit, 0) {
+		return nil, fmt.Errorf("an operation and positive admission budget are required")
+	}
+	return &Controller{Cfg: c.Cfg, DB: c.DB, gate: c.gate, scope: kind, limit: limit}, nil
 }
 
 type Lease struct {
@@ -36,6 +47,9 @@ type Lease struct {
 }
 
 func (c *Controller) Reserve(ctx context.Context, kind, model string, amount float64) (*Lease, error) {
+	if c.scope != "" && kind != c.scope {
+		return nil, fmt.Errorf("operation does not match its admission budget")
+	}
 	if amount <= 0 || math.IsNaN(amount) || math.IsInf(amount, 0) {
 		return nil, fmt.Errorf("invalid reservation")
 	}
@@ -46,7 +60,7 @@ func (c *Controller) Reserve(ctx context.Context, kind, model string, amount flo
 	}
 	day := time.Now().UTC().Format("2006-01-02")
 	Transitions.Check("spend_events", state.Start, Reserved)
-	res, err := c.DB.ExecContext(ctx, `INSERT INTO spend_events(created_at,kind,model,amount_usd,state) SELECT ?,?,?,?,? WHERE ?<=0 OR (SELECT COALESCE(SUM(amount_usd),0) FROM spend_events WHERE substr(created_at,1,10)=?)+?<=?`, store.Now(), kind, model, amount, Reserved, c.Cfg.Budget.DailyUSD, day, amount, c.Cfg.Budget.DailyUSD)
+	res, err := c.DB.ExecContext(ctx, `INSERT INTO spend_events(created_at,kind,model,amount_usd,state) SELECT ?,?,?,?,? WHERE (?<=0 OR (SELECT COALESCE(SUM(amount_usd),0) FROM spend_events WHERE substr(created_at,1,10)=?)+?<=?) AND (?='' OR (SELECT COALESCE(SUM(amount_usd),0) FROM spend_events WHERE kind=?)+?<=?)`, store.Now(), kind, model, amount, Reserved, c.Cfg.Budget.DailyUSD, day, amount, c.Cfg.Budget.DailyUSD, c.scope, c.scope, amount, c.limit)
 	if err != nil {
 		<-c.gate
 		return nil, err

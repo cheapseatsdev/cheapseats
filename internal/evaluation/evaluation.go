@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"unicode/utf8"
 
@@ -300,6 +301,9 @@ func (w *Workbench) Cases(ctx context.Context) ([]Case, error) {
 }
 
 func (w *Workbench) Save(ctx context.Context, id string, revision int, kind string, j Judgment, actor, rubric string) (Review, error) {
+	return w.save(ctx, id, revision, kind, j, actor, rubric, nil)
+}
+func (w *Workbench) save(ctx context.Context, id string, revision int, kind string, j Judgment, actor, rubric string, resolution *Resolution) (Review, error) {
 	if strings.TrimSpace(actor) == "" || len(actor) > 200 {
 		return Review{}, errors.New("an explicit human review actor is required")
 	}
@@ -309,6 +313,14 @@ func (w *Workbench) Save(ctx context.Context, id string, revision int, kind stri
 	c, err := w.Case(ctx, id)
 	if err != nil {
 		return Review{}, err
+	}
+	if resolution != nil {
+		if c.Review.State != "reviewed" {
+			return Review{}, errors.New("save your human judgment before resolving checks")
+		}
+		if resolution.Action == "keep" {
+			j = c.Review.Judgment
+		}
 	}
 	j, err = validate(j, c.Record.Answer, kind)
 	if err != nil {
@@ -327,6 +339,18 @@ func (w *Workbench) Save(ctx context.Context, id string, revision int, kind stri
 	if current != revision {
 		return c.Review, ErrConflict
 	}
+	if resolution != nil {
+		vs, err := checkViews(ctx, tx, c)
+		if err != nil {
+			return c.Review, err
+		}
+		ids := pendingIDs(vs)
+		submitted := append([]string(nil), resolution.Checks...)
+		sort.Strings(submitted)
+		if len(ids) == 0 || strings.Join(ids, "\n") != strings.Join(submitted, "\n") {
+			return c.Review, ErrConflict
+		}
+	}
 	state := kind
 	if kind == "judgment" {
 		state = "reviewed"
@@ -341,6 +365,13 @@ func (w *Workbench) Save(ctx context.Context, id string, revision int, kind stri
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO evaluation_events VALUES (?,?,?,?,?,?,?)`, id, next.Revision, kind, string(b), actor, rubric, next.UpdatedAt); err != nil {
 		return c.Review, err
+	}
+	if resolution != nil {
+		for _, check := range resolution.Checks {
+			if _, err := tx.ExecContext(ctx, `INSERT INTO evaluation_resolutions VALUES (?,?,?,?,?,?,?)`, check, next.Revision, id, resolution.Action, resolution.Explanation, actor, next.UpdatedAt); err != nil {
+				return c.Review, err
+			}
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return c.Review, err

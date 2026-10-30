@@ -1,10 +1,10 @@
 # States
 
-How a run, its results, a fix attempt and a budget reservation move between their statuses. The
+How runs, results, fix attempts, budget reservations and evaluation checks move between statuses. The
 status columns are text; these are their values, and the arrows are every move the code makes.
 
 Generated from the transition tables in the code (`run.RunTransitions`, `run.ResultTransitions`,
-`app.AttemptTransitions`, `budget.Transitions`) by
+`app.AttemptTransitions`, `budget.Transitions`, `evaluation.CheckTransitions`) by
 `go test ./internal/app -run TestStatesDocIsCurrent -update`; the test fails while this file is
 stale. Every status write goes through a helper that checks the move against its table, and the
 `run` package's tests fail on a move the table doesn't list.
@@ -98,4 +98,22 @@ stateDiagram-v2
     [*] --> reserved
     reserved --> settled
     reserved --> unknown
+```
+
+## Independent checks (`evaluation_checks.state`)
+
+An explicit request creates a **ready** check. A worker claims it as **running**, then records
+**done** with a model assessment or **failed** without a fabricated prediction. Done results
+are reused. A failed check can be retried explicitly once; a crashed running worker can be
+reclaimed after its lease expires. The lease fences late results, and the fixed admission
+budget covers both assessment attempts and their transport retries. Human judgments and
+resolution events are stored separately; none of these states is human approval.
+
+```mermaid
+stateDiagram-v2
+    [*] --> ready
+    ready --> running
+    running --> done
+    running --> failed
+    failed --> running
 ```

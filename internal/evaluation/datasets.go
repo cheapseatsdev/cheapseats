@@ -24,13 +24,14 @@ type Approval struct {
 }
 
 type Member struct {
-	CaseID     string             `json:"case_id"`
-	Revision   int                `json:"revision"`
-	Record     grade.GoldenRecord `json:"record"`
-	Judgment   Judgment           `json:"judgment"`
-	Group      Group              `json:"group"`
-	Actor      string             `json:"actor"`
-	Provenance string             `json:"provenance"`
+	CaseID      string             `json:"case_id"`
+	Revision    int                `json:"revision"`
+	Record      grade.GoldenRecord `json:"record"`
+	Judgment    Judgment           `json:"judgment"`
+	Group       Group              `json:"group"`
+	Actor       string             `json:"actor"`
+	Provenance  string             `json:"provenance"`
+	Resolutions []ResolutionRecord `json:"resolutions,omitempty"`
 }
 
 type Dataset struct {
@@ -122,7 +123,17 @@ func (w *Workbench) Approve(ctx context.Context, p Approval, actor string) (Data
 		if len(j.Evidence) > 0 {
 			record.Evidence = j.Evidence[0]
 		}
-		d.Members = append(d.Members, Member{CaseID: c.ID, Revision: revision, Record: record, Judgment: j, Group: g.Cases[c.ID], Actor: c.Review.Actor, Provenance: "single human review"})
+		m := Member{CaseID: c.ID, Revision: revision, Record: record, Judgment: j, Group: g.Cases[c.ID], Actor: c.Review.Actor, Provenance: "single human review"}
+		resolutions, err := w.ResolutionHistory(ctx, c.ID)
+		if err != nil {
+			return Dataset{}, err
+		}
+		for _, r := range resolutions {
+			if r.Revision == revision {
+				m.Resolutions = append(m.Resolutions, r)
+			}
+		}
+		d.Members = append(d.Members, m)
 	}
 	for _, r := range a.Rows {
 		if r.Error != "" {
@@ -162,6 +173,19 @@ func (w *Workbench) Approve(ctx context.Context, p Approval, actor string) (Data
 		}
 		if rev != m.Revision || state != "reviewed" {
 			return Dataset{}, ErrConflict
+		}
+		c := Case{ID: m.CaseID, Record: m.Record, Review: Review{Revision: m.Revision, Judgment: m.Judgment}}
+		views, err := checkViews(ctx, tx, c)
+		if err != nil {
+			return Dataset{}, err
+		}
+		if len(pendingIDs(views)) > 0 {
+			return Dataset{}, fmt.Errorf("%s: resolve independent-check differences before approval", m.CaseID)
+		}
+		for _, v := range views {
+			if !v.Stale && v.State == "running" {
+				return Dataset{}, fmt.Errorf("%s: an independent check is still running", m.CaseID)
+			}
 		}
 	}
 	d.Actor, d.CreatedAt = actor, store.Now()
