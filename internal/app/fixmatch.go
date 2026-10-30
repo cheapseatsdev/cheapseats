@@ -91,6 +91,10 @@ func (a *App) latestFixes(ctx context.Context) []latestFix {
 		}
 		fixes, _, _ := a.Fixes(ctx, id)
 		for _, f := range fixes {
+			f = analysis.Triage(a.Cfg, s, f)
+			if f.Verification.Status != "verified" {
+				continue
+			}
 			out = append(out, latestFix{set: s, runID: id, fix: f})
 		}
 	}

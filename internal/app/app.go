@@ -18,6 +18,7 @@ import (
 
 	"github.com/cheapseatsdev/cheapseats/internal/analysis"
 	"github.com/cheapseatsdev/cheapseats/internal/answer"
+	"github.com/cheapseatsdev/cheapseats/internal/audit"
 	"github.com/cheapseatsdev/cheapseats/internal/config"
 	"github.com/cheapseatsdev/cheapseats/internal/llm"
 	"github.com/cheapseatsdev/cheapseats/internal/report"
@@ -111,10 +112,13 @@ func (a *App) BuildFixes(ctx context.Context, id string) error {
 			return fmt.Errorf("analysis requires all results graded")
 		}
 	}
-	// The brand as the run saw it, with today's facts: a fact added since can still shape the list.
+	// Advice is about today's product and chosen market. Historical answers and
+	// grades remain evidence; rebuilding advice never changes how they were scored.
 	cfg := *a.Cfg
-	cfg.Brand = r.Snapshot.Brand
-	cfg.Brand.Facts = a.Cfg.Brand.Facts
+	reader := audit.CiteOptions{DB: a.DB.DB, Reader: a.ContentsReader()}
+	ctx = analysis.WithVerifier(ctx, func(ctx context.Context, u string) (string, error) {
+		return audit.ReadCurrent(ctx, u, reader)
+	})
 	ctx = analysis.WithSiteFindings(ctx, a.siteFindings(ctx)) // the latest site audit, as evidence
 	sum := a.Summary(r, results)
 	ctx = analysis.WithOpportunities(ctx, sum.Opportunities)
@@ -125,7 +129,7 @@ func (a *App) BuildFixes(ctx context.Context, id string) error {
 		a.DB.ExecContext(ctx, `UPDATE runs SET fixes_error=?, analysis_cost_usd=analysis_cost_usd+? WHERE id=?`, err.Error(), cost, id)
 		return err
 	}
-	_, err = a.DB.ExecContext(ctx, `UPDATE runs SET fixes=?, insights=?, fixes_at=?, fixes_error=NULL, analysis_cost_usd=analysis_cost_usd+? WHERE id=?`, mustJSON(an.Fixes), an.Insights, store.Now(), cost, id)
+	_, err = a.DB.ExecContext(ctx, `UPDATE runs SET fixes=?, insights=?, fixes_at=?, fixes_error=NULL, analysis_cost_usd=analysis_cost_usd+? WHERE id=?`, analysis.Encode(an), an.Insights, store.Now(), cost, id)
 	return err
 }
 
@@ -177,6 +181,22 @@ type QuickWin struct {
 // has left to win), then reach, then the analyst's own rank. A fix none of whose prompts the set
 // still asks is left out.
 func (a *App) QuickWins(ctx context.Context) ([]QuickWin, error) {
+	all, err := a.quickWins(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := []QuickWin{}
+	for _, q := range all {
+		if q.Verification.Status == "verified" {
+			out = append(out, q)
+		}
+	}
+	return a.groupQuickWins(ctx, out), nil
+}
+
+// quickWins retains earlier suggestions and their work history for Next steps.
+// Only QuickWins exposes actions that passed verification.
+func (a *App) quickWins(ctx context.Context) ([]QuickWin, error) {
 	var out []QuickWin
 	tried := a.FixAttempts(ctx)
 	for _, s := range a.Sets() {
@@ -199,6 +219,7 @@ func (a *App) QuickWins(ctx context.Context) ([]QuickWin, error) {
 		fixes, _, _ := a.Fixes(ctx, id)
 		for _, f := range fixes {
 			q := QuickWin{SetID: s.ID, SetName: s.Name, Tier: string(s.Tier), RunID: id, Attempts: tried.On(id, f.Rank), Earlier: tried.Earlier(id, f)}
+			q.Attempts, q.Earlier = readOnlyWorkHistory(q.Attempts), readOnlyWorkHistory(q.Earlier)
 			q.Status = tried.Status(id, f, fixesAt.String)
 			var now []int
 			for _, n := range f.Prompts {
@@ -208,7 +229,7 @@ func (a *App) QuickWins(ctx context.Context) ([]QuickWin, error) {
 				old := then.Prompts[n-1]
 				if m, ok := number[old.ID]; ok {
 					now = append(now, m)
-					if cur, _ := s.Prompt(old.ID); cur.SHA() != old.SHA() {
+					if cur, _ := s.Prompt(old.ID); cur.SHA() != old.SHA() || cur.Info() != old.Info() {
 						q.Reworded = append(q.Reworded, old.ID)
 					}
 				} else {
@@ -220,6 +241,10 @@ func (a *App) QuickWins(ctx context.Context) ([]QuickWin, error) {
 			}
 			sort.Ints(now)
 			f.Prompts = now
+			if len(q.Reworded) > 0 {
+				f.Verification.Status = "unverified"
+				f.Verification.Summary = "A target question changed after this action was verified; review the new buyer need before implementation."
+			}
 			q.Fix = analysis.Triage(a.Cfg, s, f)
 			q.Speed = q.Fix.Speed()
 			w := 0.0
@@ -243,7 +268,7 @@ func (a *App) QuickWins(ctx context.Context) ([]QuickWin, error) {
 		}
 		return x.Rank < y.Rank
 	})
-	return a.groupQuickWins(ctx, out), nil
+	return out, nil
 }
 
 // quickWinDays is how far back quick wins pool a prompt's answers to weigh it.

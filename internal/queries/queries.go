@@ -107,14 +107,15 @@ type Word struct {
 	Prompts  int    `json:"prompts"`
 }
 
-// Suggest is a query that surfaced competitors and never the brand, as a prompt to add to the
-// set's file.
+// Suggest is retrieval evidence to review, not a validated buyer question or ready-to-activate
+// prompt. It needs buyer, business-decision and intent review before becoming a candidate.
 type Suggest struct {
 	Query       string   `json:"query"`
 	Competitors []string `json:"competitors"`
 	Answers     int      `json:"answers"`
 	File        string   `json:"file"`
-	TOML        string   `json:"toml"`
+	TOML        string   `json:"toml,omitempty"` // retained for compatibility; no automatic question
+	Review      string   `json:"review"`
 }
 
 var (
@@ -582,13 +583,6 @@ const maxSuggest = 10
 // name it (sets.Check).
 func suggest(in Input, names []Name, rows []QueryRow) []Suggest {
 	out := []Suggest{}
-	ids := map[string]bool{}
-	for k := range in.Taken {
-		ids[k] = true
-	}
-	for _, p := range in.Set.Prompts {
-		ids[p.ID] = true
-	}
 	texts := map[string]bool{}
 	for _, p := range in.Set.Prompts {
 		texts[Normalize(p.Text)] = true
@@ -614,9 +608,8 @@ func suggest(in Input, names []Name, rows []QueryRow) []Suggest {
 				continue
 			}
 			texts[k] = true
-			id := PromptID(part, ids)
-			ids[id] = true
-			out = append(out, Suggest{Query: part, Competitors: comp, Answers: q.Answers, File: in.Set.File, TOML: Snippet(sets.Prompt{ID: id, Text: part})})
+			out = append(out, Suggest{Query: part, Competitors: comp, Answers: q.Answers, File: in.Set.File,
+				Review: "Research lead only. Search frequency is not buyer demand: establish the target buyer, unresolved decision/action, intent and repeat value before proposing a new question. Keep closed comparisons excluding the tracked brand outside the scored suite."})
 		}
 	}
 	return out

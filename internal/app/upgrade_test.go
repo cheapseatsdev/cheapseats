@@ -115,14 +115,15 @@ text = "Which tools track AI answers today?"
 		t.Fatalf("compare: %+v", d.Compare)
 	}
 
-	qw, err := a.QuickWins(ctx)
-	if err != nil || len(qw) != 1 {
-		t.Fatalf("quick wins: %+v %v", qw, err)
+	next, err := a.NextSteps(ctx)
+	if err != nil || len(next.Actions) != 0 || len(next.Investigations) != 1 || next.Investigations[0].Legacy == nil {
+		t.Fatalf("legacy suggestion must remain reviewable without claiming verification: %+v %v", next, err)
 	}
-	if qw[0].Gain <= 0 || qw[0].Gain > qw[0].Speed {
-		t.Errorf("expected gain %.2f should be some of speed %.2f", qw[0].Gain, qw[0].Speed)
+	q := next.Investigations[0].Legacy
+	if q.Gain <= 0 || q.Gain > q.Speed || q.ClaudePrompt != "" {
+		t.Errorf("legacy estimate or readiness changed: %+v", q)
 	}
-	if got := qw[0].Prompts; len(got) != 1 || got[0] != 3 {
+	if got := q.Prompts; len(got) != 1 || got[0] != 3 {
 		t.Fatalf("the fix's prompt is \"tools\", now number 3; got %v", got)
 	}
 
@@ -199,6 +200,33 @@ func TestEveryDaysByTier(t *testing.T) {
 	a := &App{Cfg: cfg}
 	if a.everyDays(sets.Set{Tier: sets.Core}) != 7 || a.everyDays(sets.Set{Tier: sets.PLG}) != 14 {
 		t.Fatal("wrong interval")
+	}
+}
+
+func TestNextStepsFormatUpgradeBacksUpAndRejectsOlderWriters(t *testing.T) {
+	data := t.TempDir()
+	old, err := store.OpenAt(data, 12)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixes := `[{"rank":1,"type":"fix-page","title":"Clarify existing guide","target":"https://example.org/guide","claim":"c","done_when":"d","evidence":"e","prompts":[1],"effort":"S","displaces":null}]`
+	legacyRun(t, old, "format-guard", "2026-10-20", []string{"Which starter workflow should I use?"}, fixes)
+	old.Close()
+	upgraded, err := store.Open(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer upgraded.Close()
+	var after string
+	if err := upgraded.QueryRow(`SELECT fixes FROM runs WHERE id='format-guard'`).Scan(&after); err != nil || after != fixes {
+		t.Fatalf("format guard rewrote historical advice: %q %v", after, err)
+	}
+	if _, err := os.Stat(filepath.Join(data, "cheapseats.db.bak-v12")); err != nil {
+		t.Fatalf("no backup before advice format change: %v", err)
+	}
+	if db, err := store.OpenAt(data, 12); err == nil {
+		db.Close()
+		t.Fatal("an older writer opened data containing the new analysis envelope")
 	}
 }
 

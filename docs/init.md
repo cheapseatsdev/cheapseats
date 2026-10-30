@@ -27,7 +27,7 @@ cheapseats init yoursite.com -name "Acme" -competitors "Asana,Trello" -suggest
 | --- | --- |
 | `-name X` | the brand's name, instead of what the site calls itself |
 | `-competitors a,b` | competitors, comma-separated: `[[competitors]]` entries, alternatives prompts and head-to-heads |
-| `-suggest [-n 10]` | add suggested prompts with one analyst call on the installed, logged-in `claude` CLI; uses the subscription allowance with no API spend |
+| `-suggest [-n 10]` | request decision-backed suggestions with at most one analyst call; with no buyer/advisory context it returns none without a call |
 | `-dry-run` | print what it found and every file it would write; write nothing |
 
 If any target file exists, it writes nothing.
@@ -70,7 +70,10 @@ use the [site audit](audit.md)'s public-address guard. No model is called withou
 
 Generated files pass `cheapseats check` before writing. Review every TODO (`grep -rn TODO`): supply
 `audience` and public `facts`, and check the guessed `about` and category. Settle `about` and
-`audience` before the first run; changing them restarts every trend.
+`audience` before the first run; changing them restarts every trend. Fill the advisory positioning, goals and
+accepted boundaries separately: they guide prompt curation and advice, not answer generation or scoring.
+The draft questions are examples to challenge, not demand evidence or a required coverage quota;
+remove questions that serve an excluded market or no unresolved decision.
 
 Point subsequent commands at the generated config:
 
@@ -84,3 +87,16 @@ cheapseats run discovery
 `run` asks real questions; review the prompts first. Commit the directory as its own repo using
 the command `init` prints. It stages only generated files, keeping a new `.env` out even before
 `.gitignore` is committed.
+
+## Reviewing suggested questions
+
+With `-suggest`, missing audience and advisory context defer generation without a model call;
+the discovery file records why. Those values are TODOs in a fresh init config. Fill them in, then
+use `suggest-prompts` against the configured repo. A homepage category alone does not establish a
+target buyer or business decision. Do not infer validated demand from generated wording.
+Suggestions may be fewer than requested or empty. Each retained suggestion must identify its buyer,
+learning, concrete decision/action and reason for repeating it, including when to review or stop.
+Missing rationale is rejected. Stages organize suggestions without requiring broad funnel coverage.
+Review those judgments before committing or running the files; the schedule remains disabled.
+A dry run writes nothing. Generation uses the subscription allowance when enough context exists;
+it is not a guarantee of valid buyer demand or a paid-answer run.

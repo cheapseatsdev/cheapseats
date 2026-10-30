@@ -127,9 +127,9 @@ Captured from the [public demo](https://demo.cheapseats.dev/runs/r-20261024-2227
 - **Inspect the evidence:** position, top pick, objections, net sentiment, themes, competitors
   and sources. [Read a run](docs/reading-a-run.md), [inspect searches](docs/searches.md), or
   [check claims against your listed facts](docs/misstatements.md).
-- **Choose work:** fix briefs name a page, required content, target questions, effort and owner.
-  Quick wins ranks them across sets by prompts reached per working day, weighted by remaining
-  headroom. Mark a commit or PR to track an attempt.
+- **Choose next steps:** [verified actions, bounded investigations and market findings](docs/next-steps.md)
+  separate work from unresolved checks and market learning. Only actions get implementation
+  prompts. Mark a commit or PR to track an attempt; zero actions is a valid result.
 - **Measure later:** named, recommended and top-pick rates have 95% intervals. Fix outcomes compare
   target prompts on comparable runs, after at least seven days and four later answers per target
   prompt on average. These gates do not guarantee precision; no detectable change is not zero

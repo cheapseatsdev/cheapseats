@@ -25,8 +25,8 @@ func TestQuickWinsShowWhichSetsAlsoAskForAPage(t *testing.T) {
 	a := newApp(t, testConfig(t), db)
 	ctx := context.Background()
 	fixes := map[string]analysis.Fix{
-		"ai-search-visibility":   {Rank: 1, Type: analysis.NewPage, Title: "Publish a pricing page", Target: "https://cheapseats.dev/pricing", Claim: "c", DoneWhen: "d", Prompts: []int{1}, Effort: "S"},
-		"fix-ai-recommendations": {Rank: 1, Type: analysis.NewPage, Title: "Add a plans and pricing page", Target: "https://cheapseats.dev/plans", Claim: "c", DoneWhen: "d", Prompts: []int{1}, Effort: "M"},
+		"ai-search-visibility":   {Rank: 1, Type: analysis.NewPage, Title: "Publish a pricing page", Target: "https://cheapseats.dev/pricing", Claim: "c", DoneWhen: "The pricing changes have been reviewed.", Prompts: []int{1}, Effort: "S"},
+		"fix-ai-recommendations": {Rank: 1, Type: analysis.NewPage, Title: "Add a plans and pricing page", Target: "https://cheapseats.dev/plans", Claim: "c", DoneWhen: "The pricing changes have been reviewed.", Prompts: []int{1}, Effort: "M"},
 	}
 	setNames := map[string]string{}
 	for id, f := range fixes {
@@ -39,8 +39,9 @@ func TestQuickWinsShowWhichSetsAlsoAskForAPage(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		fj, _ := json.Marshal([]analysis.Fix{f})
-		if _, err := db.Exec(`UPDATE runs SET status='done', finished_at=?, fixes=?, fixes_at=? WHERE id=?`, store.Now(), string(fj), store.Now(), r.ID); err != nil {
+		f.Verification = verifiedServerEvidence(a, f)
+		fj := analysis.Encode(analysis.Analysis{Fixes: []analysis.Fix{f}})
+		if _, err := db.Exec(`UPDATE runs SET status='done', finished_at=?, fixes=?, fixes_at=? WHERE id=?`, store.Now(), fj, store.Now(), r.ID); err != nil {
 			t.Fatal(err)
 		}
 	}

@@ -161,7 +161,6 @@ func Build(s Site, competitors []string) Plan {
 		Prompts: []sets.Prompt{
 			pr("best-for-small-team", fmt.Sprintf("What's the best %s for a small team?", cat), false),
 			pr("best-for-startup", fmt.Sprintf("What's the best %s for a startup?", cat), false),
-			pr("best-for-large-company", fmt.Sprintf("What's the best %s for a large company?", cat), false),
 			pr("most-recommended", fmt.Sprintf("Which %s do people recommend right now, and why?", cat), false),
 			pr("how-to-choose", fmt.Sprintf("How do I choose %s %s?", a, cat), true),
 		},
@@ -267,7 +266,7 @@ var suggestPrompts = suggest.Prompts
 func (p *Plan) Suggest(ctx context.Context, cfg *config.Config, n int) error {
 	var all []sets.Set
 	combined := sets.Set{ID: "starter", Name: p.Site.Name + " starter prompts",
-		Description: fmt.Sprintf("Every question a buyer asks while choosing %s %s: which to pick, for what job, instead of what, at what cost.", article(p.Category), p.Category)}
+		Description: fmt.Sprintf("Candidate questions about %s %s, only where the supplied target buyer and business decisions justify recurring tracking. These draft sets are not validated demand; do not infer a market or fill funnel stages from their placeholders.", article(p.Category), p.Category)}
 	for _, s := range p.Sets {
 		all = append(all, sets.Set{ID: s.ID, Prompts: s.Prompts})
 		if s.ID != sets.HeadToHeads {
@@ -283,6 +282,9 @@ func (p *Plan) Suggest(ctx context.Context, cfg *config.Config, n int) error {
 		return err
 	}
 	taken := map[string]bool{}
+	if res.Note != "" && len(p.Sets) > 0 {
+		p.Sets[0].Note += "\n" + res.Note
+	}
 	for _, s := range p.Sets {
 		for _, x := range s.Prompts {
 			taken[x.ID] = true
@@ -421,6 +423,13 @@ aliases = [`, Clean(s.Name), Clean(s.URL), q(s.Name))
 # Public claims the analyst may build fixes on. Everything here is sent to the model.
 # TODO: add what the brand says publicly today.
 facts = []
+
+# Advisory context guides prompt curation and advice only, never answer prompts or scoring.
+# TODO: who this is for, the decisions tracking should inform, and markets you choose not to serve.
+[brand.advisory]
+positioning = ""
+goals = []
+boundaries = []
 
 # The brand's websites, found on the home page, llms.txt and sitemap. Pages on them count as its
 # own; the fix list puts each fix on the site that suits it. A host covers its subdomains unless

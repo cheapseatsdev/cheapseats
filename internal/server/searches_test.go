@@ -55,7 +55,7 @@ func TestSearchesPage(t *testing.T) {
 	for path, want := range map[string]string{
 		"/runs/" + r.ID:                          "/runs/" + r.ID + "/searches",
 		"/runs/" + r.ID + "/searches":            "Peec AI vs Profound 2026",
-		"/runs/" + r.ID + "/searches?pool=1":     `id = &#34;peec-ai-vs-profound-2026&#34;`,
+		"/runs/" + r.ID + "/searches?pool=1":     `Research leads`,
 		"/api/runs/" + r.ID + "/searches?pool=1": `"name": "Profound"`,
 	} {
 		rec := httptest.NewRecorder()
@@ -83,10 +83,13 @@ func TestSearchesPage(t *testing.T) {
 	}
 	text := res.Content[0].(*mcp.TextContent).Text
 	// Every prompt ran the same query, naming two competitors none of the prompts named.
-	for _, want := range []string{`"brand_named":"0/`, `"injected":["Peec AI","Profound"]`, `"word":"2026"`, `[[prompts]]`} {
+	for _, want := range []string{`"brand_named":"0/`, `"injected":["Peec AI","Profound"]`, `"word":"2026"`, `"review":"Research lead only.`} {
 		if !strings.Contains(text, want) {
 			t.Errorf("get_search_queries: want %s in %s", want, limit(text))
 		}
+	}
+	if strings.Contains(text, "[[prompts]]") {
+		t.Error("a closed competitor search must not become a ready prompt")
 	}
 	if len(text) > 12000 {
 		t.Errorf("get_search_queries is %d bytes", len(text))

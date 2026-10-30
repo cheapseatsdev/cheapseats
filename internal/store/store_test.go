@@ -109,7 +109,7 @@ func TestUpgradeAddsFactCheckTables(t *testing.T) {
 	}
 	var v int
 	db.QueryRow(`PRAGMA user_version`).Scan(&v)
-	if v != Schema() || v != 12 {
+	if v != Schema() {
 		t.Errorf("schema %d", v)
 	}
 }

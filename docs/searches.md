@@ -35,11 +35,11 @@ and `limit`); MCP trims lists to leading rows.
   - **Added**: words searches add, across the set, by searches and prompts: the vocabulary the
     assistants search with (years, "best", "alternatives", "reddit"). Names count under names
     added, not here. **Dropped**: prompt words the searches left out.
-- **Add as prompt**: queries whose results named competitors and never reached the brand's sites,
-  as a `[[prompts]]` entry to paste into the set's file in the config repo. Cheap Seats doesn't write
-  it. Reword it as the question a buyer would ask before you merge it; a query naming the brand is
-  offered only in head-to-heads, the one set that may name it. A search that ran several queries
-  at once (shown joined with ` | `) offers each separately, leaving out ones with search operators
-  (`site:`, quoted phrases) and ones under three words.
+- **Research leads**: queries whose results named competitors and never reached the brand's sites.
+  They remain retrieval evidence, without ready-to-paste prompt TOML. Establish a target buyer,
+  unresolved learning and business decision, intent, and repeat/review value before proposing a
+  question. Query frequency is not buyer demand. Keep closed comparisons excluding the tracked
+  brand outside the scored library. Queries naming the brand appear only for head-to-heads;
+  joined queries are offered separately, excluding search operators and very short fragments.
 - **Prompt by prompt**: answers that searched, searches per answer (over every answer), distinct
   queries, both overlap scores, and each prompt's queries with how many answers ran them.

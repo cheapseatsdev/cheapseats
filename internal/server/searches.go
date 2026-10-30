@@ -120,9 +120,10 @@ func searchDigest(d *SearchData, limit int) any {
 		Injected    []string        `json:"injected,omitempty"`
 	}
 	type suggest struct {
-		Query string `json:"query"`
-		File  string `json:"file"`
-		TOML  string `json:"toml"`
+		Query  string `json:"query"`
+		File   string `json:"file"`
+		TOML   string `json:"toml,omitempty"`
+		Review string `json:"review"`
 	}
 	ids := []string{}
 	for _, x := range d.Pooled {
@@ -142,7 +143,7 @@ func searchDigest(d *SearchData, limit int) any {
 	}
 	sg := []suggest{}
 	for _, x := range d.Suggested[:min(len(d.Suggested), 5)] {
-		sg = append(sg, suggest{x.Query, x.File, x.TOML})
+		sg = append(sg, suggest{x.Query, x.File, x.TOML, x.Review})
 	}
 	return struct {
 		Runs       []string            `json:"runs"`

@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cheapseatsdev/cheapseats/internal/analysis"
 	"github.com/cheapseatsdev/cheapseats/internal/app"
 	"github.com/cheapseatsdev/cheapseats/internal/config"
 	"github.com/cheapseatsdev/cheapseats/internal/grade"
@@ -28,7 +29,7 @@ func TestPagesRenderWithData(t *testing.T) {
 		s := string(body)
 		var text string
 		switch {
-		case strings.Contains(s, "sharp growth lead"):
+		case strings.Contains(s, "evidence-led product and market analyst"):
 			text = `{"insights":"## Why Cheap Seats lost\nDocker is GA.","fixes":[{"rank":1,"type":"new-page","title":"Write a credential-gateway guide","target":"docs.cheapseats.example/guides/keys-off-the-box/","claim":"how","done_when":"page live","evidence":"Use Docker Sandboxes or Cheap Seats. (prompt 1)","prompts":[1],"effort":"S","displaces":"https://docs.docker.com/ai/sandboxes/security/"}]}`
 		case strings.Contains(s, "output_config"):
 			text = `{"verdict":"mentioned","position":2,"top_pick":"Docker Sandboxes","named":["Docker Sandboxes","Cheap Seats"],"reasoning":"r","why_not_top":"Docker is GA","objections":["private beta"],"tone":"positive","praise":["open source"],"evidence":"Docker Sandboxes or Cheap Seats"}`
@@ -59,6 +60,8 @@ func TestPagesRenderWithData(t *testing.T) {
 	if err := a.Runs.Execute(context.Background(), r.ID); err != nil {
 		t.Fatal(err)
 	}
+	winner := "https://docs.docker.com/ai/sandboxes/security/"
+	storeVerifiedServerActions(t, a, r.ID, analysis.Fix{Rank: 1, Type: analysis.NewPage, Title: "Write a credential-gateway guide", Target: "docs.cheapseats.example/guides/keys-off-the-box/", Claim: "how", DoneWhen: "page live", Evidence: "Use Docker Sandboxes or Cheap Seats. (prompt 1)", Prompts: []int{1}, Effort: "S", Displaces: &winner})
 	s, err := New(a)
 	if err != nil {
 		t.Fatal(err)
@@ -119,7 +122,7 @@ func TestPagesRenderWithData(t *testing.T) {
 	}
 	defer cs.Close()
 	tools, err := cs.ListTools(ctx, nil)
-	if err != nil || len(tools.Tools) != 26 {
+	if err != nil || len(tools.Tools) != 27 {
 		t.Fatalf("tools: %v %v", tools, err)
 	}
 	call := func(name string, args map[string]any) (string, bool) {

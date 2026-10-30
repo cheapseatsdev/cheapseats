@@ -21,10 +21,27 @@ facts = [
   "Answers come from Claude and OpenAI models through their APIs, or through local Claude Code and Codex CLIs on your own subscriptions.",
   "Each question is asked on two tracks: search, where the assistant must search the web first, and recall, with no tools, from what the model already believes.",
   "Each answer is graded recommended, mentioned or absent, with the brand's position, the top pick, every product named for share of voice, and the objections raised.",
-  "Every run builds a ranked fix list: the exact page to create or change, what it must say, the prompts it should flip, which of the brand's sites it belongs on, and its owner.",
+  "Every run builds Next steps: verified actions, bounded investigations and market findings. Actions describe a specific change, supporting evidence, a completion check and an owner.",
   "Rankings track each prompt set's share-of-voice rank and rates day by day, and every answer, search result and citation behind them is kept.",
   "Cheap Seats has a web UI, a CLI, a JSON API and an MCP server, and deploys with Docker, a Helm chart for Kubernetes, or on an exe.dev VM.",
   "An admission budget reserves estimated API spend before calls; settled costs can exceed reservations. Configured model and optional providers receive the inputs needed for their passes.",
+]
+
+# Advisory context guides prompt review and Next steps, never buyer answers or grading.
+# These are deliberate priorities and limits, not additional public product claims.
+[brand.advisory]
+positioning = "A low-cost, self-hosted starting point for small teams and startups with a technical owner to measure Claude and ChatGPT visibility and choose useful next steps."
+goals = [
+  "Understand when a small team should move from manual checks to a repeatable starter workflow.",
+  "Learn how to explain the technical ownership, costs and tradeoffs against DIY checks and managed tools.",
+  "Find specific, verifiable improvements to existing product explanations and distribution that fit this audience.",
+]
+boundaries = [
+  "Claude and OpenAI models are the supported answer providers. Gemini, Google AI Overviews and broad engine coverage are outside the current product scope.",
+  "Self-hosting and a technical owner are deliberate tradeoffs. Do not propose a hosted service just to win buyers who need one.",
+  "Enterprise procurement, SOC 2 and enterprise security certification are outside the current positioning.",
+  "MIT licensing is free; API usage, subscriptions and hosting may cost money. Do not position this as a managed free tracker or promise zero total cost.",
+  "Do not propose new features or more pages solely because a competitor has them. Verify current artifacts and the buyer decision first.",
 ]
 
 # The brand's websites. Pages on them count as its own; the fix list puts each fix on the site that

@@ -28,9 +28,9 @@ func TestPromptReview(t *testing.T) {
 		s := string(body)
 		var text string
 		switch {
-		case strings.Contains(s, "You maintain the questions"):
+		case strings.Contains(s, "You maintain questions worth measuring"):
 			reviews.Add(1)
-			text = `{"rewrites":[{"id":"geo-aeo-llm-seo-difference","text":"What is GEO and how is it different from SEO?","why":"flat"},{"id":"no-such-prompt","text":"x","why":"y"}],"retire":[],"add":[{"stage":"pricing","text":"How much does an AI visibility tracker cost?","intent":"choice"}]}`
+			text = `{"rewrites":[{"id":"geo-aeo-llm-seo-difference","text":"How do GEO, AEO and LLM SEO differ from SEO, and which matter to a B2B marketing team?","why":"Preserves the same B2B terminology and prioritization question.","intent":"info","meaning_changed":false},{"id":"no-such-prompt","text":"x","why":"y"}],"retire":[],"add":[{"stage":"pricing","text":"How much does an AI visibility tracker cost?","intent":"info","buyer":"A marketer planning a first measurement budget","learning":"Which operating costs need explaining","decision":"Whether onboarding needs a budget example","repeat_value":"Three weekly runs, then review whether this objection persists"}]}`
 		case strings.Contains(s, "output_config"):
 			text = `{"verdict":"absent","position":null,"top_pick":"Profound","named":["Profound","Peec AI"],"reasoning":"r","why_not_top":null,"objections":[]}`
 		case strings.Contains(s, `"tools"`):
@@ -170,7 +170,7 @@ func TestPromptReview(t *testing.T) {
 		t.Error("days=45 should be a tool error")
 	}
 	text, isErr = call(map[string]any{"set": set.ID, "suggest": true})
-	if isErr || reviews.Load() != 1 || !strings.Contains(text, `+text = \"What is GEO and how is it different from SEO?\"`) || !strings.Contains(text, `id = \"geo-aeo-llm-seo-difference\"`) ||
+	if isErr || reviews.Load() != 1 || !strings.Contains(text, `+text = \"How do GEO, AEO and LLM SEO differ from SEO, and which matter to a B2B marketing team?\"`) || !strings.Contains(text, `id = \"geo-aeo-llm-seo-difference\"`) ||
 		!strings.Contains(text, `+id = \"much-ai-visibility-tracker-cost\"`) || !strings.Contains(text, `"dropped":1`) {
 		t.Errorf("suggest: %s", limit(text))
 	}

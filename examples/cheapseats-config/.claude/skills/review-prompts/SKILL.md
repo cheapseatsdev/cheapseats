@@ -13,6 +13,9 @@ Read these from this repo unless the user supplies them:
 
 - Business goal: the user's current target customers, jobs, positioning, exclusions and decisions
   they want the measurement to inform. Use product documentation and config as supporting context.
+- Advisory curation context: optional [brand.advisory] positioning, goals and accepted boundaries.
+  Use it for selecting questions and advising on findings, separately from public facts. Never
+  copy it into answerer instructions, grader criteria or measurement outcomes.
 - Declared measurement goal: the set's `description` and the prompt-sets README. Challenge these
   when they preserve questions that do not serve the business goal.
 - How answers will be scored: Cheap Seats scores selection prompts on

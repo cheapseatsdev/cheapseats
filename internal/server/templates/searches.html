@@ -4,7 +4,7 @@
 {{if not .Searches}}<p class="muted">No searches in these answers yet.</p>{{else}}
 <div class="kpis"><div class="kpi"><b>{{.Searched}}/{{.Answers}}</b><small>answers searched</small></div><div class="kpi"><b>{{.Searches}}</b><small>searches</small></div><div class="kpi"><b>{{.Distinct}}</b><small>distinct queries</small></div><div class="kpi"><b>{{pct .FromPrompt}}</b><small title="Share of a search's words that are in its prompt">from prompt</small></div><div class="kpi"><b>{{pct .PromptKept}}</b><small title="Share of the prompt's words the search kept">prompt kept</small></div></div>
 
-<nav class="runnav" aria-label="Sections"><a href="#queries">Top queries</a>{{if .Injected}}<a href="#injected">Names added</a>{{end}}<a href="#words">Words</a>{{if .Suggested}}<a href="#suggest">Add as prompt</a>{{end}}<a href="#prompts">Prompt by prompt</a></nav>
+<nav class="runnav" aria-label="Sections"><a href="#queries">Top queries</a>{{if .Injected}}<a href="#injected">Names added</a>{{end}}<a href="#words">Words</a>{{if .Suggested}}<a href="#suggest">Research leads</a>{{end}}<a href="#prompts">Prompt by prompt</a></nav>
 
 <h2 id="queries">Top queries</h2>
 <p class="sub">Queries counted together whatever their case, quotes or spacing. <b>{{brand}}'s sites</b>: searches whose results included a page on one of them. <b>Competitors</b>: named in a result's title, or its site. <b>Named {{brand}}</b>: of the graded answers that ran the query, those that named {{brand}}.</p>
@@ -24,10 +24,10 @@
 <div class="card"><h3>Dropped</h3><p class="muted small">Prompt words the searches left out.</p>
 <table><thead><tr><th>Word</th><th class="num">Searches</th><th class="num">Prompts</th></tr></thead><tbody>{{range $i, $w := .Dropped}}{{if lt $i 25}}<tr><td>{{$w.Word}}</td><td class="num">{{$w.Searches}}</td><td class="num">{{$w.Prompts}}</td></tr>{{end}}{{end}}</tbody></table></div></div>
 
-{{with .Suggested}}<h2 id="suggest">Add as prompt</h2>
-<p class="sub">Queries whose results named competitors and never reached {{brand}}'s sites. To measure one as a prompt of its own, paste its entry into the set's file in the config repo and reword it as the question a buyer would ask; prompt ids are permanent, so pick one you'll keep.</p>
+{{with .Suggested}}<h2 id="suggest">Research leads</h2>
+<p class="sub">Queries whose results named competitors and never reached {{brand}}'s sites. Search frequency is retrieval evidence, not buyer demand. Review buyer fit, intent, the decision it could inform and repeat value before proposing a new question. Closed comparisons between other products stay outside the scored suite.</p>
 {{range .}}<details><summary>“{{.Query}}” <span class="muted">— {{.Answers}} answers · {{range $i, $c := .Competitors}}{{if $i}}, {{end}}{{$c}}{{end}}</span></summary>
-<p class="muted small">Append to <span class="mono">prompt-sets/{{.File}}</span>:</p><pre>{{.TOML}}</pre></details>{{end}}{{end}}
+<p>{{.Review}}</p>{{with .TOML}}<pre>{{.}}</pre>{{end}}</details>{{end}}{{end}}
 
 <h2 id="prompts">Prompt by prompt</h2>
 <div class="scroll"><table><thead><tr><th class="num">#</th><th>Prompt</th><th class="num">Searched</th><th class="num">Searches per answer</th><th class="num">Distinct</th><th class="num">From prompt</th><th class="num">Prompt kept</th></tr></thead>

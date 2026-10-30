@@ -158,9 +158,11 @@ func TestJudgePromptsAsksEachQuestionOnceAndFlagsAtTheThreshold(t *testing.T) {
 				if q["type"] != "choice" || c["selection"] == nil || c["info"] == nil || state["category"] != "AI visibility trackers" {
 					t.Errorf("intent criteria: %v %v", q, state)
 				}
-				// Selection is about the answer naming a product, not the prompt's grammar.
-				if s := c["selection"].(string); !strings.Contains(s, "how do I") || !strings.Contains(s, "names a product") {
-					t.Errorf("selection criterion: %q", s)
+				// A product being useful for the job must not force a method into selection.
+				selection, info := c["selection"].(string), c["info"].(string)
+				if !strings.Contains(selection, "required to satisfy") || strings.Contains(selection, "even when none was asked for") ||
+					!strings.Contains(info, "manual/API method") || !strings.Contains(info, "without selecting a product") {
+					t.Errorf("intent must allow complete product-free methods: selection=%q info=%q", selection, info)
 				}
 			case JudgeBranded:
 				b := state["brand"].(map[string]any)
