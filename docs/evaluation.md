@@ -95,6 +95,41 @@ development or held-out partitions. The first pilot draws only development
 cases; later review can annotate either partition. Held-out evidence must not
 inform candidate prompt tuning. The queue does not select on proposed verdicts.
 
+## Independent checks and resolutions
+
+After committing your own judgment, use **Preview an independent check** to see
+the configured grader, estimated allowance and admission budget. **Run one
+independent assessment** explicitly starts the call; viewing a page never does.
+The assessment receives the complete saved question/answer, brand identity,
+competitors and rubric, with imported and human labels, notes and evidence quotes
+removed. It uses the same transport and normalization as production grading.
+This is label independence, not a claim that the model is statistically independent
+of the model that produced the original proposal.
+
+Results are cached by immutable evidence, rubric, model, transport and evaluator
+source digest. The check's fixed admission budget covers HTTP retries and an
+explicit retry of a failed/interrupted assessment. Every API attempt also uses
+the global daily ledger and concurrency gate. Settlement can exceed reservations;
+neither admission budget is a hard billing ceiling. Claude Code uses its configured
+subscription rather than API charges. Missing access leaves human review usable.
+
+One check permits at most two assessment attempts. A request lasts at most three
+minutes; its four-minute lease allows explicit recovery after a process crash.
+Late workers cannot replace newer results. Provider/parse failures remain failed
+checks and never become absent predictions. Failed checks do not invent disputes.
+
+Differences in verdict, top pick, namesake-only or tone, and missing/invalid model
+quotes, are grouped under the case. **Resolve check differences** shows the model
+assessment beside your saved judgment. **Keep my saved judgment** preserves its
+fields; **Save revised judgment and resolution** validates your edited fields.
+Both require a resolution explanation. Resolution edits do not autosave over the
+saved human decision. A new check arriving meanwhile requires reloading before
+resolving it. You can instead leave the case unresolved. Existing approved versions
+remain frozen; a new version cannot include pending differences or running checks.
+Model agreement never creates another human review. Resolution history records
+the check, human actor, label revision, action and explanation; approved manifests
+include those records while keeping provenance as a single human review.
+
 ## Approve and export a version
 
 **Preview dataset version** shows the exact included cases, excluded cases,
@@ -135,7 +170,7 @@ coverage; two is a floor, not a statistical reliability claim. No diagnostic can
 grant release acceptance. In particular, 74/80 agreement from always predicting
 absent cannot pass behind the old 92.5% aggregate threshold.
 
-The workbench uses database schema 16. Opening an existing database
+The workbench uses database schema 17. Opening an existing database
 backs it up before migration; older binaries refuse newer schemas. Rollback
 requires the pre-migration backup, not merely the older binary. Evaluation tables
 are private operational data; a read-only copy is not a redaction of its database.
