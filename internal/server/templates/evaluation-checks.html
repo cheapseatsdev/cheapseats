@@ -1,4 +1,5 @@
 {{define "title"}}Check saved judgments · Evaluation · {{end}}{{define "body"}}
+{{template "evaluation-confirmation" .}}<script defer src="{{asset "evaluation.js"}}"></script>
 <p><a href="/evaluation{{with .Import}}?import={{.ID}}{{end}}">← Evaluation</a></p>
 <h1>Check saved judgments</h1>
 <p class="sub">Your reviews are saved. Compare a separate model assessment with your judgment, then decide any differences yourself.</p>

@@ -62,12 +62,14 @@ type evaluationHome struct {
 	ResumePosition               int
 	Error                        string
 	ReviewFinished               bool
+	Confirmation                 evaluationConfirmation
 	Datasets                     []evaluation.Dataset
 }
 
 func (s *Server) evaluationHomeData(r *http.Request) (evaluationHome, error) {
 	w := s.evaluationStore()
 	d := evaluationHome{Rows: []evaluationRow{}, ReviewFinished: r.URL.Query().Get("review") == "finished"}
+	d.Confirmation = s.evaluationConfirmation(r)
 	var err error
 	d.Imports, err = w.Imports(r.Context())
 	if err != nil || len(d.Imports) == 0 {
@@ -205,6 +207,11 @@ type evaluationCaseData struct {
 	ResolutionNote                                          string
 	RequireNote                                             bool
 	CheckQueue                                              bool
+	SavedJudgment                                           evaluation.Judgment
+	NextCheckURL, NextCheckAction                           string
+	CheckPosition, CheckTotal                               int
+	CheckDone, CheckPending                                 int
+	Confirmation                                            evaluationConfirmation
 }
 
 type evaluationPassage struct {
@@ -242,6 +249,8 @@ func (s *Server) evaluationCaseData(r *http.Request, id string, session *evaluat
 	}
 	d := evaluationCaseData{ID: c.ID, Prompt: c.Record.Prompt, Brand: c.Record.Brand.Name, About: c.Record.Brand.About, Aliases: c.Record.Brand.Aliases, Intent: c.Record.Intent, Answer: c.Record.Answer, Actor: s.evaluationActor(r), Rubric: evaluation.Rubric(), Judgment: c.Review.Judgment, Revision: c.Review.Revision, State: c.Review.State, FirstReviewed: c.FirstReviewed, Session: session, ImportID: r.URL.Query().Get("import")}
 	d.CheckQueue = r.URL.Query().Get("checks") == "1" || r.FormValue("checks") == "1"
+	d.SavedJudgment = c.Review.Judgment
+	d.Confirmation = s.evaluationConfirmation(r)
 	if d.Intent == "" {
 		d.Intent = "choice"
 	}
@@ -276,6 +285,17 @@ func (s *Server) evaluationCase(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, err.Error(), evaluationCode(err))
 		return
+	}
+	if d.State != "reviewed" {
+		d.CheckQueue = false
+	}
+	if d.CheckQueue || d.State == "reviewed" && len(d.Checks) > 0 {
+		d.CheckQueue = true
+		d.Resolution = len(d.Pending) > 0
+		if err := s.evaluationCheckNavigation(r, &d); err != nil {
+			http.Error(w, err.Error(), evaluationCode(err))
+			return
+		}
 	}
 	s.render(w, "evaluation-case", d)
 }
@@ -375,6 +395,10 @@ func (s *Server) evaluationSave(w http.ResponseWriter, r *http.Request) {
 	if action == "end" {
 		kind = "draft"
 	}
+	checkImportID := ""
+	if err == nil && r.FormValue("checks") == "1" && session == nil {
+		checkImportID, err = s.evaluationCheckImport(r.Context(), r.FormValue("import"), id)
+	}
 	saved := false
 	if err == nil && (action == "next" || action == "continue-review") {
 		c, e := wb.Case(r.Context(), id)
@@ -409,6 +433,19 @@ func (s *Server) evaluationSave(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if err == nil && r.FormValue("checks") == "1" && session == nil {
+		var target string
+		target, err = s.evaluationNextCheck(r, checkImportID, id)
+		if err == nil {
+			u, _ := url.Parse(target)
+			q := u.Query()
+			q.Set("confirmed_case", id)
+			q.Set("confirmed_revision", strconv.Itoa(revision))
+			u.RawQuery = q.Encode()
+			http.Redirect(w, r, u.String(), http.StatusSeeOther)
+			return
+		}
+	}
 	if err != nil {
 		d, loadErr := s.evaluationCaseData(r, id, session)
 		if loadErr != nil {
@@ -428,6 +465,11 @@ func (s *Server) evaluationSave(w http.ResponseWriter, r *http.Request) {
 		}
 		d.Rules = nil
 		d.fields()
+		if d.CheckQueue {
+			if e := s.evaluationCheckNavigation(r, &d); e != nil {
+				d.CheckQueue = false
+			}
+		}
 		w.WriteHeader(evaluationCode(err))
 		s.render(w, "evaluation-case", d)
 		return

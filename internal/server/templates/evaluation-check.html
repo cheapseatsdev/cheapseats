@@ -1,4 +1,5 @@
 {{define "title"}}Independent check · Evaluation · {{end}}{{define "body"}}
+{{template "evaluation-confirmation" .}}<script defer src="{{asset "evaluation.js"}}"></script>
 <p><a href="/evaluation/checks?import={{.ImportID}}">← Check saved judgments</a> · <a href="/evaluation/cases/{{.ID}}?import={{.ImportID}}">Saved answer and human review</a></p><h1>Independent check</h1><p class="sub">{{.Question}}</p>
 <section class="card"><h2>Check the saved answer</h2><p>One assessment using {{.Plan.Model}}. The model receives the complete saved answer, question, intended brand, competitors and grading rules. It does not receive your judgment or the imported model label. Agreement is model agreement, not another human review.</p>
 <p>Rule <span class="mono">{{short .Plan.Rubric}}</span> · evaluator <span class="mono">{{short .Plan.Evaluator}}</span>. Cached results are reused for identical evidence and evaluator configuration. A failed or interrupted check can be retried explicitly once; a crashed worker's lease expires after four minutes.</p>

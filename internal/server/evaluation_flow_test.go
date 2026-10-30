@@ -67,7 +67,7 @@ func TestEvaluationFlowConnectsSavedSessionChecksResolutionAndApproval(t *testin
 	}
 	values = url.Values{"revision": {"2"}, "rubric": {evaluation.Rubric()}, "check": {p.ID}, "action": {"resolve-keep"}, "resolution_note": {"The complete answer explicitly recommends the intended product."}, "checks": {"1"}, "import": {a.ID}}
 	r = evaluationRequest(h, "POST", "/evaluation/cases/"+id, values)
-	if r.Code != 303 || !strings.Contains(r.Header().Get("Location"), "checks=1") || !strings.Contains(r.Header().Get("Location"), a.ID) {
+	if r.Code != 303 || !strings.Contains(r.Header().Get("Location"), "/evaluation/checks?") || !strings.Contains(r.Header().Get("Location"), "confirmed_revision=3") || !strings.Contains(r.Header().Get("Location"), a.ID) {
 		t.Fatalf("resolution lost return context: %d %s", r.Code, r.Header().Get("Location"))
 	}
 	d, err = s.evaluationHomeData(request)

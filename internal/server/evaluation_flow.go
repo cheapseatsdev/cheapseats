@@ -1,12 +1,88 @@
 package server
 
 import (
+	"context"
+	"database/sql"
 	"errors"
 	"net/http"
 	"net/url"
+	"strconv"
 
 	"github.com/cheapseatsdev/cheapseats/internal/evaluation"
 )
+
+type evaluationConfirmation struct {
+	CaseID, Actor string
+	Revision      int
+}
+
+func (s *Server) evaluationConfirmation(r *http.Request) evaluationConfirmation {
+	id := r.URL.Query().Get("confirmed_case")
+	revision, err := strconv.Atoi(r.URL.Query().Get("confirmed_revision"))
+	if id == "" || err != nil {
+		return evaluationConfirmation{}
+	}
+	c, err := s.evaluationStore().Case(r.Context(), id)
+	actor := s.evaluationActor(r)
+	if err != nil || c.Review.Revision != revision || c.Review.Actor != actor {
+		return evaluationConfirmation{}
+	}
+	return evaluationConfirmation{id, actor, revision}
+}
+
+func (s *Server) evaluationCheckImport(ctx context.Context, id, caseID string) (string, error) {
+	wb := s.evaluationStore()
+	if id != "" {
+		a, err := wb.Import(ctx, id)
+		if err != nil {
+			return "", err
+		}
+		for _, row := range a.Rows {
+			if row.CaseID == caseID {
+				return id, nil
+			}
+		}
+		return "", sql.ErrNoRows
+	}
+	imports, err := wb.Imports(ctx)
+	if err != nil {
+		return "", err
+	}
+	for _, a := range imports {
+		for _, row := range a.Rows {
+			if row.CaseID == caseID {
+				return a.ID, nil
+			}
+		}
+	}
+	return "", sql.ErrNoRows
+}
+
+func (s *Server) evaluationNextCheck(r *http.Request, importID, caseID string) (string, error) {
+	q := r.URL.Query()
+	q.Set("import", importID)
+	r.URL.RawQuery = q.Encode()
+	d, err := s.evaluationHomeData(r)
+	if err != nil {
+		return "", err
+	}
+	eligible := map[string]evaluationCheckRow{}
+	for _, row := range d.Flow.Rows {
+		eligible[row.ID] = row
+	}
+	after := false
+	for _, row := range d.Rows {
+		if after {
+			if next, ok := eligible[row.ID]; ok {
+				return next.URL, nil
+			}
+		}
+		if row.ID == caseID {
+			after = true
+		}
+	}
+	return "/evaluation/checks?" + url.Values{"import": {importID}}.Encode(), nil
+}
 
 // Called only after an explicit save/continue POST. Rejoining an active session
 // must acknowledge the just-saved case if it is still the session's current item.
