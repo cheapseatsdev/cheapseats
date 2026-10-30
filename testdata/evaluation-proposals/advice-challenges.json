@@ -1,0 +1,445 @@
+{
+  "contract": "proposed-advice-benchmark-v1",
+  "status": "proposed",
+  "provenance": {
+    "kind": "synthetic",
+    "created_by": "Codex",
+    "human_adjudicated": false
+  },
+  "scorer_implemented": false,
+  "cases": [
+    {
+      "id": "advice-001",
+      "family": "already-done",
+      "brand": {
+        "name": "Example Tracker",
+        "aliases": [
+          "ExampleTracker",
+          "exampletracker.test"
+        ],
+        "about": "A fictional self-hosted software platform for recording how AI assistants recommend a brand. Not a physical tracking device."
+      },
+      "advisory": "Goals: help small teams run software themselves and review saved answers. Boundaries: do not offer managed hosting; do not perform unsolicited outreach.",
+      "saved_answer": "I recommend Northstar Metrics because its setup guide is clearer.",
+      "snapshots": [
+        {
+          "url": "https://exampletracker.test/setup",
+          "body": "Install the CLI, run tracker init, then run tracker serve. The server stores answers locally.",
+          "sha256": "0b79ad3a1a87adcf1bf7a93f22bba2941bb72d201e5e11aadc823fabe1ab6456",
+          "read_status": "ok",
+          "coverage": "complete",
+          "truncated": false
+        }
+      ],
+      "candidate": {
+        "target": "https://exampletracker.test/setup",
+        "action": "Add the three commands needed to start the CLI.",
+        "done_when": "The setup page lists install, init and serve commands."
+      },
+      "proposed_disposition": "already-done",
+      "gates_to_examine": [
+        "existing_work",
+        "remaining_change"
+      ],
+      "rationale": "The complete target already contains the requested commands; restating them is not material work."
+    },
+    {
+      "id": "advice-002",
+      "family": "intentional-boundary",
+      "brand": {
+        "name": "Example Tracker",
+        "aliases": [
+          "ExampleTracker",
+          "exampletracker.test"
+        ],
+        "about": "A fictional self-hosted software platform for recording how AI assistants recommend a brand. Not a physical tracking device."
+      },
+      "advisory": "Goals: help small teams run software themselves and review saved answers. Boundaries: do not offer managed hosting; do not perform unsolicited outreach.",
+      "saved_answer": "I recommend Northstar Metrics because its setup guide is clearer.",
+      "snapshots": [
+        {
+          "url": "https://exampletracker.test/hosting",
+          "body": "Example Tracker is self-hosted software. Managed hosting is not offered.",
+          "sha256": "a316f8952281fc8d26ff903482fbe40e59b993a7090f2cde123308a4514ab5e7",
+          "read_status": "ok",
+          "coverage": "complete",
+          "truncated": false
+        }
+      ],
+      "candidate": {
+        "target": "https://exampletracker.test/hosting",
+        "action": "Build a managed hosting service.",
+        "done_when": "A hosted signup flow is live."
+      },
+      "proposed_disposition": "boundary",
+      "gates_to_examine": [
+        "strategy"
+      ],
+      "rationale": "The requested expansion conflicts with an explicit boundary rather than exposing an unowned TODO."
+    },
+    {
+      "id": "advice-003",
+      "family": "unread-target",
+      "brand": {
+        "name": "Example Tracker",
+        "aliases": [
+          "ExampleTracker",
+          "exampletracker.test"
+        ],
+        "about": "A fictional self-hosted software platform for recording how AI assistants recommend a brand. Not a physical tracking device."
+      },
+      "advisory": "Goals: help small teams run software themselves and review saved answers. Boundaries: do not offer managed hosting; do not perform unsolicited outreach.",
+      "saved_answer": "I recommend Northstar Metrics because its setup guide is clearer.",
+      "snapshots": [
+        {
+          "url": "https://exampletracker.test/setup",
+          "body": "",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "read_status": "error",
+          "coverage": "unavailable",
+          "truncated": false
+        }
+      ],
+      "candidate": {
+        "target": "https://exampletracker.test/setup",
+        "action": "Replace the missing setup instructions with a complete guide.",
+        "done_when": "The setup page includes a verified first-run command."
+      },
+      "proposed_disposition": "investigate",
+      "gates_to_examine": [
+        "existing_work",
+        "remaining_change"
+      ],
+      "rationale": "A read error establishes nothing about missing content. First make one bounded read of the target to decide whether a fix is needed.",
+      "annotations": {
+        "read_error": "Synthetic timeout; no response body."
+      }
+    },
+    {
+      "id": "advice-004",
+      "family": "irrelevant-proof",
+      "brand": {
+        "name": "Example Tracker",
+        "aliases": [
+          "ExampleTracker",
+          "exampletracker.test"
+        ],
+        "about": "A fictional self-hosted software platform for recording how AI assistants recommend a brand. Not a physical tracking device."
+      },
+      "advisory": "Goals: help small teams run software themselves and review saved answers. Boundaries: do not offer managed hosting; do not perform unsolicited outreach.",
+      "saved_answer": "I recommend Northstar Metrics because its setup guide is clearer.",
+      "snapshots": [
+        {
+          "url": "https://exampletracker.test/setup",
+          "body": "Run tracker init to create the local database. Navigation: Export guide.",
+          "sha256": "9c16794c001e18656126b2dc3cb021d563802962e9adba880855363cc0c87bee",
+          "read_status": "ok",
+          "coverage": "complete",
+          "truncated": false
+        }
+      ],
+      "candidate": {
+        "target": "https://exampletracker.test/setup",
+        "action": "Add a documented CSV export command.",
+        "done_when": "The setup page includes a verified CSV export command."
+      },
+      "proposed_disposition": "investigate",
+      "gates_to_examine": [
+        "capability",
+        "remaining_change"
+      ],
+      "rationale": "The quoted initialization command is authentic but proves no CSV export capability. Check the actual export interface before proposing an executable edit.",
+      "annotations": {
+        "proposed_bad_proof": {
+          "source": "https://exampletracker.test/setup",
+          "quote": "Run tracker init to create the local database."
+        }
+      }
+    },
+    {
+      "id": "advice-005",
+      "family": "tail-contradiction",
+      "brand": {
+        "name": "Example Tracker",
+        "aliases": [
+          "ExampleTracker",
+          "exampletracker.test"
+        ],
+        "about": "A fictional self-hosted software platform for recording how AI assistants recommend a brand. Not a physical tracking device."
+      },
+      "advisory": "Goals: help small teams run software themselves and review saved answers. Boundaries: do not offer managed hosting; do not perform unsolicited outreach.",
+      "saved_answer": "I recommend Northstar Metrics because its setup guide is clearer.",
+      "snapshots": [
+        {
+          "url": "https://exampletracker.test/exports",
+          "body": "CSV exports are available in the command-line tool.\n\nThe web interface does not offer CSV exports.",
+          "sha256": "7b47e6a7c0abc40ebe6ef037c595c371a9dadd99ab09a809ee32bc1fa8f0c8a1",
+          "read_status": "ok",
+          "coverage": "complete",
+          "truncated": false
+        }
+      ],
+      "candidate": {
+        "target": "https://exampletracker.test/exports",
+        "action": "Tell users to export CSV from the web interface.",
+        "done_when": "The export page shows the web CSV export button."
+      },
+      "proposed_disposition": "reject",
+      "gates_to_examine": [
+        "capability"
+      ],
+      "rationale": "The full page explicitly denies the UI capability; the opening CLI claim cannot support a web-interface action."
+    },
+    {
+      "id": "advice-006",
+      "family": "missing-inventory",
+      "brand": {
+        "name": "Example Tracker",
+        "aliases": [
+          "ExampleTracker",
+          "exampletracker.test"
+        ],
+        "about": "A fictional self-hosted software platform for recording how AI assistants recommend a brand. Not a physical tracking device."
+      },
+      "advisory": "Goals: help small teams run software themselves and review saved answers. Boundaries: do not offer managed hosting; do not perform unsolicited outreach.",
+      "saved_answer": "I recommend Northstar Metrics because its setup guide is clearer.",
+      "snapshots": [
+        {
+          "url": "https://exampletracker.test/setup",
+          "body": "Run tracker init and tracker serve to start locally.",
+          "sha256": "7ecef09e07921dd41700a07793d92353109e21b1a9af00cfcd100b627815c0c9",
+          "read_status": "ok",
+          "coverage": "complete",
+          "truncated": false
+        }
+      ],
+      "candidate": {
+        "target": "https://exampletracker.test/setup",
+        "action": "Create a new export guide because no export guide exists anywhere on the site.",
+        "done_when": "A new export guide is published with verified commands."
+      },
+      "proposed_disposition": "investigate",
+      "gates_to_examine": [
+        "existing_work",
+        "remaining_change"
+      ],
+      "rationale": "One sampled page is not a site inventory. Check the route/content index and export capability before deciding whether a new page is useful.",
+      "annotations": {
+        "sitewide_inventory_available": false
+      }
+    },
+    {
+      "id": "advice-007",
+      "family": "publisher-control",
+      "brand": {
+        "name": "Example Tracker",
+        "aliases": [
+          "ExampleTracker",
+          "exampletracker.test"
+        ],
+        "about": "A fictional self-hosted software platform for recording how AI assistants recommend a brand. Not a physical tracking device."
+      },
+      "advisory": "Goals: submit to relevant self-hosted directories when their current rules allow it. Boundaries: no product expansion.",
+      "saved_answer": "I recommend Northstar Metrics because its setup guide is clearer.",
+      "snapshots": [
+        {
+          "url": "https://exampletracker.test/submission-copy",
+          "body": "Synthetic publisher rules: list submissions must include a working self-hosted setup link; editors decide whether to accept them.",
+          "sha256": "b5757334771e9e0577e4f8eff6aca58bee44c83f0f597af654f877bfd275d1d3",
+          "read_status": "ok",
+          "coverage": "complete",
+          "truncated": false
+        }
+      ],
+      "candidate": {
+        "target": "https://exampletracker.test/submission-copy",
+        "action": "Submit a listing to an external directory.",
+        "done_when": "The publisher accepts and publishes the listing."
+      },
+      "proposed_disposition": "reject",
+      "gates_to_examine": [
+        "completion"
+      ],
+      "rationale": "Acceptance is outside the team’s control. Even verified eligibility cannot make a publisher decision a team-controlled completion check.",
+      "annotations": {
+        "external_publisher": "https://directory.test/submit",
+        "note": "The snapshot is a synthetic saved copy of supplied publisher rules, not a live fetch."
+      }
+    },
+    {
+      "id": "advice-008",
+      "family": "future-model-outcome",
+      "brand": {
+        "name": "Example Tracker",
+        "aliases": [
+          "ExampleTracker",
+          "exampletracker.test"
+        ],
+        "about": "A fictional self-hosted software platform for recording how AI assistants recommend a brand. Not a physical tracking device."
+      },
+      "advisory": "Goals: help small teams run software themselves and review saved answers. Boundaries: do not offer managed hosting; do not perform unsolicited outreach.",
+      "saved_answer": "I recommend Northstar Metrics because its setup guide is clearer.",
+      "snapshots": [
+        {
+          "url": "https://exampletracker.test/setup",
+          "body": "Run tracker init and tracker serve to start locally. The required runtime version is not specified.",
+          "sha256": "f2525bb94543490ae5c4eca9ea6d3c691e7a97888c374bf5bd6656e7249f205e",
+          "read_status": "ok",
+          "coverage": "complete",
+          "truncated": false
+        }
+      ],
+      "candidate": {
+        "target": "https://exampletracker.test/setup",
+        "action": "Document the tested runtime version.",
+        "done_when": "An AI assistant recommends Example Tracker next week."
+      },
+      "proposed_disposition": "reject",
+      "gates_to_examine": [
+        "completion"
+      ],
+      "rationale": "A future model outcome is an impact observation, not a completion test for a documentation edit."
+    },
+    {
+      "id": "advice-009",
+      "family": "outreach-boundary",
+      "brand": {
+        "name": "Example Tracker",
+        "aliases": [
+          "ExampleTracker",
+          "exampletracker.test"
+        ],
+        "about": "A fictional self-hosted software platform for recording how AI assistants recommend a brand. Not a physical tracking device."
+      },
+      "advisory": "Goals: help small teams run software themselves and review saved answers. Boundaries: do not offer managed hosting; do not perform unsolicited outreach.",
+      "saved_answer": "I recommend Northstar Metrics because its setup guide is clearer.",
+      "snapshots": [
+        {
+          "url": "https://exampletracker.test/community",
+          "body": "Questions can be discussed in the project forum.",
+          "sha256": "6e8939e1988f34dacecb3b24677c63995f333c48e507af8984fd9d8a32a7a375",
+          "read_status": "ok",
+          "coverage": "complete",
+          "truncated": false
+        }
+      ],
+      "candidate": {
+        "target": "https://exampletracker.test/community",
+        "action": "Send unsolicited promotional emails to forum participants.",
+        "done_when": "Ten promotional emails are sent."
+      },
+      "proposed_disposition": "boundary",
+      "gates_to_examine": [
+        "strategy"
+      ],
+      "rationale": "The explicit advisory forbids unsolicited outreach, even when sending emails is technically controllable."
+    },
+    {
+      "id": "advice-010",
+      "family": "useful-owned-change",
+      "brand": {
+        "name": "Example Tracker",
+        "aliases": [
+          "ExampleTracker",
+          "exampletracker.test"
+        ],
+        "about": "A fictional self-hosted software platform for recording how AI assistants recommend a brand. Not a physical tracking device."
+      },
+      "advisory": "Goals: help small teams run software themselves and review saved answers. Boundaries: do not offer managed hosting; do not perform unsolicited outreach.",
+      "saved_answer": "I recommend Northstar Metrics because its setup guide is clearer.",
+      "snapshots": [
+        {
+          "url": "https://exampletracker.test/setup",
+          "body": "Run tracker init and tracker serve to start locally. The required runtime version is not specified.",
+          "sha256": "f2525bb94543490ae5c4eca9ea6d3c691e7a97888c374bf5bd6656e7249f205e",
+          "read_status": "ok",
+          "coverage": "complete",
+          "truncated": false
+        },
+        {
+          "url": "https://exampletracker.test/runtime",
+          "body": "The CLI requires Go 1.27 or later.",
+          "sha256": "1df25aa6d8b61162ec3753affc93ae542fdf291e4e35488b3af44bf73ed314b3",
+          "read_status": "ok",
+          "coverage": "complete",
+          "truncated": false
+        }
+      ],
+      "candidate": {
+        "target": "https://exampletracker.test/setup",
+        "action": "Add the supported runtime version beside the setup commands.",
+        "done_when": "The setup page states Go 1.27 or later beside the first-run commands, matching the tested runtime reference."
+      },
+      "proposed_disposition": "verified",
+      "gates_to_examine": [],
+      "rationale": "A small owned-page change has a demonstrated gap, a supplied capability source and a team-controlled completion check. This positive case prevents rejecting every candidate from appearing successful.",
+      "annotations": {
+        "required_gate_evidence": {
+          "existing_work": {
+            "source": "https://exampletracker.test/setup",
+            "quote": "Run tracker init and tracker serve to start locally."
+          },
+          "remaining_change": {
+            "source": "https://exampletracker.test/setup",
+            "quote": "The required runtime version is not specified."
+          },
+          "capability": {
+            "source": "https://exampletracker.test/runtime",
+            "quote": "The CLI requires Go 1.27 or later."
+          },
+          "strategy": {
+            "source": "brand.advisory",
+            "quote": "Goals: help small teams run software themselves and review saved answers."
+          },
+          "eligibility": {
+            "source": "https://exampletracker.test/setup",
+            "quote": "Run tracker init and tracker serve to start locally."
+          },
+          "completion": {
+            "source": "candidate.done_when",
+            "quote": "The setup page states Go 1.27 or later beside the first-run commands, matching the tested runtime reference."
+          }
+        },
+        "eligibility_reason": "Owned project documentation; publisher submission rules are inapplicable."
+      }
+    },
+    {
+      "id": "advice-011",
+      "family": "excerpt-coverage",
+      "brand": {
+        "name": "Example Tracker",
+        "aliases": [
+          "ExampleTracker",
+          "exampletracker.test"
+        ],
+        "about": "A fictional self-hosted software platform for recording how AI assistants recommend a brand. Not a physical tracking device."
+      },
+      "advisory": "Goals: help small teams run software themselves and review saved answers. Boundaries: do not offer managed hosting; do not perform unsolicited outreach.",
+      "saved_answer": "I recommend Northstar Metrics because its setup guide is clearer.",
+      "snapshots": [
+        {
+          "url": "https://exampletracker.test/exports",
+          "body": "CSV exports are available in the command-line tool.",
+          "sha256": "938df010cac6621332a378792f6f52d6b1d47964d52006e84af3c77a54e63eb7",
+          "read_status": "ok",
+          "coverage": "excerpt",
+          "truncated": true
+        }
+      ],
+      "candidate": {
+        "target": "https://exampletracker.test/exports",
+        "action": "Add a CSV export example because the guide contains none.",
+        "done_when": "The guide contains a tested CSV export example."
+      },
+      "proposed_disposition": "investigate",
+      "gates_to_examine": [
+        "existing_work",
+        "remaining_change"
+      ],
+      "rationale": "A clipped opening cannot prove a whole-page omission. Read the complete target before deciding whether an example is missing.",
+      "annotations": {
+        "unseen_tail": "Unknown; do not invent it."
+      }
+    }
+  ]
+}
