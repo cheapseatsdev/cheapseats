@@ -38,7 +38,36 @@ Evidence matching restores the original source span after harmless formatting
 differences. It verifies provenance, not whether the passage logically supports
 the reviewer's interpretation. Known incomplete answers remain unresolved.
 
-The storage foundation uses database schema 14. Opening an existing database
+## Review in the dashboard
+
+Enable the internal workbench with `CHEAPSEATS_EVALUATION=1`, then open
+**Checks → Evaluation**. It is off by default and unavailable in read-only mode.
+The existing token or trusted sign-in proxy authenticates all routes; an open
+loopback instance trusts every local user, as the rest of the app does. Review
+sessions are scoped to that authenticated reviewer (or the local reviewer).
+
+Import the bundled records, then start a session of up to ten cases. Each case
+shows the complete saved answer, its buyer question, intended brand identity and
+grading rules. The imported model verdict, supporting quote and note are omitted
+from the first-review response entirely. They become available for comparison
+only after an explicit human judgment. A draft never unlocks that comparison.
+
+Drafts autosave without advancing the queue. **Save and next** commits a validated
+judgment; **Leave unresolved** needs an issue and explanation; **End session** saves
+the unfinished draft and resumes at the same case. Failed or stale saves preserve
+typed fields. A local backup stays in that browser tab's session storage until
+confirmed saved or discarded. Restoring it is explicit, and cannot silently
+replace a newer server revision. Live dashboard refresh is disabled on review pages.
+
+Before the first short session, the import's grouping plan is stored. The same
+normalized buyer question, exact answers and answer bigrams with at least 90%
+Jaccard overlap stay together. This is a conservative lexical heuristic, not
+semantic deduplication. A label-independent digest assigns whole groups to
+development or held-out partitions. The first pilot draws only development
+cases; later review can annotate either partition. Held-out evidence must not
+inform candidate prompt tuning. The queue does not select on proposed verdicts.
+
+The workbench uses database schema 15. Opening an existing database
 backs it up before migration; older binaries refuse newer schemas. Rollback
 requires the pre-migration backup, not merely the older binary. Evaluation tables
 are private operational data; a read-only copy is not a redaction of its database.
