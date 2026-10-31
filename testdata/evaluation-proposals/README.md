@@ -74,6 +74,11 @@ checklist. Each passing gate still needs an exact source, quote and explanation.
 The positive owned-page example supplies proposed sources for all six gates.
 Page body hashes pin the synthetic snapshots; hashes do not establish truth.
 
+`advice-001` needs investigation: the complete page gives init and serve commands,
+but no installation command. Complete coverage does not mean every requested
+step is present. Its proposed disposition is not a verified action or an
+already-done result.
+
 The cases exercise already-completed work, intentional boundaries, failed reads,
 irrelevant proof, contradictory tails, missing content inventories, publisher
 control and team-controlled completion. The excerpt case intentionally leaves its
@@ -94,8 +99,3 @@ changes the rubric or output schema intentionally; a human still needs to confir
 that the wording preserves their meaning. No provider comparison was run for
 these proposals. Format, provenance, literal quotes and snapshot hashes were
 checked offline; that validation cannot establish label correctness.
-
-`advice-001` needs investigation: the complete page gives init and serve commands,
-but no installation command. Complete coverage does not mean every requested
-step is present. Its proposed disposition is not a verified action or an
-already-done result.
