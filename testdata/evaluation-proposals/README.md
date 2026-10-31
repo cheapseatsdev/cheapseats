@@ -79,7 +79,7 @@ but no installation command. Complete coverage does not mean every requested
 step is present. Its proposed disposition is not a verified action or an
 already-done result.
 
-The cases exercise already-completed work, intentional boundaries, failed reads,
+The cases exercise missing installation instructions, intentional boundaries, failed reads,
 irrelevant proof, contradictory tails, missing content inventories, publisher
 control and team-controlled completion. The excerpt case intentionally leaves its
 tail unknown. Rejected actions become investigations only when a bounded check
