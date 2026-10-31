@@ -206,16 +206,25 @@ func (w *Workbench) Session(ctx context.Context, id, actor string) (Session, err
 	return s, err
 }
 
+// Materialize eligible queues before comparing their progress. Otherwise an old
+// copy already superseded by completion could hide a later intentional review,
+// or an UPDATE could change which copy wins midway through the repair.
+const resumableSessionsSQL = `WITH eligible AS MATERIALIZED (
+ SELECT s.* FROM evaluation_sessions s WHERE s.import_id=? AND s.actor=? AND s.state!='done' AND NOT EXISTS (
+  SELECT 1 FROM evaluation_sessions k WHERE k.import_id=s.import_id AND k.actor=s.actor AND k.case_ids=s.case_ids
+  AND k.state='done' AND k.cursor>=json_array_length(k.case_ids) AND s.created_at<k.updated_at)
+), preferred AS (
+ SELECT s.* FROM eligible s WHERE NOT EXISTS (
+  SELECT 1 FROM eligible k WHERE k.case_ids=s.case_ids AND
+  (k.cursor>s.cursor OR (k.cursor=s.cursor AND (k.updated_at>s.updated_at OR (k.updated_at=s.updated_at AND k.id<s.id)))))
+) `
+
 func (w *Workbench) Resume(ctx context.Context, importID, actor string) (*Session, error) {
 	var id string
 	// Old double-clicks could create identical overlapping queues. Hide queues
 	// completed while this one existed, and prefer the furthest active copy.
 	// A later intentional review after completion is a separate session.
-	err := w.DB.QueryRowContext(ctx, `SELECT s.id FROM evaluation_sessions s WHERE s.import_id=? AND s.actor=? AND s.state!='done' AND NOT EXISTS (
-		SELECT 1 FROM evaluation_sessions k WHERE k.import_id=s.import_id AND k.actor=s.actor AND k.case_ids=s.case_ids AND (
-		(k.state='done' AND k.cursor>=json_array_length(k.case_ids) AND s.created_at<k.updated_at) OR
-		(k.state!='done' AND (k.cursor>s.cursor OR (k.cursor=s.cursor AND (k.updated_at>s.updated_at OR (k.updated_at=s.updated_at AND k.id<s.id)))))))
-		ORDER BY s.updated_at DESC,s.id LIMIT 1`, importID, actor).Scan(&id)
+	err := w.DB.QueryRowContext(ctx, resumableSessionsSQL+`SELECT id FROM preferred ORDER BY updated_at DESC,id LIMIT 1`, importID, actor).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -235,10 +244,7 @@ func (w *Workbench) repairSessions(ctx context.Context, importID, actor string) 
 		return err
 	}
 	defer tx.Rollback()
-	_, err = tx.ExecContext(ctx, `UPDATE evaluation_sessions AS s SET state='done' WHERE s.import_id=? AND s.actor=? AND s.state!='done' AND EXISTS (
-		SELECT 1 FROM evaluation_sessions k WHERE k.import_id=s.import_id AND k.actor=s.actor AND k.case_ids=s.case_ids AND (
-		(k.state='done' AND k.cursor>=json_array_length(k.case_ids) AND s.created_at<k.updated_at) OR
-		(k.state!='done' AND (k.cursor>s.cursor OR (k.cursor=s.cursor AND (k.updated_at>s.updated_at OR (k.updated_at=s.updated_at AND k.id<s.id)))))))`, importID, actor)
+	_, err = tx.ExecContext(ctx, resumableSessionsSQL+`UPDATE evaluation_sessions SET state='done' WHERE import_id=? AND actor=? AND state!='done' AND id NOT IN (SELECT id FROM preferred)`, importID, actor, importID, actor)
 	if err != nil {
 		return err
 	}

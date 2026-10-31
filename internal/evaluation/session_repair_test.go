@@ -79,7 +79,7 @@ func TestLegacyCompletedDuplicateDoesNotHideLaterIntentionalReview(t *testing.T)
 		cursor                      int
 	}{
 		{"finished", "done", "2026-01-01T10:00:00Z", "2026-01-01T11:00:00Z", 2},
-		{"leftover", "active", "2026-01-01T10:01:00Z", "2026-01-01T10:01:00Z", 0},
+		{"leftover", "active", "2026-01-01T10:01:00Z", "2026-01-01T10:01:00Z", 1},
 	} {
 		if _, err := w.DB.Exec(`INSERT INTO evaluation_sessions VALUES (?,?,?,?,?,?,?,?)`, s.id, a.ID, "human", raw, s.cursor, s.state, s.created, s.updated); err != nil {
 			t.Fatal(err)
@@ -91,12 +91,17 @@ func TestLegacyCompletedDuplicateDoesNotHideLaterIntentionalReview(t *testing.T)
 	if _, err := w.DB.Exec(`INSERT INTO evaluation_sessions VALUES ('intentional',?,'human',?,0,'paused','2026-01-01T12:00:00Z','2026-01-01T12:00:00Z')`, a.ID, raw); err != nil {
 		t.Fatal(err)
 	}
+	// The obsolete copy has a higher cursor, but it must not hide this newer
+	// review even during a read-only lookup before repair runs.
+	if s, err := w.Resume(ctx, a.ID, "human"); err != nil || s == nil || s.ID != "intentional" {
+		t.Fatalf("an obsolete higher cursor hid the later review: %+v %v", s, err)
+	}
 	s, err := w.Start(ctx, a.ID, "human", "attention")
 	if err != nil || s.ID != "intentional" || s.State != "paused" {
 		t.Fatalf("repair retired a later intentional review: %+v %v", s, err)
 	}
 	old, err := w.Session(ctx, "leftover", "human")
-	if err != nil || old.State != "done" || old.Cursor != 0 {
+	if err != nil || old.State != "done" || old.Cursor != 1 {
 		t.Fatalf("existing completed duplicate was not retired: %+v %v", old, err)
 	}
 }
