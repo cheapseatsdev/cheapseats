@@ -78,6 +78,18 @@ Committed records use Cheap Seats itself, from `examples/cheapseats-config`;
 private. The test reads this fixture directory; `CHEAPSEATS_CONFIG` selects its grader and
 pricing, not another record directory. Each record supplies its own brand and competitors.
 
+The current 80 committed labels are all model proposals (`labeled_by: "claude"`),
+not an independently human-labeled benchmark. Their proposed verdicts are 74 absent,
+four recommended and two mentioned. An always-absent grader reaches 74/80 (92.5%)
+verdict agreement, so the aggregate gate alone cannot establish grading quality.
+Inspect class coverage, errors on rare classes and label provenance before drawing
+a conclusion. Historical pilot agreement below is agreement with earlier model
+labels.
+
+The unreleased [Evaluation workbench](evaluation.md) provides blind initial human
+review, batch independent checks, frozen dataset versions and paired prompt
+comparisons. It does not replace this test or update its fixtures automatically.
+
 ### Exporting
 
 ```sh
@@ -95,16 +107,22 @@ answer names a retired brand name absent from today's config are excluded.
 
 ### Labeling
 
-Read each record's prompt, answer and evidence, then edit `expected`:
+Prefer the preview [review workflow](evaluation.md#what-to-do-next) when available:
+it hides the imported proposal until you commit a judgment and keeps review history.
+For manual file labeling, read the complete prompt and answer before consulting the
+old label or quote, then edit `expected`:
 
 - `verdict`: `recommended`, `mentioned` or `absent` under the definitions above.
 - `top_pick`: true only for the single strongest recommendation; verdict must be `recommended`.
 - `other_product`: true only for a namesake; verdict must be `absent`.
 - `tone`: `positive`, `neutral`, `mixed` or `negative`; omit for an absent brand.
 
-Set `labeled_by` to `human` even when no label changed; explain close calls in `note`. Leave
-`id` and `answer` untouched: tests verify the answer's hash. Start with `top pick`,
-`recommended` and `other product`, then sample the remaining records.
+Set `labeled_by` to `human` only after a person has completed the judgment, even
+when no label changed; explain close calls in `note`. An unresolved case needs
+further review or explicit exclusion, never a guessed reference label. Leave
+`id` and `answer` untouched: tests verify the answer's hash. For this small bundled
+corpus, review all 80 and add fresh rare-class cases; a ten-case pilot is not a
+release benchmark. A single human review is not independent human adjudication.
 
 ```sh
 # the records still waiting for a person

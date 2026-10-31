@@ -227,9 +227,10 @@ before one yes/no request asks whether one page could satisfy both. State includ
 targets, claims, done-when criteria and the category context described above.
 
 `fix_matches` stores probability and source (`rule` or `jev`), keyed by both signatures (type,
-target, title). Unchanged pairs are not asked again. Above the threshold, Quick wins groups
-connected matches and keeps the highest-ranked card; `also_in` retains every other set/run/rank
-so `mark_fix` can target any of them. Set filters include grouped cards requested by that set.
+target, title). Unchanged pairs are not asked again. Above the threshold, Next steps groups
+connected matches among verified actions and keeps the highest-ranked card;
+`also_in` retains every other set/run/rank so `mark_fix` can target any of them.
+Set filters include grouped cards requested by that set.
 The UI, `/api/quick-wins`, MCP `get_quick_wins` and CLI show the groups; the CLI also lists
 below-threshold decisions. Grouping does not complete the fixes.
 

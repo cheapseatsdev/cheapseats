@@ -1,8 +1,31 @@
 # Evaluation
 
+**Preview:** this workbench is unreleased and is not in 0.6.0. The current source
+is in [the Evaluation batch PR](https://github.com/cheapseatsdev/cheapseats/pull/155).
+It is off by default. The instructions below describe that preview build.
+
 Evaluation keeps saved answer evidence, imported model labels and explicit human
 decisions separate from production runs. Importing records and reviewing them
 does not contact a model or change historical grades.
+
+## What to do next
+
+| Step | Your action | What it gives you |
+| --- | --- | --- |
+| 1. Review | Import saved answers and judge them in sessions of up to ten, using **Save and next** | Human labels made before seeing the old model proposal |
+| 2. Check | At session completion, choose **Run checks for all N**; watch progress, then compare all results together | A second model assessment, with differences to inspect |
+| 3. Resolve | Keep your labels with an explanation, revise them, or leave the case unresolved | An explicit human decision for each difference; model agreement needs no action |
+| 4. Approve | Choose **Preview dataset version**, explain exclusions and approve | A frozen reference dataset with labels, evidence, partitions and history |
+| 5. Compare | On the approved version, create and explicitly run a grader comparison | Paired control/candidate results and repeated-run variation on the same answers |
+| 6. Review a change | Inspect regressions and coverage; validate frozen candidates on untouched evidence | Evidence for a separate prompt/code PR and human release review |
+
+Saving ten judgments is progress, not a prompt change. Independent checks do not
+replace your decisions, and approval does not install labels into golden CI.
+Checks are optional; running checks and pending differences must be settled before
+a case can be included in an approved version.
+Comparisons never change the production grader automatically. Exporting an approved
+version and transferring reviewed labels into the repository's golden fixtures
+requires a separate reviewed change; preserve its manifest and exclusions.
 
 ## Try the review workflow locally
 
@@ -16,22 +39,64 @@ CHEAPSEATS_DATA_DIR="$PWD/data/evaluation" \
 go run ./cmd/cheapseats serve -addr 127.0.0.1:3000
 ```
 
-Open `http://127.0.0.1:3000/evaluation`, import the saved review records and start
-a short session. Try saving a judgment, leaving a case unresolved, and ending and
-resuming a draft. Then return to the queue to preview and approve a dataset
-version. Give an exclusion reason for every case you have not finished reviewing.
-The version page downloads the approved JSONL and full manifest. This workflow
-needs no provider keys and makes no model calls. Use this separate database for testing; it does not change your normal dashboard's
-data. Reuse the same directory when restarting so your saved reviews remain
-available. If you already reviewed cases in a temporary directory, keep that
-directory or use the original build's backup command to preserve it before moving
+Open `http://127.0.0.1:3000/evaluation`, choose **Import saved review records**, then
+**Start review · up to 10 cases**. Follow the steps above. Import, manual review,
+approval and export need no provider keys and make no model calls. Independent
+checks and grader comparisons require access to the configured grader; API calls
+cost money and subscription calls use their subscription allowance.
+
+Use this separate database for testing. Reuse the same directory when restarting
+so your saved reviews remain available. If you already reviewed cases in a
+temporary directory, keep that directory or use the original build's backup
+command to preserve it before moving
 the database; changing directories does not transfer reviews automatically.
+
+## How many answers to review
+
+There is no universal target of 80 answers. Start with a short pilot to learn the
+rubric, then inspect your own collection's verdicts, top picks, namesakes, tones,
+close calls and distinct question/answer groups. Review the whole collection when
+it is small enough. For a larger collection, select a manageable set covering
+those cases, preserve grouped partitions, and keep separate untouched evidence
+for validating frozen candidates. A ten-case session is a workflow convenience,
+not a sufficient benchmark or a statistical sample-size rule.
+
+### Worked example: the bundled collection
+
+For Cheap Seats' current bundled 80 records, we recommend reviewing **all 80**, in
+short sessions. Other imports will have different sizes and distributions.
+Before human review, all 80 bundled labels are Claude proposals: 74 absent,
+four recommended and two mentioned. They include only three positive top-pick
+labels and one namesake. Those counts can change when people review them.
+
+Even all 80 are a curated calibration sample, not production prevalence or a
+statistical guarantee. Under the current grouping rule, their split is 67
+development and 13 held-out cases; all 13 held-out proposals are absent. Add fresh
+real answers covering recommendations, mentions, namesakes, tone and close calls
+before using a held-out comparison to judge a prompt change. Do not invent a label
+to meet coverage: leave incomplete or ambiguous cases unresolved and explain
+exclusions. Two examples per core class is the app's minimum coverage floor, not
+a recommended sample size or proof of reliability.
+
+Human annotation of held-out cases is allowed; using their answers or disputes to
+tune a candidate spends their value as untouched validation. Existing public
+fixtures may already have informed prompt development outside the app. Declare
+that use honestly and collect fresh validation evidence when necessary.
 
 ## Import saved evidence
 
 ```sh
 cheapseats evaluation import                   # the bundled public golden fixtures
 cheapseats evaluation import records.jsonl     # a private JSONL export
+```
+
+Set `CHEAPSEATS_DATA_DIR` to the workbench's directory for every CLI operation.
+For the local quickstart above, import your own saved records before starting the
+server with:
+
+```sh
+CHEAPSEATS_DATA_DIR="$PWD/data/evaluation" \
+go run ./cmd/cheapseats evaluation import /path/to/records.jsonl
 ```
 
 The import uses the same record contract as [the golden set](grading.md). Each
@@ -101,9 +166,10 @@ replace a newer server revision. Live dashboard refresh is disabled on review pa
 
 Finishing a session opens **Review session complete**, with the current number of
 finished judgments, unresolved decisions and drafts among that session's cases.
-Choose **Check saved judgments** to continue. The Evaluation overview also shows
-this action whenever finished judgments have checks or differences to handle;
-you do not need to reopen each answer to discover the next step.
+The page offers **Run checks for all N** finished judgments, or **Compare all N
+saved assessments** when no new calls are needed. The Evaluation overview offers
+the batch flow across the selected import. You do not need to reopen each answer
+to discover the next step.
 
 Before the first short session, the import's grouping plan is stored. The same
 normalized buyer question, exact answers and answer bigrams with at least 90%
@@ -307,7 +373,9 @@ replacement for the repository's real-provider golden test. The existing golden
 CI corpus still needs explicitly approved human labels before that gate can
 represent this reviewed benchmark.
 
-The workbench uses database schema 19. Opening an existing database
+## Database compatibility and privacy
+
+The preview workbench uses database schema 19. Opening an existing database
 backs it up before migration; older binaries refuse newer schemas. Rollback
 requires the pre-migration backup, not merely the older binary. Evaluation tables
 are private operational data; a read-only copy is not a redaction of its database.
