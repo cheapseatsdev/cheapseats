@@ -31,6 +31,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cheapseatsdev/cheapseats/internal/analysis"
@@ -75,8 +76,9 @@ type Server struct {
 	publicURL string
 	// A read-only copy (CHEAPSEATS_READONLY), such as a public demo: it serves pages and the JSON
 	// API, refuses every change and MCP, and hides the controls that would make one.
-	readOnly   bool
-	evaluation bool
+	readOnly       bool
+	evaluation     bool
+	evaluationJobs sync.Map
 	// The shared-report page, which has its own layout (no navigation to pages behind auth), and
 	// the limit on unknown tokens asked for.
 	share      *template.Template
@@ -110,12 +112,13 @@ func New(a *app.App) (*Server, error) {
 		}
 	}
 	funcs := template.FuncMap{
-		"icon":  icon,
-		"logo":  logo,
-		"sicon": statusIcon,
-		"seats": seats,
-		"pct":   func(p float64) string { return fmt.Sprintf("%.0f%%", 100*p) },
-		"neg":   func(n int) int { return -n },
+		"icon":     icon,
+		"logo":     logo,
+		"sicon":    statusIcon,
+		"seats":    seats,
+		"pct":      func(p float64) string { return fmt.Sprintf("%.0f%%", 100*p) },
+		"onebased": func(n int) int { return n + 1 },
+		"neg":      func(n int) int { return -n },
 		// An answer's grade key for the seat meter (see gradeKey), and its words.
 		"gradekey":   func(g *grade.Grade) string { return gradeKey(g, a.Cfg.Brand.Name) },
 		"glabel":     func(k string) string { return strings.ReplaceAll(k, "-", " ") },
@@ -220,8 +223,8 @@ func New(a *app.App) (*Server, error) {
 		},
 	}
 	s.pages = map[string]*template.Template{}
-	for _, p := range []string{"home", "set", "run", "rankings", "quickwins", "search", "login", "searches", "audit", "crawlers", "regrade", "review", "evaluation", "evaluation-case", "evaluation-approval", "evaluation-dataset", "evaluation-check"} {
-		t, err := template.New(p).Funcs(funcs).ParseFS(assets, "templates/layout.html", "templates/"+p+".html")
+	for _, p := range []string{"home", "set", "run", "rankings", "quickwins", "search", "login", "searches", "audit", "crawlers", "regrade", "review", "evaluation", "evaluation-case", "evaluation-approval", "evaluation-dataset", "evaluation-check", "evaluation-experiment-new", "evaluation-experiment", "evaluation-experiment-review"} {
+		t, err := template.New(p).Funcs(funcs).ParseFS(assets, "templates/layout.html", "templates/evaluation-fields.html", "templates/"+p+".html")
 		if err != nil {
 			return nil, fmt.Errorf("template %s: %w", p, err)
 		}

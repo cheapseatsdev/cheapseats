@@ -14,6 +14,22 @@ type ClassMetric struct {
 	Predicted int    `json:"predicted"`
 	Correct   int    `json:"correct"`
 }
+
+func (m ClassMetric) Precision() *float64 {
+	if m.Reference < 2 || m.Predicted < 2 {
+		return nil
+	}
+	v := float64(m.Correct) / float64(m.Predicted)
+	return &v
+}
+func (m ClassMetric) Recall() *float64 {
+	if m.Reference < 2 {
+		return nil
+	}
+	v := float64(m.Correct) / float64(m.Reference)
+	return &v
+}
+
 type Metrics struct {
 	Cases            int                       `json:"cases"`
 	Predictions      int                       `json:"predictions"`
@@ -24,6 +40,7 @@ type Metrics struct {
 	Coverage         []string                  `json:"insufficient_coverage"`
 	CriticalFailures []string                  `json:"critical_failures"`
 	Gate             string                    `json:"gate"`
+	MacroRecall      *float64                  `json:"verdict_macro_recall,omitempty"`
 }
 
 func Measure(ms []Member, predictions map[string]grade.GoldenExpected) Metrics {
@@ -104,6 +121,18 @@ func Measure(ms []Member, predictions map[string]grade.GoldenExpected) Metrics {
 		}
 	}
 	out.Gate = "diagnostic only; release acceptance is not established"
+	macro, covered := 0.0, true
+	for _, class := range []string{"absent", "mentioned", "recommended"} {
+		n := expected["verdict"][class]
+		if n < 2 {
+			covered = false
+			break
+		}
+		macro += float64(correct["verdict"][class]) / float64(n) / 3
+	}
+	if covered {
+		out.MacroRecall = &macro
+	}
 	if out.Missing > 0 {
 		out.Gate = "incomplete predictions; no release verdict"
 	} else if len(out.CriticalFailures) > 0 {

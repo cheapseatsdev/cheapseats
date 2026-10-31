@@ -75,6 +75,10 @@ const usage = `cheapseats: how AI assistants answer your buyers' questions.
                                          when no file is supplied); no provider calls
   cheapseats evaluation export <dataset-id> <new-file.jsonl>
                                          export frozen human labels without overwriting a file
+  cheapseats evaluation run-comparison <id> [--retry]
+                                         run or resume an explicitly prepared grader comparison
+  cheapseats evaluation comparison-report <id> [--gate <candidate-number>]
+                                         report results and optionally check release-review prerequisites
 
 Config: CHEAPSEATS_CONFIG, else the example in examples/cheapseats-config; prompt sets beside it,
 data in ./data (CHEAPSEATS_DATA_DIR). Secrets from the environment or .env: ANTHROPIC_API_KEY
@@ -776,6 +780,7 @@ func serve(ctx context.Context, addr string) error {
 	go func() {
 		<-ctx.Done()
 		slog.Info("shutting down; runs in progress resume on the next start")
+		srv.StopEvaluationJobs()
 		a.Runs.Stop(20 * time.Second)
 		stopRuns()
 		sctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

@@ -355,6 +355,11 @@ func (w *Workbench) save(ctx context.Context, id string, revision int, kind stri
 	if kind == "judgment" {
 		state = "reviewed"
 	}
+	from := ReviewState(c.Review.State)
+	if c.Review.Revision == 0 {
+		from = ""
+	}
+	ReviewTransitions.Check("evaluation_reviews", from, ReviewState(state))
 	b, _ := json.Marshal(j)
 	next := Review{Revision: current + 1, State: state, Judgment: j, Actor: actor, UpdatedAt: store.Now()}
 	if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO evaluation_rubrics VALUES (?,?,?)`, rubric, grade.System, next.UpdatedAt); err != nil {
