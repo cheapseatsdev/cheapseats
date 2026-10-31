@@ -14,8 +14,33 @@ import (
 )
 
 func evaluationCmd(ctx context.Context, args []string) error {
+	if len(args) == 3 && args[0] == "export" {
+		db, err := store.Open(env.Or("DATA_DIR", "data"))
+		if err != nil {
+			return err
+		}
+		defer db.Close()
+		d, err := evaluation.New(db.DB).Dataset(ctx, args[1])
+		if err != nil {
+			return err
+		}
+		b, err := d.JSONL()
+		if err != nil {
+			return err
+		}
+		f, err := os.OpenFile(args[2], os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+		if err != nil {
+			return err
+		}
+		_, writeErr := f.Write(b)
+		closeErr := f.Close()
+		if writeErr != nil {
+			return writeErr
+		}
+		return closeErr
+	}
 	if len(args) < 1 || args[0] != "import" || len(args) > 2 {
-		return errors.New("usage: cheapseats evaluation import [file.jsonl]")
+		return errors.New("usage: cheapseats evaluation import [file.jsonl] | export <dataset-id> <new-file.jsonl>")
 	}
 	var data []byte
 	var err error

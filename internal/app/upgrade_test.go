@@ -307,6 +307,41 @@ func TestEvaluationSessionsUpgradeKeepsSavedHumanDecision(t *testing.T) {
 	}
 }
 
+func TestEvaluationDatasetUpgradePreservesReviewSession(t *testing.T) {
+	data := t.TempDir()
+	old, err := store.OpenAt(data, 15)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, query := range []string{
+		`INSERT INTO evaluation_imports VALUES ('import','source','digest','now')`,
+		`INSERT INTO evaluation_groupings VALUES ('import','method','{"cases":{}}','now')`,
+		`INSERT INTO evaluation_sessions VALUES ('session','import','reviewer','["case-a","case-b"]',1,'paused','now','now')`,
+	} {
+		if _, err := old.Exec(query); err != nil {
+			t.Fatal(err)
+		}
+	}
+	old.Close()
+	db, err := store.Open(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	var ids, state string
+	var cursor int
+	if err := db.QueryRow(`SELECT case_ids,cursor,state FROM evaluation_sessions WHERE id='session'`).Scan(&ids, &cursor, &state); err != nil || ids != `["case-a","case-b"]` || cursor != 1 || state != "paused" {
+		t.Fatalf("session changed: %s %d %s %v", ids, cursor, state, err)
+	}
+	if _, err := os.Stat(filepath.Join(data, "cheapseats.db.bak-v15")); err != nil {
+		t.Fatal(err)
+	}
+	if older, err := store.OpenAt(data, 15); err == nil {
+		older.Close()
+		t.Fatal("older writer opened approved dataset schema")
+	}
+}
+
 // Crawl counts from before 4xx responses were pooled under crawl.ErrorPath keep their own rows and
 // still count: a 404 counted under its path by an older release reads beside the pooled row new
 // imports write, a new 5xx still lands on its own page, and the totals hold all of them.

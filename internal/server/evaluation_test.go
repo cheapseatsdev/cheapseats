@@ -184,3 +184,48 @@ func TestEvaluationSessionEndResumeAndSavedDecisionRecovery(t *testing.T) {
 		t.Fatalf("cross-site write: %d", blocked.Code)
 	}
 }
+
+func TestEvaluationApprovalExportsFrozenHumanVersion(t *testing.T) {
+	s, wb := evaluationServer(t)
+	a, id := evaluationFixture(t, wb)
+	h := s.Handler()
+	if _, err := wb.Save(context.Background(), id, 0, "judgment", evaluation.Judgment{Verdict: grade.Absent, AbsenceReason: "not-named", FullAnswer: true, Note: "Human explanation for this test"}, "human reviewer", evaluation.Rubric()); err != nil {
+		t.Fatal(err)
+	}
+	r := evaluationRequest(h, "POST", "/evaluation/datasets/prepare", url.Values{"import": {a.ID}})
+	if r.Code != 303 {
+		t.Fatalf("prepare: %d %s", r.Code, r.Body.String())
+	}
+	r = evaluationRequest(h, "GET", r.Header().Get("Location"), nil)
+	if r.Code != 200 || !strings.Contains(r.Body.String(), "Approve dataset version") {
+		t.Fatalf("preview: %d %s", r.Code, r.Body.String())
+	}
+	values := url.Values{"import": {a.ID}, "name": {"Approved test version"}, "member": {id}, "revision_" + id: {"1"}}
+	r = evaluationRequest(h, "POST", "/evaluation/datasets", values)
+	if r.Code != 303 {
+		t.Fatalf("approve: %d %s", r.Code, r.Body.String())
+	}
+	path := r.Header().Get("Location")
+	r = evaluationRequest(h, "GET", path, nil)
+	if r.Code != 200 || !strings.Contains(r.Body.String(), "insufficient coverage") || !strings.Contains(r.Body.String(), "1 / 1") {
+		t.Fatalf("version: %d %s", r.Code, r.Body.String())
+	}
+	r = evaluationRequest(h, "GET", path+"/export.jsonl", nil)
+	if r.Code != 200 || !strings.Contains(r.Body.String(), `"labeled_by":"human"`) || strings.Contains(r.Body.String(), "IMPORTED_MODEL_NOTE_DO_NOT_DISCLOSE") || r.Header().Get("Content-Disposition") == "" {
+		t.Fatalf("export: %d %s", r.Code, r.Body.String())
+	}
+	if _, err := wb.Save(context.Background(), id, 1, "draft", evaluation.Judgment{Note: "A later unfinished edit"}, "reviewer", evaluation.Rubric()); err != nil {
+		t.Fatal(err)
+	}
+	r = evaluationRequest(h, "GET", path+"/export.jsonl", nil)
+	if strings.Contains(r.Body.String(), "later unfinished") || !strings.Contains(r.Body.String(), "Human explanation for this test") {
+		t.Fatal("download followed a mutable current label")
+	}
+	for _, route := range []string{path, path + "/export.jsonl", path + "/manifest.json", "/evaluation/datasets/new?import=" + a.ID} {
+		s.evaluation = false
+		r = evaluationRequest(s.Handler(), "GET", route, nil)
+		if r.Code != 404 {
+			t.Fatalf("disabled route exposed %s: %d", route, r.Code)
+		}
+	}
+}
