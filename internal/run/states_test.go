@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cheapseatsdev/cheapseats/internal/budget"
+	"github.com/cheapseatsdev/cheapseats/internal/evaluation"
 	"github.com/cheapseatsdev/cheapseats/internal/grade"
 	"github.com/cheapseatsdev/cheapseats/internal/llm"
 	"github.com/cheapseatsdev/cheapseats/internal/state"
@@ -146,6 +147,9 @@ func TestStatesSQLLiteralsAreKnown(t *testing.T) {
 		known[string(s)] = true
 	}
 	for _, s := range budget.States {
+		known[string(s)] = true
+	}
+	for _, s := range evaluation.CheckStates {
 		known[string(s)] = true
 	}
 	for _, s := range []string{"proposed", "accepted", "withdrawn", "dismissed"} { // app.AttemptStates: app imports this package

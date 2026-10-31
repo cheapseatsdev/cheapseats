@@ -42,10 +42,12 @@ func (s *Server) evaluationRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /evaluation/cases/{id}", s.evaluationSave)
 	mux.HandleFunc("POST /api/evaluation/cases/{id}/draft", s.evaluationDraft)
 	s.evaluationDatasetRoutes(mux)
+	s.evaluationCheckRoutes(mux)
 }
 
 type evaluationRow struct {
 	ID, Prompt, Set, Answerer, Track, State string
+	Pending                                 bool
 }
 
 type evaluationHome struct {
@@ -53,6 +55,7 @@ type evaluationHome struct {
 	Import                       *evaluation.Import
 	Rows                         []evaluationRow
 	Reviewed, Unresolved, Drafts int
+	Pending                      int
 	Resume                       *evaluation.Session
 	ResumePosition               int
 	Error                        string
@@ -95,6 +98,16 @@ func (s *Server) evaluationHomeData(r *http.Request) (evaluationHome, error) {
 			d.Drafts++
 		}
 		row := evaluationRow{ID: c.ID, Prompt: c.Record.Prompt, Set: c.Record.Set, State: c.Review.State}
+		if c.FirstReviewed {
+			ids, err := w.PendingChecks(r.Context(), c)
+			if err != nil {
+				return d, err
+			}
+			row.Pending = len(ids) > 0
+			if row.Pending {
+				d.Pending++
+			}
+		}
 		if c.Record.Source != nil {
 			row.Answerer, row.Track = c.Record.Source.Answerer, c.Record.Source.Track
 		}
@@ -177,6 +190,11 @@ type evaluationCaseData struct {
 	Passages                                                []evaluationPassage
 	TopPickValue                                            string
 	Rules                                                   []evaluationRule
+	Checks                                                  []evaluation.CheckView
+	Pending                                                 []string
+	Resolutions                                             []evaluation.ResolutionRecord
+	Resolution                                              bool
+	ResolutionNote                                          string
 }
 
 type evaluationPassage struct {
@@ -224,6 +242,18 @@ func (s *Server) evaluationCaseData(r *http.Request, id string, session *evaluat
 	// even inside a closed disclosure or a hidden input.
 	if c.FirstReviewed {
 		d.Original = &c.Record
+		d.Checks, err = s.evaluationStore().CheckViews(r.Context(), c)
+		if err != nil {
+			return d, err
+		}
+		d.Pending, err = s.evaluationStore().PendingChecks(r.Context(), c)
+		if err != nil {
+			return d, err
+		}
+		d.Resolutions, err = s.evaluationStore().ResolutionHistory(r.Context(), id)
+		if err != nil {
+			return d, err
+		}
 	}
 	d.History, err = s.evaluationStore().History(r.Context(), id)
 	d.fields()
@@ -329,7 +359,12 @@ func (s *Server) evaluationSave(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		var review evaluation.Review
-		review, err = wb.Save(r.Context(), id, revision, kind, j, actor, r.FormValue("rubric"))
+		if action == "resolve-keep" || action == "resolve-change" {
+			resolution := evaluation.Resolution{Checks: r.Form["check"], Action: strings.TrimPrefix(action, "resolve-"), Explanation: r.FormValue("resolution_note")}
+			review, err = wb.Resolve(r.Context(), id, revision, j, actor, r.FormValue("rubric"), resolution)
+		} else {
+			review, err = wb.Save(r.Context(), id, revision, kind, j, actor, r.FormValue("rubric"))
+		}
 		if err == nil {
 			revision = review.Revision
 			saved = true
@@ -347,6 +382,11 @@ func (s *Server) evaluationSave(w http.ResponseWriter, r *http.Request) {
 		// Retain typed fields on failure. Keep a stale revision stale: silently
 		// replacing it would let a retry overwrite another tab's saved work.
 		d.Judgment, d.Revision, d.Error, d.Saved = j, revision, err.Error(), saved
+		d.Resolution = r.FormValue("resolving") == "1"
+		d.ResolutionNote = r.FormValue("resolution_note")
+		if d.Resolution {
+			d.Pending = append([]string(nil), r.Form["check"]...)
+		}
 		d.Rules = nil
 		d.fields()
 		w.WriteHeader(evaluationCode(err))
@@ -361,5 +401,9 @@ func (s *Server) evaluationSave(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/evaluation?import="+url.QueryEscape(session.ImportID), http.StatusSeeOther)
 		return
 	}
-	http.Redirect(w, r, fmt.Sprintf("/evaluation/cases/%s?import=%s&saved=1", id, url.QueryEscape(r.FormValue("import"))), http.StatusSeeOther)
+	target := fmt.Sprintf("/evaluation/cases/%s?import=%s&saved=1", id, url.QueryEscape(r.FormValue("import")))
+	if action == "resolve-keep" || action == "resolve-change" {
+		target += fmt.Sprintf("&resolved_revision=%d", revision)
+	}
+	http.Redirect(w, r, target, http.StatusSeeOther)
 }

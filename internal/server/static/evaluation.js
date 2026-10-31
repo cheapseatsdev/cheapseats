@@ -8,7 +8,7 @@
   const evidenceHelp = form.querySelector("[data-evidence-help]");
   const generalEvidenceHelp = evidenceHelp.textContent;
   const key = `cheapseats-evaluation:${form.dataset.actor}:${form.dataset.case}`;
-  const editable = new Set(["verdict", "top_pick", "tone", "absence_reason", "full_answer", "incomplete", "issue", "note", "evidence"]);
+  const editable = new Set(["verdict", "top_pick", "tone", "absence_reason", "full_answer", "incomplete", "issue", "note", "evidence", "resolution_note"]);
   let timer, pending = Promise.resolve(), dirty = false, submitting = false, changes = 0;
   function conditionalFields() {
     const verdict = form.elements.namedItem("verdict").value;
@@ -44,6 +44,7 @@
   // A failed request might have committed. Recovery is deliberate and keeps the
   // current server revision, so an old local draft cannot silently win a conflict.
   try {
+    if (new URLSearchParams(location.search).get("resolved_revision") === revision.value) forget();
     const backup = JSON.parse(sessionStorage.getItem(key) || "null");
     if (backup && JSON.stringify(backup.values) !== JSON.stringify(values())) {
       const box = document.createElement("section"); box.className = "card";
@@ -72,7 +73,7 @@
   } catch {}
   function saveDraft() {
     pending = pending.then(async () => {
-      if (!dirty || submitting) return;
+      if (!dirty || submitting || form.hasAttribute("data-resolution")) return;
       const generation = changes, body = new URLSearchParams(new FormData(form));
       status.textContent = "Saving draft…";
       try {
@@ -90,7 +91,7 @@
   }
   function edited() {
     if (submitting) return;
-    conditionalFields(); dirty = true; changes++; stash(); clearTimeout(timer); timer = setTimeout(saveDraft, 600);
+    conditionalFields(); dirty = true; changes++; stash(); clearTimeout(timer); if (!form.hasAttribute("data-resolution")) timer = setTimeout(saveDraft, 600);
   }
   form.addEventListener("input", edited); form.addEventListener("change", edited);
   form.addEventListener("submit", async (event) => {

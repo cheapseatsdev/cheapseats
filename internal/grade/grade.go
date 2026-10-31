@@ -4,6 +4,8 @@ package grade
 
 import (
 	"context"
+	"crypto/sha256"
+	_ "embed"
 	"fmt"
 	"slices"
 	"strings"
@@ -140,6 +142,24 @@ var structuredCLI = answer.ClaudeStructured
 
 // Answer grades one answer for the brand.
 func Answer(ctx context.Context, cfg *config.Config, set sets.Set, prompt, answer string) (Grade, float64, error) {
+	return AnswerWithSystem(ctx, cfg, set, prompt, answer, System)
+}
+
+// Exact evaluator sources pin experiment/cache behavior as well as the prompt.
+//
+//go:embed grade.go
+var evaluatorSource string
+
+//go:embed evidence.go
+var evidenceSource string
+
+func EvaluatorDigest() string {
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(evaluatorSource+"\x00"+evidenceSource)))
+}
+
+// AnswerWithSystem uses the production transport and normalization with an
+// explicitly supplied experiment prompt. It never changes the global System.
+func AnswerWithSystem(ctx context.Context, cfg *config.Config, set sets.Set, prompt, answer, system string) (Grade, float64, error) {
 	var g Grade
 	if strings.TrimSpace(answer) == "" {
 		return g, 0, fmt.Errorf("empty answer")
@@ -148,12 +168,12 @@ func Answer(ctx context.Context, cfg *config.Config, set sets.Set, prompt, answe
 	cost := 0.0
 	var err error
 	if cfg.Grader.Via() == config.ClaudeCode {
-		err = structuredCLI(ctx, cfg.Grader.Model, System, in, schema, &g) // on the subscription
+		err = structuredCLI(ctx, cfg.Grader.Model, system, in, schema, &g) // on the subscription
 	} else {
 		// Room for thinking as well as the grade: current Claude models think by default, thinking
 		// counts against max_tokens, and at 2048 a long think cut the grade off. Only use is billed.
 		var resp map[string]any
-		resp, err = llm.Structured(ctx, cfg.Grader.Model, System, in, 16000, schema, &g)
+		resp, err = llm.Structured(ctx, cfg.Grader.Model, system, in, 16000, schema, &g)
 		if resp != nil {
 			cost = cfg.Cost(cfg.Grader.Model, llm.Usage(resp, false))
 		}
