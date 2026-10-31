@@ -1,0 +1,11 @@
+{{define "title"}}Choose saved answers · Evaluation · {{end}}{{define "body"}}
+<p><a href="/evaluation">← Evaluation</a></p>
+<h1>Choose a run for review</h1>
+<p class="sub">Bring saved answers into Evaluation without collecting them again or changing their production grades. Opening a run here imports nothing and makes no model calls.</p>
+{{if .}}
+<p>Finished runs among the 100 most recent runs are listed below. You can also open any finished run report and choose <b>Review saved answers</b>, or <b>Review this grade</b> beside an individual answer.</p>
+<div class="scroll"><table><thead><tr><th>Run</th><th>Captured</th><th></th></tr></thead><tbody>
+{{range .}}<tr><td>{{.Name}}</td><td>{{day .CreatedAt}} UTC</td><td><a href="/evaluation/runs/{{.ID}}">Choose answers<span class="sr"> from {{.Name}}</span></a></td></tr>{{end}}
+</tbody></table></div>
+{{else}}<section class="card"><h2>No finished runs to import</h2><p>Finish a run first, or return to Evaluation to import the bundled example records. Collecting new answers uses the configured providers and their allowances; importing saved answers is free of model calls.</p><p><a href="/">Go to dashboard</a></p></section>{{end}}
+{{end}}

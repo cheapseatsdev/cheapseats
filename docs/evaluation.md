@@ -1,8 +1,9 @@
 # Evaluation
 
-**Preview:** this workbench is unreleased and is not in 0.6.0. The current source
-is in [the Evaluation batch PR](https://github.com/cheapseatsdev/cheapseats/pull/155).
-It is off by default. The instructions below describe that preview build.
+**Preview:** this workbench is unreleased and is not in 0.6.0. The instructions
+below describe this source branch, built on
+[the Evaluation batch PR](https://github.com/cheapseatsdev/cheapseats/pull/155).
+It is off by default.
 
 Evaluation keeps saved answer evidence, imported model labels and explicit human
 decisions separate from production runs. Importing records and reviewing them
@@ -83,6 +84,39 @@ tune a candidate spends their value as untouched validation. Existing public
 fixtures may already have informed prompt development outside the app. Declare
 that use honestly and collect fresh validation evidence when necessary.
 
+## Add answers from your own runs
+
+Choose **Add answers from a saved run** in Evaluation, or **Review saved answers**
+under a finished run's **Every answer** section. **Review this grade** beside an
+individual answer opens the same import preview with that answer selected.
+Browsing the list and preview imports nothing and starts no calls.
+
+Select the answers you want, then choose **Import selected answers**. There is no
+required collection size: each import accepts 1–500 selected answers, within the
+existing 16 MiB limit. One unique case opens directly for review; larger selections
+open their own review queue. The run list shows finished runs among the 100 most
+recent runs; older finished reports still offer the same import links.
+
+The import copies exact answer bytes, buyer questions, intent, and the run's
+recorded brand identity and competitors, including its most recent completed
+regrade context. It retains the source run/result, grader and method. Today's
+config does not replace that snapshot. Failed/missing answers, missing grades,
+unknown brand identity and unmatched question snapshots remain visible with
+reasons and cannot be selected. An import cannot recover missing source context.
+If the run changes after preview, the app asks you to review the selection again.
+
+The old grade remains a model proposal, hidden in first review. A run report may
+already have shown it to you; entering Evaluation from that report does not make
+the review independently blinded. The case has an **Original source run and
+answer** link, with a reminder that the report reveals the model grade.
+
+Repeated imports reuse matching cases and preserve drafts, judgments and review
+history; they never reset a case to unreviewed or overwrite its original proposal.
+An import is a collection, not an approved dataset version. New imports do not
+change frozen versions, production grades or prior comparison exposure. Evidence
+already used for tuning cannot become fresh validation by importing it again.
+Scheduled evidence imports and automatic review are not enabled by this action.
+
 ## Import saved evidence
 
 ```sh
@@ -134,7 +168,7 @@ The existing token or trusted sign-in proxy authenticates all routes; an open
 loopback instance trusts every local user, as the rest of the app does. Review
 sessions are scoped to that authenticated reviewer (or the local reviewer).
 
-Import the bundled records, then start a session of up to ten cases. Each case
+Select an evidence import, then start a session of up to ten cases. Each case
 shows the complete saved answer, its buyer question, intended brand identity and
 grading rules. The imported model verdict, supporting quote and note are omitted
 from the first-review response entirely. They become available for comparison

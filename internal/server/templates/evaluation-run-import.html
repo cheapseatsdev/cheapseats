@@ -1,0 +1,20 @@
+{{define "title"}}Import saved answers · Evaluation · {{end}}{{define "body"}}
+<p><a href="/evaluation/runs">← Choose another run</a> · <a href="/runs/{{.ID}}#answers">Source run</a></p>
+<h1>Import saved answers</h1>
+<p class="sub">{{.Name}} · recorded brand: {{.Brand}}. {{.Eligible}} / {{len .Rows}} answers eligible. Choose up to {{.Limit}} answers; there is no required collection size.</p>
+{{with .Error}}<p class="err" role="alert">{{.}}</p>{{end}}
+<section class="card"><h2>What gets saved</h2><p>The exact saved answer, buyer question, and the run's recorded brand identity, competitors and source. Old grades remain model proposals, hidden during first review.</p><p>Importing makes no model calls, changes no production grades and approves no labels. Matching cases reuse their saved reviews; approved dataset versions stay frozen.</p><p class="muted small">Answers used to tune a candidate are not fresh validation. Importing again does not erase that use. Unavailable evidence stays listed below with a reason.</p></section>
+<form method="post" action="/evaluation/runs/{{.ID}}" data-evaluation-import>
+<input type="hidden" name="digest" value="{{.Digest}}">
+{{if .Eligible}}
+<div class="row" data-import-selection hidden><label class="row"><input type="checkbox" data-import-all> Select all eligible answers</label><span class="muted small" data-import-count aria-live="polite"></span></div>
+<noscript><p>Select answers individually below; the import also works without JavaScript.</p></noscript>
+{{end}}
+<div class="scroll"><table><thead><tr><th>Select</th><th>Buyer question</th><th>Source</th></tr></thead><tbody>
+{{range .Rows}}<tr><td>{{if .Problem}}Unavailable{{else}}<label class="row"><input type="checkbox" name="result" value="{{.ID}}"{{if .Selected}} checked{{end}}> Include<span class="sr"> answer {{.ID}}: {{.Prompt}} · {{.Answerer}} · {{.Track}}</span></label>{{end}}</td><td>{{.Prompt}}{{with .Problem}}<br><span class="muted small">{{.}}</span>{{end}}</td><td>{{.Answerer}} · {{.Track}}</td></tr>{{end}}
+</tbody></table></div>
+{{if .Eligible}}<p>After import, one unique case opens directly for review. A larger selection opens its review queue.</p>
+<button>Import selected answers</button> <a href="/runs/{{.ID}}#answers">Cancel</a>
+{{else}}<p>No answers can be imported from this run. Check the saved answer, grade and identity context before trying again.</p>{{end}}
+</form>{{if .Eligible}}<script defer src="{{asset "evaluation-import.js"}}"></script>{{end}}
+{{end}}
