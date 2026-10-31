@@ -129,8 +129,6 @@ func (s *Server) evaluationExperiment(w http.ResponseWriter, r *http.Request) {
 	s.render(w, "evaluation-experiment", d)
 }
 
-type evaluationJob struct{ Cancel context.CancelFunc }
-
 func (s *Server) evaluationExperimentRun(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	e, err := s.evaluationStore().Experiment(r.Context(), id)
@@ -148,14 +146,16 @@ func (s *Server) evaluationExperimentRun(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 30*time.Minute)
-	job := &evaluationJob{Cancel: cancel}
-	if _, loaded := s.evaluationJobs.LoadOrStore(id, job); loaded {
-		cancel()
-	} else {
+	job, claimed, err := s.claimEvaluationJob(id, cancel)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		return
+	}
+	if claimed {
 		retry := r.FormValue("retry") == "on"
 		go func() {
 			defer cancel()
-			defer s.evaluationJobs.Delete(id)
+			defer s.finishEvaluationJob(id, job)
 			if err := s.evaluationStore().RunExperiment(ctx, id, s.evaluationAssessor(), retry, s.evaluationAssessor().Assess); err != nil {
 				slog.Info("evaluation comparison paused", "experiment", id, "error", err)
 			}
@@ -168,9 +168,6 @@ func (s *Server) evaluationExperimentStop(w http.ResponseWriter, r *http.Request
 		job.(*evaluationJob).Cancel()
 	}
 	http.Redirect(w, r, "/evaluation/experiments/"+r.PathValue("id"), http.StatusSeeOther)
-}
-func (s *Server) StopEvaluationJobs() {
-	s.evaluationJobs.Range(func(_, v any) bool { v.(*evaluationJob).Cancel(); return true })
 }
 func (s *Server) evaluationExperimentJSON(w http.ResponseWriter, r *http.Request) {
 	report, err := s.evaluationStore().ExperimentReport(r.Context(), r.PathValue("id"))

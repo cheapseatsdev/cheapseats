@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -111,5 +112,58 @@ func TestEvaluationSourceLinksRequireMatchingLocalEvidence(t *testing.T) {
 	if page.Code != 200 || !strings.Contains(page.Body.String(), want) {
 		c, _ := wb.Case(ctx, local.Rows[0].CaseID)
 		t.Fatalf("real local source link disappeared: status=%d want=%s source=%+v question=%q answer=%q page=%s", page.Code, want, c.Record.Source, c.Record.Prompt, c.Record.Answer, limit(page.Body.String()))
+	}
+}
+
+func TestEvaluationShutdownWaitsForPausedStateAndClosesAdmission(t *testing.T) {
+	s, wb := evaluationServer(t)
+	imported, id := evaluationFixture(t, wb)
+	ctx := context.Background()
+	if _, err := wb.Save(ctx, id, 0, "judgment", evaluation.Judgment{Verdict: grade.Absent, AbsenceReason: "not-named", FullAnswer: true}, "local reviewer", evaluation.Rubric()); err != nil {
+		t.Fatal(err)
+	}
+	a := s.evaluationAssessor()
+	offer, err := wb.PrepareCheckBatch(ctx, a, imported.ID, "", "local reviewer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := wb.CreateCheckBatch(ctx, a, offer.Plan, "local reviewer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	workerCtx, cancel := context.WithCancel(ctx)
+	job, claimed, err := s.claimEvaluationJob(b.Plan.ID, cancel)
+	if err != nil || !claimed {
+		t.Fatalf("claim: %v %v", claimed, err)
+	}
+	started := make(chan struct{})
+	finished := make(chan error, 1)
+	go func() {
+		defer s.finishEvaluationJob(b.Plan.ID, job)
+		finished <- wb.RunCheckBatch(workerCtx, b.Plan.ID, "local reviewer", a, false, func(callCtx context.Context, _ grade.GoldenRecord, _, _ string, _ float64) (grade.Grade, float64, error) {
+			close(started)
+			<-callCtx.Done()
+			// Subscription processes can return a killed-process error instead
+			// of context.Canceled. The canceled call context still marks a pause.
+			return grade.Grade{}, 0, errors.New("process killed")
+		})
+	}()
+	<-started
+	s.StopEvaluationJobs()
+	if err := <-finished; !errors.Is(err, context.Canceled) {
+		t.Fatal("shutdown was treated as provider failure", err)
+	}
+	check, err := wb.Check(ctx, b.Plan.Cases[0].CheckID)
+	if err != nil || check.State != evaluation.CheckReady || check.Attempt != 0 {
+		t.Fatalf("shutdown returned before preserving the attempt: %+v %v", check, err)
+	}
+	b, err = wb.CheckBatch(ctx, b.Plan.ID, "local reviewer")
+	if err != nil || b.State != evaluation.CheckReady || b.LeaseUntil != "" {
+		t.Fatalf("shutdown left a running batch: %+v %v", b, err)
+	}
+	nextCtx, stop := context.WithCancel(ctx)
+	defer stop()
+	if _, claimed, err := s.claimEvaluationJob("too-late", stop); err == nil || claimed || nextCtx.Err() == nil {
+		t.Fatal("shutdown admitted another evaluation worker")
 	}
 }

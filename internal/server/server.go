@@ -76,9 +76,11 @@ type Server struct {
 	publicURL string
 	// A read-only copy (CHEAPSEATS_READONLY), such as a public demo: it serves pages and the JSON
 	// API, refuses every change and MCP, and hides the controls that would make one.
-	readOnly       bool
-	evaluation     bool
-	evaluationJobs sync.Map
+	readOnly           bool
+	evaluation         bool
+	evaluationJobs     sync.Map
+	evaluationJobMu    sync.Mutex
+	evaluationStopping bool
 	// The shared-report page, which has its own layout (no navigation to pages behind auth), and
 	// the limit on unknown tokens asked for.
 	share      *template.Template

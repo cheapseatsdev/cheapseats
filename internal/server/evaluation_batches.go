@@ -66,14 +66,13 @@ func (s *Server) startEvaluationBatch(r *http.Request, b evaluation.CheckBatch, 
 		}
 	}
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 30*time.Minute)
-	job := &evaluationJob{Cancel: cancel}
-	if _, loaded := s.evaluationJobs.LoadOrStore(b.Plan.ID, job); loaded {
-		cancel()
-		return nil
+	job, claimed, err := s.claimEvaluationJob(b.Plan.ID, cancel)
+	if err != nil || !claimed {
+		return err
 	}
 	go func() {
 		defer cancel()
-		defer s.evaluationJobs.Delete(b.Plan.ID)
+		defer s.finishEvaluationJob(b.Plan.ID, job)
 		if err := s.evaluationStore().RunCheckBatch(ctx, b.Plan.ID, b.Actor, a, retry, nil); err != nil {
 			slog.Info("independent check batch paused", "batch", b.Plan.ID, "error", err)
 		}
