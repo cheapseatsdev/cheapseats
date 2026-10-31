@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cheapseatsdev/cheapseats/internal/answer"
 	"github.com/cheapseatsdev/cheapseats/internal/evaluation"
 	"github.com/cheapseatsdev/cheapseats/internal/grade"
 )
@@ -269,7 +271,17 @@ func (s *Server) evaluationCaseData(r *http.Request, id string, session *evaluat
 	d.CheckBatchID = r.FormValue("batch")
 	d.SavedJudgment = c.Review.Judgment
 	if src := c.Record.Source; src != nil && src.Run != "" && src.Result > 0 {
-		d.SourceURL = fmt.Sprintf("/runs/%s#result-%d", url.PathEscape(src.Run), src.Result)
+		// Imported provenance may refer to a different deployment. Link only
+		// when the local result contains the exact saved answer and question.
+		var raw string
+		err := s.App.DB.QueryRowContext(r.Context(), `SELECT COALESCE(answer,'') FROM results WHERE id=? AND run_id=? AND prompt=?`, src.Result, src.Run, c.Record.Prompt).Scan(&raw)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return d, err
+		}
+		var original answer.Answer
+		if err == nil && json.Unmarshal([]byte(raw), &original) == nil && original.Text == c.Record.Answer {
+			d.SourceURL = fmt.Sprintf("/runs/%s#result-%d", url.PathEscape(src.Run), src.Result)
+		}
 	}
 	d.Confirmation = s.evaluationConfirmation(r)
 	if d.Intent == "" {
@@ -336,6 +348,9 @@ func (s *Server) evaluationSession(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), evaluationCode(err))
 		return
 	}
+	// A previous save may have committed before its advance/response was lost.
+	// Let the reviewer acknowledge it without creating another history event.
+	d.Saved = d.State == "reviewed" || d.State == "unresolved"
 	s.render(w, "evaluation-case", d)
 }
 
@@ -365,6 +380,13 @@ func evaluationForm(r *http.Request) (evaluation.Judgment, int, error) {
 
 func (s *Server) evaluationDraft(w http.ResponseWriter, r *http.Request) {
 	j, revision, err := evaluationForm(r)
+	if err == nil {
+		var c evaluation.Case
+		c, err = s.evaluationStore().Case(r.Context(), r.PathValue("id"))
+		if err == nil && c.Review.State == "reviewed" {
+			err = errors.New("this judgment is committed; edits stay in this tab until you explicitly save them")
+		}
+	}
 	if err == nil {
 		var saved evaluation.Review
 		saved, err = s.evaluationStore().Save(r.Context(), r.PathValue("id"), revision, "draft", j, s.evaluationActor(r), r.FormValue("rubric"))
@@ -487,9 +509,9 @@ func (s *Server) evaluationSave(w http.ResponseWriter, r *http.Request) {
 		if session == nil {
 			d.ImportID = r.FormValue("import")
 		}
-		d.Resolution = r.FormValue("resolving") == "1"
+		d.Resolution = len(d.Pending) > 0 || r.FormValue("resolving") == "1"
 		d.ResolutionNote = r.FormValue("resolution_note")
-		if d.Resolution {
+		if r.FormValue("resolving") == "1" {
 			d.Pending = append([]string(nil), r.Form["check"]...)
 		}
 		d.Rules = nil

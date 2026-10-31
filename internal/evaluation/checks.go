@@ -88,19 +88,29 @@ func evidenceRecord(r grade.GoldenRecord) grade.GoldenRecord {
 }
 
 type Check struct {
-	Plan      CheckPlan    `json:"plan"`
-	State     CheckState   `json:"state"`
-	Attempt   int          `json:"attempt"`
-	Grade     *grade.Grade `json:"grade,omitempty"`
-	Error     string       `json:"error,omitempty"`
-	Actor     string       `json:"actor"`
-	UpdatedAt string       `json:"updated_at"`
+	Plan       CheckPlan    `json:"plan"`
+	State      CheckState   `json:"state"`
+	Attempt    int          `json:"attempt"`
+	Grade      *grade.Grade `json:"grade,omitempty"`
+	Error      string       `json:"error,omitempty"`
+	Actor      string       `json:"actor"`
+	UpdatedAt  string       `json:"updated_at"`
+	LeaseUntil string       `json:"lease_until,omitempty"`
+}
+
+// A lost worker has no prediction. Once its lease expires it must not block
+// approval forever, including when it crashed on its final allowed attempt.
+func (c *Check) expired() {
+	if c.State == CheckRunning && c.LeaseUntil < store.Now() {
+		c.State = CheckFailed
+		c.Error = "The worker's lease expired without a saved assessment. The result is unknown."
+	}
 }
 
 func (w *Workbench) Check(ctx context.Context, id string) (Check, error) {
 	var c Check
 	var plan, result string
-	err := w.DB.QueryRowContext(ctx, `SELECT plan,state,attempt,result,error,actor,updated_at FROM evaluation_checks WHERE id=?`, id).Scan(&plan, &c.State, &c.Attempt, &result, &c.Error, &c.Actor, &c.UpdatedAt)
+	err := w.DB.QueryRowContext(ctx, `SELECT plan,state,attempt,result,error,actor,updated_at,lease_until FROM evaluation_checks WHERE id=?`, id).Scan(&plan, &c.State, &c.Attempt, &result, &c.Error, &c.Actor, &c.UpdatedAt, &c.LeaseUntil)
 	if err != nil {
 		return c, err
 	}
@@ -111,7 +121,15 @@ func (w *Workbench) Check(ctx context.Context, id string) (Check, error) {
 		c.Grade = &grade.Grade{}
 		err = json.Unmarshal([]byte(result), c.Grade)
 	}
+	c.expired()
 	return c, err
+}
+
+// Pausing work is different from an assessment failure. Provider spending is
+// still settled by the accounting layer; only the logical retry allowance is
+// returned, so resume can select this assessment without explicit retry.
+func assessmentPaused(err error) bool {
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, budget.ErrExhausted)
 }
 
 type AssessFunc func(context.Context, grade.GoldenRecord, string, string, float64) (grade.Grade, float64, error)
@@ -151,7 +169,7 @@ func (w *Workbench) RunCheck(ctx context.Context, p CheckPlan, actor string, ret
 	if previous.State == "done" {
 		return previous, nil
 	}
-	if previous.Attempt > 0 && !retry {
+	if previous.State != CheckReady && previous.Attempt > 0 && !retry {
 		return previous, errors.New("this check already started; use explicit retry for a failed or interrupted check")
 	}
 	lease := rand.Text()
@@ -169,6 +187,9 @@ func (w *Workbench) RunCheck(ctx context.Context, p CheckPlan, actor string, ret
 	// expiry; an old worker cannot overwrite a later worker's result.
 	callCtx, cancel := context.WithTimeout(ctx, 3*time.Minute)
 	g, _, callErr := assess(callCtx, evidenceRecord(c.Record), p.Prompt, "evaluation/check/"+p.ID, p.MaxUSD)
+	if callErr != nil && callCtx.Err() != nil {
+		callErr = errors.Join(callErr, callCtx.Err())
+	}
 	cancel()
 	if callErr == nil {
 		expected := grade.GoldenExpectedOf(g, c.Record.Brand.Name)
@@ -179,9 +200,14 @@ func (w *Workbench) RunCheck(ctx context.Context, p CheckPlan, actor string, ret
 		}
 	}
 	nextState, raw, why := CheckDone, "", ""
+	refund := 0
 	if callErr != nil {
 		nextState = CheckFailed
 		why = "Assessment failed: " + llm.Truncate(callErr.Error(), 1500)
+		if assessmentPaused(callErr) {
+			nextState, refund = CheckReady, 1
+			why = "Assessment paused: " + llm.Truncate(callErr.Error(), 1500)
+		}
 	} else {
 		b, _ := json.Marshal(g)
 		raw = string(b)
@@ -189,7 +215,7 @@ func (w *Workbench) RunCheck(ctx context.Context, p CheckPlan, actor string, ret
 	saveCtx, stop := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
 	defer stop()
 	CheckTransitions.Check("evaluation_checks", CheckRunning, nextState)
-	result, err = w.DB.ExecContext(saveCtx, `UPDATE evaluation_checks SET state=?,result=?,error=?,lease='',lease_until='',updated_at=? WHERE id=? AND lease=?`, nextState, raw, why, store.Now(), p.ID, lease)
+	result, err = w.DB.ExecContext(saveCtx, `UPDATE evaluation_checks SET state=?,attempt=attempt-?,result=?,error=?,lease='',lease_until='',updated_at=? WHERE id=? AND lease=? AND lease_until>=?`, nextState, refund, raw, why, store.Now(), p.ID, lease, store.Now())
 	if err != nil {
 		return Check{}, err
 	}
@@ -235,7 +261,7 @@ func differences(j Judgment, g grade.Grade, brand, answer string) []string {
 	return out
 }
 func checkViews(ctx context.Context, q checkQuery, c Case) ([]CheckView, error) {
-	rows, err := q.QueryContext(ctx, `SELECT plan,state,attempt,result,error,actor,updated_at,EXISTS(SELECT 1 FROM evaluation_resolutions r WHERE r.check_id=k.id AND r.case_id=k.case_id AND r.revision=?) FROM evaluation_checks k WHERE case_id=? ORDER BY created_at,id`, c.Review.Revision, c.ID)
+	rows, err := q.QueryContext(ctx, `SELECT plan,state,attempt,result,error,actor,updated_at,lease_until,EXISTS(SELECT 1 FROM evaluation_resolutions r WHERE r.check_id=k.id AND r.case_id=k.case_id AND r.revision=?) FROM evaluation_checks k WHERE case_id=? ORDER BY created_at,id`, c.Review.Revision, c.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -244,13 +270,14 @@ func checkViews(ctx context.Context, q checkQuery, c Case) ([]CheckView, error) 
 	for rows.Next() {
 		var v CheckView
 		var p, g string
-		if err := rows.Scan(&p, &v.State, &v.Attempt, &g, &v.Error, &v.Actor, &v.UpdatedAt, &v.Resolved); err != nil {
+		if err := rows.Scan(&p, &v.State, &v.Attempt, &g, &v.Error, &v.Actor, &v.UpdatedAt, &v.LeaseUntil, &v.Resolved); err != nil {
 			return nil, err
 		}
 		if err := json.Unmarshal([]byte(p), &v.Plan); err != nil {
 			return nil, err
 		}
 		v.Stale = v.Plan.Rubric != Rubric() || v.Plan.Evaluator != grade.EvaluatorDigest()
+		v.expired()
 		if g != "" {
 			v.Grade = &grade.Grade{}
 			if err := json.Unmarshal([]byte(g), v.Grade); err != nil {
@@ -268,7 +295,7 @@ func (w *Workbench) CheckViews(ctx context.Context, c Case) ([]CheckView, error)
 func pendingIDs(vs []CheckView) []string {
 	ids := []string{}
 	for _, v := range vs {
-		if v.State == "done" && !v.Stale && !v.Resolved && len(v.Fields) > 0 {
+		if v.State == "done" && !v.Resolved && len(v.Fields) > 0 {
 			ids = append(ids, v.Plan.ID)
 		}
 	}
@@ -284,6 +311,8 @@ type Resolution struct {
 	Checks      []string
 	Action      string
 	Explanation string
+	// scope is set only by the batch operation, from its persisted membership.
+	scope []string
 }
 type ResolutionRecord struct {
 	CheckID     string `json:"check_id"`

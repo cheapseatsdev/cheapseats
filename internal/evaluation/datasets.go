@@ -2,6 +2,7 @@ package evaluation
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -183,10 +184,18 @@ func (w *Workbench) Approve(ctx context.Context, p Approval, actor string) (Data
 			return Dataset{}, fmt.Errorf("%s: resolve independent-check differences before approval", m.CaseID)
 		}
 		for _, v := range views {
-			if !v.Stale && v.State == "running" {
+			if v.State == "running" {
 				return Dataset{}, fmt.Errorf("%s: an independent check is still running", m.CaseID)
 			}
 		}
+	}
+	var approvedBy string
+	err = tx.QueryRowContext(ctx, `SELECT actor FROM evaluation_datasets WHERE id=?`, d.ID).Scan(&approvedBy)
+	if err == nil && approvedBy != actor {
+		return Dataset{}, fmt.Errorf("this identical version is already approved by %s; reuse that version (no additional approval was recorded)", approvedBy)
+	}
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return Dataset{}, err
 	}
 	d.Actor, d.CreatedAt = actor, store.Now()
 	content, _ = json.Marshal(d)

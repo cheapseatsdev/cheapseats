@@ -278,8 +278,26 @@ func (w *Workbench) Start(ctx context.Context, importID, actor, filter string) (
 	s := Session{ID: "es-" + rand.Text(), ImportID: importID, Actor: actor, CaseIDs: ids, State: "active"}
 	b, _ := json.Marshal(ids)
 	now := store.Now()
-	_, err = w.DB.ExecContext(ctx, `INSERT INTO evaluation_sessions VALUES (?,?,?,?,?,?,?,?)`, s.ID, importID, actor, string(b), 0, s.State, now, now)
-	return s, err
+	// Store transactions acquire the SQLite write lock before reading. Recheck
+	// here so simultaneous starts cannot leave a second active session behind.
+	tx, err := w.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return Session{}, err
+	}
+	defer tx.Rollback()
+	var existing string
+	err = tx.QueryRowContext(ctx, `SELECT id FROM evaluation_sessions WHERE import_id=? AND actor=? AND state!='done' ORDER BY updated_at DESC,id LIMIT 1`, importID, actor).Scan(&existing)
+	if err == nil {
+		tx.Rollback()
+		return w.Session(ctx, existing, actor)
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return Session{}, err
+	}
+	if _, err = tx.ExecContext(ctx, `INSERT INTO evaluation_sessions VALUES (?,?,?,?,?,?,?,?)`, s.ID, importID, actor, string(b), 0, s.State, now, now); err != nil {
+		return Session{}, err
+	}
+	return s, tx.Commit()
 }
 
 // Advance is a compare-and-swap on the stable queue. Judgment persistence is

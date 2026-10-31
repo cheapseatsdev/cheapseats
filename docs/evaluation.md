@@ -111,8 +111,10 @@ If the run changes after preview, the app asks you to review the selection again
 
 The old grade remains a model proposal, hidden in first review. A run report may
 already have shown it to you; entering Evaluation from that report does not make
-the review independently blinded. The case has an **Original source run and
-answer** link, with a reminder that the report reveals the model grade.
+the review independently blinded. The case offers an **Original source run and answer**
+link only when the exact saved answer and question exist in this deployment, with a
+reminder that the report reveals the model grade. Bundled and foreign records retain
+provenance without linking to missing local runs.
 
 Repeated imports reuse matching cases and preserve drafts, judgments and review
 history; they never reset a case to unreviewed or overwrite its original proposal.
@@ -195,7 +197,11 @@ unfinished decision before continuing. If no eligible first-review cases remain,
 the overview confirms the save and shows the next available actions. This uses
 the same development/held-out selection rules as starting a session normally.
 
-Drafts autosave without advancing the queue. **Save and next** commits a validated
+Uncommitted drafts autosave without advancing the queue. Edits to an already committed
+judgment stay in the browser tab until an explicit save; autosave never turns that
+judgment back into a draft. If a save committed before its page transition was
+interrupted, reopening the session offers **Continue session** without adding another
+decision to history. **Save and next** commits a validated
 judgment; **Leave unresolved** needs an issue and explanation; **End session** saves
 the unfinished draft and resumes at the same case. Failed or stale saves preserve
 typed fields. A local backup stays in that browser tab's session storage until
@@ -237,10 +243,12 @@ All answers appear on one comparison screen, with human and model labels,
 reasoning, evidence, failures and unresolved differences. Agreements need no
 action. **Select all differences** and **Keep selected judgments** apply one
 required human explanation to the chosen cases. Every keep uses the saved
-revision and exact pending check set, records its actor and explanation, and
+revision and exact pending check set displayed for that batch, records its actor and explanation, and
 preserves the original judgment fields. If a selected case changed meanwhile,
 other successful keeps remain saved and the conflict is shown without overwriting
-newer work. Remaining cases must be selected again after reviewing current labels.
+newer work. Differences and bulk keeps cover only the assessments in this batch. Other
+graders' differences remain separate and still block dataset approval. Remaining cases
+must be selected again after reviewing current labels.
 
 Use **Change or inspect judgment** for a particular case when needed. Saving a
 revision or resolution returns directly to that case's row in the combined
@@ -250,8 +258,11 @@ unique human-reviewed answers, separate from completed model assessments.
 
 The worker continues when you leave the page and pauses after 30 minutes or an
 explicit pause. Results are saved per case. Resume reuses completed assessments;
-retrying failed or interrupted assessments requires an explicit choice and retains
-each check's two-attempt limit. A four-minute renewable worker lease prevents
+Paused assessments resume without selecting retry. Cancellation, timeouts and exhausted
+admission budgets return in-progress assessments to waiting without consuming an
+assessment attempt. Recorded provider charges remain. Provider or parse failures and
+crashed claims require explicit retry and retain each check's two-attempt limit. A
+four-minute renewable worker lease prevents
 competing batches from overwriting progress; an interrupted process can be
 recovered after its lease expires. Provider failures remain unknown, never absent,
 and every selected case remains accounted for. Missing provider access still
@@ -271,15 +282,17 @@ proposal. A human still owns each label; model agreement does not add another
 human review.
 
 Results are cached by immutable evidence, rubric, model, transport and evaluator
-source digest. The check's fixed admission budget covers HTTP retries and an
-explicit retry of a failed/interrupted assessment. Every API attempt also uses
+source digest. The check's fixed admission budget covers HTTP retries, resumed work and an
+explicit retry of a failed or crashed assessment. Every API attempt also uses
 the global daily ledger and concurrency gate. Settlement can exceed reservations;
 neither admission budget is a hard billing ceiling. Claude Code uses its configured
 subscription rather than API charges. Missing access leaves human review usable.
 
 One check permits at most two assessment attempts. A request lasts at most three
 minutes; its four-minute lease allows explicit recovery after a process crash.
-Late workers cannot replace newer results. Provider/parse failures remain failed
+An expired lease is an unknown failed result, including a crash on the final attempt; it
+no longer blocks approval as running. Late workers cannot save after lease expiry or
+replace newer results. Provider/parse failures remain failed
 checks and never become absent predictions. Failed checks do not invent disputes.
 
 Differences in verdict, top pick, namesake-only or tone, and missing/invalid model
@@ -289,7 +302,9 @@ fields; saving a revised judgment validates its edited fields. Individual
 resolution controls use the same rules.
 Both require a resolution explanation. Resolution edits do not autosave over the
 saved human decision. A new check arriving meanwhile requires reloading before
-resolving it. You can instead leave the case unresolved. Existing approved versions
+resolving it. Ordinary saves cannot bypass a pending resolution, including one from an
+older rubric or evaluator. If unsure, leave the difference pending and return later, or
+explicitly exclude the case from a dataset. Existing approved versions
 remain frozen; a new version cannot include pending differences or running checks.
 Model agreement never creates another human review. Resolution history records
 the check, human actor, label revision, action and explanation; approved manifests
@@ -301,8 +316,10 @@ include those records while keeping provenance as a single human review.
 blocked rows, current label revisions and grouped partition assignments. Each
 omitted unique case and blocked row needs an explicit exclusion reason. Duplicate
 rows remain accounted for without creating another scored member. Only a current,
-committed, complete judgment under the current rubric can be included. Approval
-records the approving reviewer separately from each label's reviewer.
+committed, complete judgment under the current rubric can be included. Approval records
+the approving reviewer separately from each label's reviewer. Repeating the same approval
+by that reviewer reuses the version. Another reviewer receives an explicit
+already-approved response instead of an unrecorded successful approval.
 
 An approved version freezes membership, full evidence and identity, core labels,
 all supporting passages, label revisions, provenance, exact rules and partitions.

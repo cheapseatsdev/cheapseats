@@ -83,7 +83,7 @@
   } catch {}
   function saveDraft() {
     pending = pending.then(async () => {
-      if (!dirty || submitting || form.hasAttribute("data-resolution")) return;
+      if (!dirty || submitting || form.hasAttribute("data-resolution") || form.hasAttribute("data-committed")) return;
       const generation = changes, body = new URLSearchParams(new FormData(form));
       status.textContent = "Saving draft…";
       try {
@@ -101,7 +101,9 @@
   }
   function edited() {
     if (submitting) return;
-    conditionalFields(); dirty = true; changes++; stash(); clearTimeout(timer); if (!form.hasAttribute("data-resolution")) timer = setTimeout(saveDraft, 600);
+    conditionalFields(); dirty = true; changes++; stash(); clearTimeout(timer);
+    if (form.hasAttribute("data-committed")) status.textContent = "Edits are kept in this tab. Your committed judgment stays saved until you explicitly submit a change.";
+    else if (!form.hasAttribute("data-resolution")) timer = setTimeout(saveDraft, 600);
   }
   form.addEventListener("input", edited); form.addEventListener("change", edited);
   form.addEventListener("submit", async (event) => {

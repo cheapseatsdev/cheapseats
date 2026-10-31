@@ -93,13 +93,14 @@ type evaluationBatchPage struct {
 	Running                 bool
 	Percent                 float64
 	ReadyError, Error, Note string
+	Rubric                  string
 	Saved                   int
 	Confirmation            evaluationConfirmation
 }
 
 func (s *Server) evaluationBatchData(r *http.Request) (evaluationBatchPage, error) {
 	report, err := s.evaluationStore().CheckBatchReport(r.Context(), r.PathValue("id"), s.evaluationActor(r), s.evaluationAssessor())
-	out := evaluationBatchPage{Report: report, Rows: []evaluationBatchRow{}, Confirmation: s.evaluationConfirmation(r)}
+	out := evaluationBatchPage{Report: report, Rows: []evaluationBatchRow{}, Confirmation: s.evaluationConfirmation(r), Rubric: evaluation.Rubric()}
 	if err != nil {
 		return out, err
 	}
@@ -109,7 +110,7 @@ func (s *Server) evaluationBatchData(r *http.Request) (evaluationBatchPage, erro
 		out.Percent = 100 * float64(report.Done+report.Failed) / float64(report.Total)
 	}
 	for _, row := range report.Rows {
-		v := evaluationBatchRow{CheckBatchRow: row, CanKeep: row.State == evaluation.CheckDone && row.Check != nil && !row.Check.Stale && row.Case.Review.State == "reviewed" && len(row.Pending) > 0}
+		v := evaluationBatchRow{CheckBatchRow: row, CanKeep: row.State == evaluation.CheckDone && row.Check != nil && row.Case.Review.State == "reviewed" && len(row.Pending) > 0}
 		if row.Check != nil && row.Check.Grade != nil {
 			v.ModelExpected = grade.GoldenExpectedOf(*row.Check.Grade, row.Case.Record.Brand.Name)
 		}
@@ -192,7 +193,7 @@ func (s *Server) evaluationBatchKeep(w http.ResponseWriter, r *http.Request) {
 		for _, id := range selected {
 			revision, e := strconv.Atoi(r.FormValue("revision_" + id))
 			if e == nil {
-				_, e = s.evaluationStore().Resolve(r.Context(), id, revision, evaluation.Judgment{}, s.evaluationActor(r), r.FormValue("rubric"), evaluation.Resolution{Checks: r.Form["checks_"+id], Action: "keep", Explanation: note})
+				_, e = s.evaluationStore().KeepBatchJudgment(r.Context(), batch.Plan.ID, id, revision, s.evaluationActor(r), r.FormValue("rubric"), r.Form["checks_"+id], note)
 			}
 			if e != nil {
 				issues[id] = e.Error()

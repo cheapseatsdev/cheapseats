@@ -138,7 +138,7 @@ func TestEvaluationBatchStartsOnceShowsProgressAndKeepsSelectedWithoutOverwritin
 	c, _ := wb.Case(ctx, second.CaseID)
 	j := c.Review.Judgment
 	j.Note = "Newer reviewer explanation"
-	if _, err := wb.Save(ctx, second.CaseID, 1, "judgment", j, "local reviewer", evaluation.Rubric()); err != nil {
+	if _, err := wb.Resolve(ctx, second.CaseID, 1, j, "local reviewer", evaluation.Rubric(), evaluation.Resolution{Checks: []string{second.CheckID}, Action: "change", Explanation: "The saved answer explicitly endorses the intended software; clarify my note."}); err != nil {
 		t.Fatal(err)
 	}
 	keep := url.Values{"case": {first.CaseID, second.CaseID}, "note": {"Both saved answers explicitly endorse the intended software."}, "rubric": {evaluation.Rubric()}, "revision_" + first.CaseID: {"1"}, "revision_" + second.CaseID: {"1"}, "checks_" + first.CaseID: {first.CheckID}, "checks_" + second.CaseID: {second.CheckID}}

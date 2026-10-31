@@ -13,6 +13,7 @@ import (
 	"github.com/cheapseatsdev/cheapseats/internal/answer"
 	"github.com/cheapseatsdev/cheapseats/internal/config"
 	"github.com/cheapseatsdev/cheapseats/internal/crawl"
+	"github.com/cheapseatsdev/cheapseats/internal/evaluation"
 	"github.com/cheapseatsdev/cheapseats/internal/grade"
 	"github.com/cheapseatsdev/cheapseats/internal/sets"
 	"github.com/cheapseatsdev/cheapseats/internal/store"
@@ -479,6 +480,36 @@ func TestComparisonUpgradePreservesCheckAndResolutionEvidence(t *testing.T) {
 	if older, err := store.OpenAt(data, 17); err == nil {
 		older.Close()
 		t.Fatal("older writer opened comparison schema")
+	}
+}
+
+func TestEvaluationUpgradeKeepsExpiredFinalAttemptAsUnknown(t *testing.T) {
+	data := t.TempDir()
+	old, err := store.OpenAt(data, 18)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, query := range []string{
+		`INSERT INTO evaluation_cases VALUES ('case','{}','now')`,
+		`INSERT INTO evaluation_checks(id,case_id,plan,state,attempt,lease,lease_until,actor,created_at,updated_at) VALUES ('expired','case','{"id":"expired","rubric":"old"}','running',2,'crashed-worker','2000-01-01T00:00:00Z','human','now','now')`,
+	} {
+		if _, err := old.Exec(query); err != nil {
+			t.Fatal(err)
+		}
+	}
+	old.Close()
+	db, err := store.Open(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	check, err := evaluation.New(db.DB).Check(context.Background(), "expired")
+	if err != nil || check.State != evaluation.CheckFailed || check.Attempt != 2 || check.Grade != nil || !strings.Contains(check.Error, "unknown") {
+		t.Fatalf("upgraded crashed check blocked approval or invented a prediction: %+v %v", check, err)
+	}
+	var state, lease string
+	if err := db.QueryRow(`SELECT state,lease FROM evaluation_checks WHERE id='expired'`).Scan(&state, &lease); err != nil || state != "running" || lease != "crashed-worker" {
+		t.Fatal("readonly interpretation rewrote stored evidence", err)
 	}
 }
 

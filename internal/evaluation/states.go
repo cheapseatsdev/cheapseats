@@ -15,14 +15,14 @@ var CheckStates = []CheckState{CheckReady, CheckRunning, CheckDone, CheckFailed}
 var CheckTransitions = state.Table[CheckState]{
 	state.Start:  {CheckReady},
 	CheckReady:   {CheckRunning},
-	CheckRunning: {CheckDone, CheckFailed},
+	CheckRunning: {CheckDone, CheckFailed, CheckReady}, // paused without consuming an attempt
 	CheckFailed:  {CheckRunning},
 }
 
 var CheckBatchTransitions = state.Table[CheckState]{
 	state.Start:  {CheckReady},
 	CheckReady:   {CheckRunning},
-	CheckRunning: {CheckDone, CheckFailed},
+	CheckRunning: {CheckDone, CheckFailed, CheckReady},
 	CheckFailed:  {CheckRunning},
 	CheckDone:    {CheckRunning}, // explicit retry of failed items only
 }

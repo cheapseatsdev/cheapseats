@@ -127,11 +127,11 @@ func (f *evaluationFlow) add(c evaluation.Case, views []evaluation.CheckView, cu
 	priority := 2
 	found, pending, otherRunning := false, false, false
 	for _, v := range views {
-		if v.State == evaluation.CheckDone && !v.Stale && !v.Resolved && len(v.Fields) > 0 {
+		if v.State == evaluation.CheckDone && !v.Resolved && len(v.Fields) > 0 {
 			pending = true
 		}
 		if v.Plan.ID != currentID {
-			otherRunning = otherRunning || !v.Stale && v.State == evaluation.CheckRunning
+			otherRunning = otherRunning || v.State == evaluation.CheckRunning
 			continue
 		}
 		found = true
