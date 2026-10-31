@@ -71,6 +71,8 @@ const usage = `cheapseats: how AI assistants answer your buyers' questions.
   cheapseats golden export <snapshot.db> [-n 80] [-set id] [-o dir]
                                          sample graded answers from a database snapshot into the
                                          grader's golden set, for a human to label (docs/grading.md)
+  cheapseats evaluation import [file.jsonl] import saved review evidence (the bundled fixtures
+                                         when no file is supplied); no provider calls
 
 Config: CHEAPSEATS_CONFIG, else the example in examples/cheapseats-config; prompt sets beside it,
 data in ./data (CHEAPSEATS_DATA_DIR). Secrets from the environment or .env: ANTHROPIC_API_KEY
@@ -133,6 +135,8 @@ func open() (*app.App, error) {
 
 func dispatch(ctx context.Context, cmd string, args []string) error {
 	switch cmd {
+	case "evaluation":
+		return evaluationCmd(ctx, args)
 	case "help", "-h", "--help":
 		fmt.Print(usage + "\n" + passUsage())
 		return nil

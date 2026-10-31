@@ -230,6 +230,41 @@ func TestNextStepsFormatUpgradeBacksUpAndRejectsOlderWriters(t *testing.T) {
 	}
 }
 
+func TestEvaluationUpgradeKeepsProductionEvidenceAndRequiresNewWriter(t *testing.T) {
+	data := t.TempDir()
+	old, err := store.OpenAt(data, 13)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacyRun(t, old, "evaluation-upgrade", "2026-10-20", []string{"Which starter workflow should I use?"}, "[]")
+	var beforeRun, beforeGrade string
+	old.QueryRow(`SELECT snapshot FROM runs WHERE id='evaluation-upgrade'`).Scan(&beforeRun)
+	old.QueryRow(`SELECT grade FROM results WHERE run_id='evaluation-upgrade' ORDER BY id LIMIT 1`).Scan(&beforeGrade)
+	old.Close()
+	db, err := store.Open(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	var afterRun, afterGrade string
+	db.QueryRow(`SELECT snapshot FROM runs WHERE id='evaluation-upgrade'`).Scan(&afterRun)
+	db.QueryRow(`SELECT grade FROM results WHERE run_id='evaluation-upgrade' ORDER BY id LIMIT 1`).Scan(&afterGrade)
+	if beforeRun != afterRun || beforeGrade != afterGrade || beforeGrade == "" {
+		t.Fatal("evaluation migration changed production evidence")
+	}
+	if _, err := os.Stat(filepath.Join(data, "cheapseats.db.bak-v13")); err != nil {
+		t.Fatal(err)
+	}
+	if older, err := store.OpenAt(data, 13); err == nil {
+		older.Close()
+		t.Fatal("an older writer opened the evaluation database")
+	}
+	var n int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM evaluation_cases`).Scan(&n); err != nil || n != 0 {
+		t.Fatalf("migration invented evaluation cases: %d %v", n, err)
+	}
+}
+
 // Crawl counts from before 4xx responses were pooled under crawl.ErrorPath keep their own rows and
 // still count: a 404 counted under its path by an older release reads beside the pooled row new
 // imports write, a new 5xx still lands on its own page, and the totals hold all of them.
