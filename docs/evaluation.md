@@ -1,5 +1,9 @@
 # Evaluation
 
+Start with [Choosing and running evaluations](evaluation-workflow.md) for purpose,
+workflow diagrams, outcomes, rerun signals and what success means. This document
+contains setup, exact controls, contracts, limits and recovery behavior.
+
 **Preview:** this workbench is unreleased and is not in 0.6.0. The instructions
 below describe this source branch, built on
 [the Evaluation batch PR](https://github.com/cheapseatsdev/cheapseats/pull/155).

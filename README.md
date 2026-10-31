@@ -13,6 +13,13 @@ scraping dependencies ([why](https://cheapseats.dev/docs/engines/#why-not-scrape
 Model access, hosting and optional services have their own costs. [Docs](https://cheapseats.dev/docs/) · [Live demo](https://demo.cheapseats.dev/)
 · [Compare tools](https://cheapseats.dev/compare/) · [Latest release](https://github.com/cheapseatsdev/cheapseats/releases/latest).
 
+New to AI visibility? Start with [AEO/GEO and the learning loop](https://cheapseats.dev/docs/understanding-ai-visibility/),
+[choosing buyer questions](https://cheapseats.dev/docs/choosing-questions/) and
+[your first run](https://cheapseats.dev/docs/first-run/).
+[Choose a check](https://cheapseats.dev/docs/checks-and-evaluations/) when you need
+to validate something; [measuring success](https://cheapseats.dev/docs/measuring-success/)
+explains what outcomes can mean.
+
 ## Quick start
 
 **Use Go with subscriptions, or Docker for the quickest setup with API keys.**
@@ -181,7 +188,8 @@ Check config with `cheapseats check`; preview a change with `cheapseats plan <be
 The [CLI reference](https://cheapseats.dev/docs/reference/#cli) covers all commands and flags,
 including audits, search probes, discovery and optional provider passes.
 
-**Evaluation preview:** the unreleased [review workbench](docs/evaluation.md) lets
+**Evaluation preview:** [Choosing and running evaluations](docs/evaluation-workflow.md)
+explains the lifecycle, outcomes and rerun signals. The unreleased [review workbench](docs/evaluation.md) lets
 you label saved answers, batch-check judgments and compare grader prompts against
 a frozen dataset. It requires the preview build and `CHEAPSEATS_EVALUATION=1`;
 the 0.6.0 image does not include it. Reviews and comparisons do not change the
