@@ -83,12 +83,27 @@ unrelated namesake, quote the wording that supports that interpretation. The
 unfinished-review reason and note are required only for **Leave unresolved**;
 leave the reason blank when you can finish the judgment.
 
+Opening **Review answer** from the queue also offers **Save and next** as the
+primary action. It saves the current judgment, then starts or resumes a short
+session in the same evidence import. If that session is still on the just-saved
+answer, continuing acknowledges it and advances once. **Save and stay** keeps the
+individual answer open for editing. **Leave unresolved and next** records the
+unfinished decision before continuing. If no eligible first-review cases remain,
+the overview confirms the save and shows the next available actions. This uses
+the same development/held-out selection rules as starting a session normally.
+
 Drafts autosave without advancing the queue. **Save and next** commits a validated
 judgment; **Leave unresolved** needs an issue and explanation; **End session** saves
 the unfinished draft and resumes at the same case. Failed or stale saves preserve
 typed fields. A local backup stays in that browser tab's session storage until
 confirmed saved or discarded. Restoring it is explicit, and cannot silently
 replace a newer server revision. Live dashboard refresh is disabled on review pages.
+
+Finishing a session opens **Review session complete**, with the current number of
+finished judgments, unresolved decisions and drafts among that session's cases.
+Choose **Check saved judgments** to continue. The Evaluation overview also shows
+this action whenever finished judgments have checks or differences to handle;
+you do not need to reopen each answer to discover the next step.
 
 Before the first short session, the import's grouping plan is stored. The same
 normalized buyer question, exact answers and answer bigrams with at least 90%
@@ -100,14 +115,45 @@ inform candidate prompt tuning. The queue does not select on proposed verdicts.
 
 ## Independent checks and resolutions
 
-After committing your own judgment, use **Preview an independent check** to see
-the configured grader, estimated allowance and admission budget. **Run one
+After committing your own judgment, choose **Check saved judgments** on the
+Evaluation overview or session summary, then **Preview check**. The preview shows
+the configured grader, estimated allowance and admission budget. The same preview
+is linked from an individual finished review as **Preview an independent check**. **Run one
 independent assessment** explicitly starts the call; viewing a page never does.
 The assessment receives the complete saved question/answer, brand identity,
 competitors and rubric, with imported and human labels, notes and evidence quotes
 removed. It uses the same transport and normalization as production grading.
 This is label independence, not a claim that the model is statistically independent
 of the model that produced the original proposal.
+
+**Check saved judgments** lists finished judgments for the selected evidence
+import. It shows completed, unchecked, failed and running checks for the current
+grader configuration and links directly to each next action. Differences needing
+a human decision take priority. A changed grader configuration needs a new check;
+an old completed assessment is not counted as current. Drafts and unresolved
+reviews remain in the review queue. Opening a reviewed answer with independent
+checks enters the assessment workflow, including older case bookmarks. Model
+reasoning and evidence are visible above the answer without expanding a disclosure.
+
+After an assessment agrees with your saved judgment, choose **Continue to next
+check**; no judgment needs to be saved again. To change it, open **Edit this saved
+judgment** and choose **Save revised judgment and next**. For a disagreement,
+**Keep my saved judgment and next** or **Save revised judgment and next** records
+your explained decision and advances directly. Cases follow the selected import
+order. A saved result opens its assessment; a case needing a model call opens its
+preview, where starting the call remains explicit. The last case offers **Finish
+checking**, returning to the queue with any failures or unresolved cases still
+accounted for. **Continue checking saved judgments** is a separate return-to-queue
+link when you want to leave the sequence. Check-mode edits do not autosave over
+your original judgment.
+
+Opening results, continuing, or viewing a preview makes no model calls. Cached
+assessments can be read in sequence without repeating them. The assessment count
+is separate from the number of first human judgments. Once all current checks are complete and no
+differences remain, the main action becomes **Preview dataset version**. Checks
+remain optional: the list also explains how to continue manual approval when
+provider access is unavailable. Approval still blocks running checks and pending
+differences for included cases.
 
 Results are cached by immutable evidence, rubric, model, transport and evaluator
 source digest. The check's fixed admission budget covers HTTP retries and an
@@ -123,8 +169,8 @@ checks and never become absent predictions. Failed checks do not invent disputes
 
 Differences in verdict, top pick, namesake-only or tone, and missing/invalid model
 quotes, are grouped under the case. **Resolve check differences** shows the model
-assessment beside your saved judgment. **Keep my saved judgment** preserves its
-fields; **Save revised judgment and resolution** validates your edited fields.
+assessment beside your saved judgment. **Keep my saved judgment and next** preserves its
+fields; **Save revised judgment and next** validates your edited fields.
 Both require a resolution explanation. Resolution edits do not autosave over the
 saved human decision. A new check arriving meanwhile requires reloading before
 resolving it. You can instead leave the case unresolved. Existing approved versions

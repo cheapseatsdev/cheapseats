@@ -1,5 +1,15 @@
 // Draft saves are serialized and never replace the form or advance the queue.
 (function () {
+  // Clear only older local edits after the server confirms the actor and saved
+  // revision. Newer drafts survive revisiting a previously confirmed URL.
+  const confirmed = document.querySelector("[data-evaluation-confirmed-case]");
+  if (confirmed) {
+    const key = `cheapseats-evaluation:${confirmed.dataset.actor}:${confirmed.dataset.evaluationConfirmedCase}`;
+    try {
+      const backup = JSON.parse(sessionStorage.getItem(key) || "null");
+      if (backup && Number(backup.revision) < Number(confirmed.dataset.revision)) sessionStorage.removeItem(key);
+    } catch {}
+  }
   const form = document.querySelector("[data-evaluation-review]");
   if (!form) return;
   const status = form.querySelector("[data-draft-status]");

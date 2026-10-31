@@ -16,6 +16,8 @@ import (
 
 const GroupingMethod = "question-and-answer-bigram-v1"
 
+var ErrNoReviewCases = errors.New("no cases match this session; held-out cases remain available for manual review from the queue")
+
 type Group struct {
 	ID        string `json:"id"`
 	Partition string `json:"partition"`
@@ -271,7 +273,7 @@ func (w *Workbench) Start(ctx context.Context, importID, actor, filter string) (
 		}
 	}
 	if len(ids) == 0 {
-		return Session{}, errors.New("no cases match this session; held-out cases remain available for manual review from the queue")
+		return Session{}, ErrNoReviewCases
 	}
 	s := Session{ID: "es-" + rand.Text(), ImportID: importID, Actor: actor, CaseIDs: ids, State: "active"}
 	b, _ := json.Marshal(ids)
