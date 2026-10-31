@@ -110,7 +110,7 @@ in the MCP `get_run` digest, the first ten. A run with no check, or none before 
 ### Did the fix land
 
 A fix marked with an attempt (proposed or accepted) whose target is on one of the brand's sites
-shows **On the page now** under its **Done when**, on the run page and on Quick wins: whether the
+shows **On the page now** under its **Done when**, on the run page and in Next steps: whether the
 target page names the brand and has each of the fix's claim terms, by the same whole-word match.
 The claim terms are its quoted phrases and numbers (any word with a digit: `$49`, `99.9%`,
 `30-day`); a claim with neither uses non-common words of at least four letters. Terms are lowercased,
