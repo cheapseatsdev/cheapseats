@@ -94,3 +94,8 @@ changes the rubric or output schema intentionally; a human still needs to confir
 that the wording preserves their meaning. No provider comparison was run for
 these proposals. Format, provenance, literal quotes and snapshot hashes were
 checked offline; that validation cannot establish label correctness.
+
+`advice-001` needs investigation: the complete page gives init and serve commands,
+but no installation command. Complete coverage does not mean every requested
+step is present. Its proposed disposition is not a verified action or an
+already-done result.

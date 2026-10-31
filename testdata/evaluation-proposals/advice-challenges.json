@@ -10,7 +10,7 @@
   "cases": [
     {
       "id": "advice-001",
-      "family": "already-done",
+      "family": "missing-install-command",
       "brand": {
         "name": "Example Tracker",
         "aliases": [
@@ -36,12 +36,12 @@
         "action": "Add the three commands needed to start the CLI.",
         "done_when": "The setup page lists install, init and serve commands."
       },
-      "proposed_disposition": "already-done",
+      "proposed_disposition": "investigate",
       "gates_to_examine": [
         "existing_work",
         "remaining_change"
       ],
-      "rationale": "The complete target already contains the requested commands; restating them is not material work."
+      "rationale": "The page gives init and serve commands but no installation command. Do not mark this already done. Verify the correct install command before treating the remaining edit as supported work."
     },
     {
       "id": "advice-002",
