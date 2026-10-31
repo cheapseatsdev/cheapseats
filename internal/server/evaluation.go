@@ -339,6 +339,12 @@ func (s *Server) evaluationSession(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), evaluationCode(err))
 		return
 	}
+	if session.State == "done" && session.Cursor < len(session.CaseIDs) {
+		// A repaired duplicate retains its original cursor for provenance.
+		// Its bookmark returns to the queue instead of reopening retired work.
+		http.Redirect(w, r, "/evaluation?import="+url.QueryEscape(session.ImportID), http.StatusSeeOther)
+		return
+	}
 	if session.Cursor >= len(session.CaseIDs) {
 		s.evaluationSessionFinished(w, r, session)
 		return
@@ -383,8 +389,8 @@ func (s *Server) evaluationDraft(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		var c evaluation.Case
 		c, err = s.evaluationStore().Case(r.Context(), r.PathValue("id"))
-		if err == nil && c.Review.State == "reviewed" {
-			err = errors.New("this judgment is committed; edits stay in this tab until you explicitly save them")
+		if err == nil && (c.Review.State == "reviewed" || c.Review.State == "unresolved") {
+			err = errors.New("this decision is saved; edits stay in this tab until you explicitly save them")
 		}
 	}
 	if err == nil {
@@ -410,7 +416,7 @@ func (s *Server) evaluationSave(w http.ResponseWriter, r *http.Request) {
 	if sid := r.FormValue("session"); sid != "" {
 		loaded, err := wb.Session(r.Context(), sid, actor)
 		cursor, e := strconv.Atoi(r.FormValue("cursor"))
-		if err != nil || e != nil || cursor != loaded.Cursor || cursor < 0 || cursor >= len(loaded.CaseIDs) || loaded.CaseIDs[cursor] != id {
+		if err != nil || e != nil || loaded.State == "done" || cursor != loaded.Cursor || cursor < 0 || cursor >= len(loaded.CaseIDs) || loaded.CaseIDs[cursor] != id {
 			http.Error(w, evaluation.ErrConflict.Error(), http.StatusConflict)
 			return
 		}
@@ -438,6 +444,16 @@ func (s *Server) evaluationSave(w http.ResponseWriter, r *http.Request) {
 	if action == "end" {
 		kind = "draft"
 	}
+	preserveSaved := false
+	if action == "end" && err == nil {
+		if session == nil {
+			err = errors.New("open the review session before pausing it")
+		} else {
+			c, e := wb.Case(r.Context(), id)
+			err = e
+			preserveSaved = e == nil && (c.Review.State == "reviewed" || c.Review.State == "unresolved")
+		}
+	}
 	batchID := r.FormValue("batch")
 	if err == nil && batchID != "" {
 		_, err = s.evaluationBatchCase(r, batchID, id)
@@ -447,7 +463,7 @@ func (s *Server) evaluationSave(w http.ResponseWriter, r *http.Request) {
 		checkImportID, err = s.evaluationCheckImport(r.Context(), r.FormValue("import"), id)
 	}
 	saved := false
-	if err == nil && (action == "next" || action == "continue-review") {
+	if err == nil && (action == "next" || action == "continue-review" || preserveSaved) {
 		c, e := wb.Case(r.Context(), id)
 		if e != nil {
 			err = e

@@ -208,7 +208,14 @@ func (w *Workbench) Session(ctx context.Context, id, actor string) (Session, err
 
 func (w *Workbench) Resume(ctx context.Context, importID, actor string) (*Session, error) {
 	var id string
-	err := w.DB.QueryRowContext(ctx, `SELECT id FROM evaluation_sessions WHERE import_id=? AND actor=? AND state!='done' ORDER BY updated_at DESC,id LIMIT 1`, importID, actor).Scan(&id)
+	// Old double-clicks could create identical overlapping queues. Hide queues
+	// completed while this one existed, and prefer the furthest active copy.
+	// A later intentional review after completion is a separate session.
+	err := w.DB.QueryRowContext(ctx, `SELECT s.id FROM evaluation_sessions s WHERE s.import_id=? AND s.actor=? AND s.state!='done' AND NOT EXISTS (
+		SELECT 1 FROM evaluation_sessions k WHERE k.import_id=s.import_id AND k.actor=s.actor AND k.case_ids=s.case_ids AND (
+		(k.state='done' AND k.cursor>=json_array_length(k.case_ids) AND s.created_at<k.updated_at) OR
+		(k.state!='done' AND (k.cursor>s.cursor OR (k.cursor=s.cursor AND (k.updated_at>s.updated_at OR (k.updated_at=s.updated_at AND k.id<s.id)))))))
+		ORDER BY s.updated_at DESC,s.id LIMIT 1`, importID, actor).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -219,9 +226,31 @@ func (w *Workbench) Resume(ctx context.Context, importID, actor string) (*Sessio
 	return &s, err
 }
 
+// Repair only exact matching queues. Keep every row and original cursor/time;
+// mark redundant overlapping sessions done, without changing any case or review.
+// This runs on an explicit start, while Resume remains a read-only lookup.
+func (w *Workbench) repairSessions(ctx context.Context, importID, actor string) error {
+	tx, err := w.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	_, err = tx.ExecContext(ctx, `UPDATE evaluation_sessions AS s SET state='done' WHERE s.import_id=? AND s.actor=? AND s.state!='done' AND EXISTS (
+		SELECT 1 FROM evaluation_sessions k WHERE k.import_id=s.import_id AND k.actor=s.actor AND k.case_ids=s.case_ids AND (
+		(k.state='done' AND k.cursor>=json_array_length(k.case_ids) AND s.created_at<k.updated_at) OR
+		(k.state!='done' AND (k.cursor>s.cursor OR (k.cursor=s.cursor AND (k.updated_at>s.updated_at OR (k.updated_at=s.updated_at AND k.id<s.id)))))))`, importID, actor)
+	if err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 func (w *Workbench) Start(ctx context.Context, importID, actor, filter string) (Session, error) {
 	if actor == "" || filter != "first" && filter != "attention" {
 		return Session{}, errors.New("choose first review or cases needing a decision")
+	}
+	if err := w.repairSessions(ctx, importID, actor); err != nil {
+		return Session{}, err
 	}
 	if s, err := w.Resume(ctx, importID, actor); err != nil {
 		return Session{}, err
@@ -307,7 +336,7 @@ func (w *Workbench) Advance(ctx context.Context, id, actor, caseID string, curso
 	if err != nil {
 		return err
 	}
-	if s.Cursor != cursor || cursor < 0 || cursor >= len(s.CaseIDs) || s.CaseIDs[cursor] != caseID {
+	if s.State == "done" || s.Cursor != cursor || cursor < 0 || cursor >= len(s.CaseIDs) || s.CaseIDs[cursor] != caseID {
 		return ErrConflict
 	}
 	next, state := cursor+1, "active"
@@ -316,12 +345,23 @@ func (w *Workbench) Advance(ctx context.Context, id, actor, caseID string, curso
 	} else if next == len(s.CaseIDs) {
 		state = "done"
 	}
-	r, err := w.DB.ExecContext(ctx, `UPDATE evaluation_sessions SET cursor=?,state=?,updated_at=? WHERE id=? AND actor=? AND cursor=?`, next, state, store.Now(), id, actor, cursor)
+	tx, err := w.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	r, err := tx.ExecContext(ctx, `UPDATE evaluation_sessions SET cursor=?,state=?,updated_at=? WHERE id=? AND actor=? AND cursor=? AND state!='done'`, next, state, store.Now(), id, actor, cursor)
 	if err != nil {
 		return err
 	}
 	if n, _ := r.RowsAffected(); n != 1 {
 		return ErrConflict
 	}
-	return nil
+	if state == "done" {
+		ids, _ := json.Marshal(s.CaseIDs)
+		if _, err := tx.ExecContext(ctx, `UPDATE evaluation_sessions SET state='done' WHERE import_id=? AND actor=? AND case_ids=? AND state!='done'`, s.ImportID, actor, string(ids)); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }

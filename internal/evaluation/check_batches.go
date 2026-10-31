@@ -323,7 +323,7 @@ func (w *Workbench) RunCheckBatch(ctx context.Context, id, actor string, a Asses
 		next, why := CheckDone, ""
 		if e != nil {
 			next, why = CheckFailed, e.Error()
-			if assessmentPaused(e) {
+			if assessmentPaused(callCtx, e) {
 				next = CheckReady
 			}
 		}
@@ -340,7 +340,7 @@ func (w *Workbench) RunCheckBatch(ctx context.Context, id, actor string, a Asses
 			runErr = ErrConflict
 			break
 		}
-		if assessmentPaused(e) {
+		if assessmentPaused(callCtx, e) {
 			runErr = e
 			break
 		}
@@ -352,7 +352,7 @@ func (w *Workbench) RunCheckBatch(ctx context.Context, id, actor string, a Asses
 	next, why := CheckDone, ""
 	if runErr != nil {
 		next, why = CheckFailed, runErr.Error()
-		if assessmentPaused(runErr) {
+		if assessmentPaused(callCtx, runErr) {
 			next = CheckReady
 		}
 	}

@@ -174,6 +174,12 @@ The existing token or trusted sign-in proxy authenticates all routes; an open
 loopback instance trusts every local user, as the rest of the app does. Review
 sessions are scoped to that authenticated reviewer (or the local reviewer).
 
+Older builds may have left duplicate sessions. Resume prefers the copy with the
+furthest progress among identical active queues. An explicit start or session
+completion closes redundant overlapping copies for the same reviewer and import,
+while preserving their rows, cursors and all decisions. A later intentional review
+after completion remains separate.
+
 Select an evidence import, then start a session of up to ten cases. Each case
 shows the complete saved answer, its buyer question, intended brand identity and
 grading rules. The imported model verdict, supporting quote and note are omitted
@@ -197,13 +203,15 @@ unfinished decision before continuing. If no eligible first-review cases remain,
 the overview confirms the save and shows the next available actions. This uses
 the same development/held-out selection rules as starting a session normally.
 
-Uncommitted drafts autosave without advancing the queue. Edits to an already committed
-judgment stay in the browser tab until an explicit save; autosave never turns that
-judgment back into a draft. If a save committed before its page transition was
+Uncommitted drafts autosave without advancing the queue. Edits to a saved judgment or
+unresolved decision stay in the browser tab until an
+explicit save; autosave never turns either decision back into a draft. If a save committed
+before its page transition was
 interrupted, reopening the session offers **Continue session** without adding another
 decision to history. **Save and next** commits a validated
-judgment; **Leave unresolved** needs an issue and explanation; **End session** saves
-the unfinished draft and resumes at the same case. Failed or stale saves preserve
+judgment; **Leave unresolved** needs an issue and explanation. **End session** pauses
+at the same case, preserving a saved judgment or unresolved decision. It saves a
+draft only for unfinished work. Failed or stale saves preserve
 typed fields. A local backup stays in that browser tab's session storage until
 confirmed saved or discarded. Restoring it is explicit, and cannot silently
 replace a newer server revision. Live dashboard refresh is disabled on review pages.
@@ -257,10 +265,12 @@ they are secondary to the batch flow. First-review counts remain counts of
 unique human-reviewed answers, separate from completed model assessments.
 
 The worker continues when you leave the page and pauses after 30 minutes or an
-explicit pause. Results are saved per case. Resume reuses completed assessments;
-Paused assessments resume without selecting retry. Cancellation, timeouts and exhausted
-admission budgets return in-progress assessments to waiting without consuming an
-assessment attempt. Recorded provider charges remain. Provider or parse failures and
+explicit pause. Results are saved per case. Resume reuses completed assessments.
+Paused assessments resume without selecting retry. Stopping the enclosing run, its
+30-minute deadline and exhausted admission budgets return in-progress assessments
+to waiting without consuming an assessment attempt. A single request hitting its
+three-minute limit counts as a failed attempt; the sweep continues to later work. Recorded
+provider charges remain. Provider or parse failures and
 crashed claims require explicit retry and retain each check's two-attempt limit. A
 four-minute renewable worker lease prevents
 competing batches from overwriting progress; an interrupted process can be
@@ -289,7 +299,8 @@ neither admission budget is a hard billing ceiling. Claude Code uses its configu
 subscription rather than API charges. Missing access leaves human review usable.
 
 One check permits at most two assessment attempts. A request lasts at most three
-minutes; its four-minute lease allows explicit recovery after a process crash.
+minutes; its four-minute lease allows explicit recovery after a process crash. A request
+timeout uses an attempt, even though the surrounding run can continue.
 An expired lease is an unknown failed result, including a crash on the final attempt; it
 no longer blocks approval as running. Late workers cannot save after lease expiry or
 replace newer results. Provider/parse failures remain failed

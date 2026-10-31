@@ -5,36 +5,51 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/cheapseatsdev/cheapseats/internal/config"
 	"github.com/cheapseatsdev/cheapseats/internal/evaluation"
 	"github.com/cheapseatsdev/cheapseats/internal/grade"
 )
 
 func TestEvaluationCommittedJudgmentCannotBeOverwrittenByAutosave(t *testing.T) {
-	s, wb := evaluationServer(t)
-	_, id := evaluationFixture(t, wb)
-	ctx := context.Background()
-	j := evaluation.Judgment{Verdict: grade.Absent, AbsenceReason: "not-named", FullAnswer: true}
-	if _, err := wb.Save(ctx, id, 0, "judgment", j, "local reviewer", evaluation.Rubric()); err != nil {
-		t.Fatal(err)
-	}
-	h := s.Handler()
-	page := evaluationRequest(h, "GET", "/evaluation/cases/"+id, nil)
-	if page.Code != 200 || !strings.Contains(page.Body.String(), "data-committed") {
-		t.Fatal("committed form did not disable automatic server drafts")
-	}
-	values := url.Values{"revision": {"1"}, "rubric": {evaluation.Rubric()}, "note": {"an unfinished edit"}}
-	response := evaluationRequest(h, "POST", "/api/evaluation/cases/"+id+"/draft", values)
-	if response.Code == 200 {
-		t.Fatal("autosave replaced committed judgment")
-	}
-	c, err := wb.Case(ctx, id)
-	history, _ := wb.History(ctx, id)
-	if err != nil || c.Review.State != "reviewed" || c.Review.Revision != 1 || c.Review.Judgment.Expected() != j.Expected() || len(history) != 1 {
-		t.Fatalf("autosave changed committed review: %+v history=%d %v", c, len(history), err)
+	for _, state := range []string{"reviewed", "unresolved"} {
+		t.Run(state, func(t *testing.T) {
+			s, wb := evaluationServer(t)
+			_, id := evaluationFixture(t, wb)
+			ctx := context.Background()
+			j := evaluation.Judgment{Verdict: grade.Absent, AbsenceReason: "not-named", FullAnswer: true}
+			kind := "judgment"
+			if state == "unresolved" {
+				kind = "unresolved"
+				j.Issue = "identity"
+				j.Note = "The product identity needs confirmation."
+			}
+			if _, err := wb.Save(ctx, id, 0, kind, j, "local reviewer", evaluation.Rubric()); err != nil {
+				t.Fatal(err)
+			}
+			h := s.Handler()
+			page := evaluationRequest(h, "GET", "/evaluation/cases/"+id, nil)
+			if page.Code != 200 || !strings.Contains(page.Body.String(), "data-committed") {
+				t.Fatal("committed form did not disable automatic server drafts")
+			}
+			values := url.Values{"revision": {"1"}, "rubric": {evaluation.Rubric()}, "note": {"an unfinished edit"}}
+			response := evaluationRequest(h, "POST", "/api/evaluation/cases/"+id+"/draft", values)
+			if response.Code == 200 {
+				t.Fatal("autosave replaced committed judgment")
+			}
+			c, err := wb.Case(ctx, id)
+			history, _ := wb.History(ctx, id)
+			if err != nil || c.Review.State != state || c.Review.Revision != 1 || c.Review.Judgment.Expected() != j.Expected() || len(history) != 1 {
+				t.Fatalf("autosave changed committed review: %+v history=%d %v", c, len(history), err)
+			}
+		})
 	}
 }
 
@@ -165,5 +180,107 @@ func TestEvaluationShutdownWaitsForPausedStateAndClosesAdmission(t *testing.T) {
 	defer stop()
 	if _, claimed, err := s.claimEvaluationJob("too-late", stop); err == nil || claimed || nextCtx.Err() == nil {
 		t.Fatal("shutdown admitted another evaluation worker")
+	}
+}
+
+func TestEvaluationEndSessionPreservesSavedDecision(t *testing.T) {
+	for _, kind := range []string{"judgment", "unresolved"} {
+		t.Run(kind, func(t *testing.T) {
+			s, wb := evaluationServer(t)
+			a, id := evaluationFixture(t, wb)
+			ctx := context.Background()
+			if _, err := wb.Save(ctx, id, 0, "draft", evaluation.Judgment{}, "local reviewer", evaluation.Rubric()); err != nil {
+				t.Fatal(err)
+			}
+			session, err := wb.Start(ctx, a.ID, "local reviewer", "attention")
+			if err != nil {
+				t.Fatal(err)
+			}
+			j := evaluation.Judgment{Verdict: grade.Absent, AbsenceReason: "not-named", FullAnswer: true, Note: "Saved decision"}
+			if kind == "unresolved" {
+				j.Issue = "identity"
+			}
+			before, err := wb.Save(ctx, id, 1, kind, j, "local reviewer", evaluation.Rubric())
+			if err != nil {
+				t.Fatal(err)
+			}
+			form := url.Values{"revision": {"2"}, "rubric": {evaluation.Rubric()}, "session": {session.ID}, "cursor": {"0"}, "action": {"end"}, "note": {"An unsaved edit must not replace the decision"}}
+			r := evaluationRequest(s.Handler(), "POST", "/evaluation/cases/"+id, form)
+			after, err := wb.Case(ctx, id)
+			history, _ := wb.History(ctx, id)
+			if r.Code != 303 || err != nil || after.Review.State != before.State || after.Review.Revision != before.Revision || after.Review.Judgment.Note != j.Note || len(history) != 2 {
+				t.Fatalf("End session overwrote the saved decision: status=%d case=%+v events=%d %v", r.Code, after, len(history), err)
+			}
+			paused, err := wb.Session(ctx, session.ID, "local reviewer")
+			if err != nil || paused.State != "paused" || paused.Cursor != 0 {
+				t.Fatalf("session did not pause at the same case: %+v %v", paused, err)
+			}
+		})
+	}
+}
+
+func TestEvaluationSingleCheckPersistsPauseBeforeShutdownReturns(t *testing.T) {
+	started := make(chan struct{})
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.Copy(io.Discard, r.Body)
+		close(started)
+		<-r.Context().Done()
+	}))
+	defer api.Close()
+	t.Setenv("ANTHROPIC_API_KEY", "fake-single-check-key")
+	t.Setenv(config.AnthropicBaseURLVar, api.URL)
+	s, wb := evaluationServer(t)
+	defer s.StopEvaluationJobs()
+	_, id := evaluationFixture(t, wb)
+	ctx := context.Background()
+	if _, err := wb.Save(ctx, id, 0, "judgment", evaluation.Judgment{Verdict: grade.Absent, AbsenceReason: "not-named", FullAnswer: true}, "local reviewer", evaluation.Rubric()); err != nil {
+		t.Fatal(err)
+	}
+	p := s.evaluationAssessor().CheckPlan(id, 3)
+	finished := make(chan *httptest.ResponseRecorder, 1)
+	go func() {
+		finished <- evaluationRequest(s.Handler(), "POST", "/evaluation/checks/"+id, url.Values{"plan": {p.ID}, "max_usd": {"3"}})
+	}()
+	select {
+	case <-started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("single check did not reach the fake provider")
+	}
+	s.StopEvaluationJobs()
+	check, err := wb.Check(ctx, p.ID)
+	if err != nil || check.State != evaluation.CheckReady || check.Attempt != 0 {
+		t.Fatalf("shutdown failed to wait for the single check: %+v %v", check, err)
+	}
+	select {
+	case <-finished:
+	case <-time.After(5 * time.Second):
+		t.Fatal("single-check handler did not finish")
+	}
+	var spend float64
+	if err := wb.DB.QueryRow(`SELECT coalesce(sum(amount_usd),0) FROM spend_events`).Scan(&spend); err != nil || spend <= 0 {
+		t.Fatal("cancellation erased provider accounting", spend, err)
+	}
+	check, err = wb.RunCheck(ctx, p, "local reviewer", false, func(context.Context, grade.GoldenRecord, string, string, float64) (grade.Grade, float64, error) {
+		return grade.Grade{Verdict: grade.Absent}, 0, nil
+	})
+	if err != nil || check.State != evaluation.CheckDone || check.Attempt != 1 {
+		t.Fatalf("single check could not resume without retry after shutdown: %+v %v", check, err)
+	}
+}
+
+func TestEvaluationRetiredSessionBookmarkReturnsToQueue(t *testing.T) {
+	s, wb := evaluationServer(t)
+	a, id := evaluationFixture(t, wb)
+	ids, _ := json.Marshal([]string{id})
+	if _, err := wb.DB.Exec(`INSERT INTO evaluation_sessions VALUES ('retired',?,'local reviewer',?,0,'done','old','old')`, a.ID, string(ids)); err != nil {
+		t.Fatal(err)
+	}
+	r := evaluationRequest(s.Handler(), "GET", "/evaluation/sessions/retired", nil)
+	if r.Code != 303 || r.Header().Get("Location") != "/evaluation?import="+a.ID {
+		t.Fatalf("retired session reopened instead of returning to its queue: %d %s", r.Code, r.Header().Get("Location"))
+	}
+	r = evaluationRequest(s.Handler(), "POST", "/evaluation/cases/"+id, url.Values{"revision": {"0"}, "session": {"retired"}, "cursor": {"0"}, "rubric": {evaluation.Rubric()}, "action": {"end"}})
+	if r.Code != 409 {
+		t.Fatal("retired bookmark could change a decision", r.Code)
 	}
 }

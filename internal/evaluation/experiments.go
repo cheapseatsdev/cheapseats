@@ -340,7 +340,7 @@ func (w *Workbench) RunExperiment(ctx context.Context, id string, a Assessor, re
 				if callErr != nil {
 					next = CheckFailed
 					why = llm.Truncate(callErr.Error(), 1500)
-					if assessmentPaused(callErr) {
+					if assessmentPaused(ctx, callErr) {
 						next, refund = CheckReady, 1
 					}
 				} else {
@@ -361,7 +361,7 @@ func (w *Workbench) RunExperiment(ctx context.Context, id string, a Assessor, re
 				if n != 1 {
 					return ErrConflict
 				}
-				if assessmentPaused(callErr) {
+				if assessmentPaused(ctx, callErr) {
 					return callErr
 				}
 				if ctx.Err() != nil {

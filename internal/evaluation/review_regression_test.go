@@ -28,9 +28,14 @@ func TestCheckPausesPreserveRemainingAttemptAndResumeWithoutRetry(t *testing.T) 
 				t.Fatalf("failure: %+v %v", failed, err)
 			}
 			for i := 0; i < 3; i++ {
-				paused, err := w.RunCheck(ctx, p, "human", i == 0, func(context.Context, grade.GoldenRecord, string, string, float64) (grade.Grade, float64, error) {
+				runCtx, stop := context.WithCancel(ctx)
+				paused, err := w.RunCheck(runCtx, p, "human", i == 0, func(context.Context, grade.GoldenRecord, string, string, float64) (grade.Grade, float64, error) {
+					if !errors.Is(pause, budget.ErrExhausted) {
+						stop()
+					}
 					return grade.Grade{}, .02, fmt.Errorf("transport stopped: %w", pause)
 				})
+				stop()
 				if !errors.Is(err, pause) || paused.State != CheckReady || paused.Attempt != 1 || paused.Grade != nil {
 					t.Fatalf("pause %d: %+v %v", i, paused, err)
 				}
@@ -57,9 +62,14 @@ func TestExperimentPausesResumeWithoutRetryAndKeepRecordedCost(t *testing.T) {
 				t.Fatal(err)
 			}
 			for i := 0; i < 3; i++ {
-				err := w.RunExperiment(ctx, p.ID, a, false, func(context.Context, grade.GoldenRecord, string, string, float64) (grade.Grade, float64, error) {
+				runCtx, stop := context.WithCancel(ctx)
+				err := w.RunExperiment(runCtx, p.ID, a, false, func(context.Context, grade.GoldenRecord, string, string, float64) (grade.Grade, float64, error) {
+					if !errors.Is(pause, budget.ErrExhausted) {
+						stop()
+					}
 					return grade.Grade{}, .02, pause
 				})
+				stop()
 				if !errors.Is(err, pause) {
 					t.Fatalf("pause: %v", err)
 				}
@@ -302,7 +312,7 @@ func TestBatchPauseAndRealFailureHaveDifferentResumeRules(t *testing.T) {
 			err = w.RunCheckBatch(ctx, b.Plan.ID, "human", a, false, func(context.Context, grade.GoldenRecord, string, string, float64) (grade.Grade, float64, error) {
 				return grade.Grade{}, 0, interruption
 			})
-			paused := assessmentPaused(interruption)
+			paused := errors.Is(interruption, budget.ErrExhausted)
 			if paused && !errors.Is(err, interruption) {
 				t.Fatal(err)
 			}

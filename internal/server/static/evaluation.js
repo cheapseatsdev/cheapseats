@@ -102,7 +102,7 @@
   function edited() {
     if (submitting) return;
     conditionalFields(); dirty = true; changes++; stash(); clearTimeout(timer);
-    if (form.hasAttribute("data-committed")) status.textContent = "Edits are kept in this tab. Your committed judgment stays saved until you explicitly submit a change.";
+    if (form.hasAttribute("data-committed")) status.textContent = "Edits are kept in this tab. Your saved judgment or unresolved decision stays unchanged until you explicitly submit a change.";
     else if (!form.hasAttribute("data-resolution")) timer = setTimeout(saveDraft, 600);
   }
   form.addEventListener("input", edited); form.addEventListener("change", edited);

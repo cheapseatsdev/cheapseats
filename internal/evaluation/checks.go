@@ -128,8 +128,10 @@ func (w *Workbench) Check(ctx context.Context, id string) (Check, error) {
 // Pausing work is different from an assessment failure. Provider spending is
 // still settled by the accounting layer; only the logical retry allowance is
 // returned, so resume can select this assessment without explicit retry.
-func assessmentPaused(err error) bool {
-	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, budget.ErrExhausted)
+func assessmentPaused(runCtx context.Context, err error) bool {
+	// Only the enclosing run can pause work. A request's own timeout or
+	// cancellation while that run is healthy is an ordinary failed attempt.
+	return err != nil && (runCtx.Err() != nil || errors.Is(err, budget.ErrExhausted))
 }
 
 type AssessFunc func(context.Context, grade.GoldenRecord, string, string, float64) (grade.Grade, float64, error)
@@ -204,7 +206,7 @@ func (w *Workbench) RunCheck(ctx context.Context, p CheckPlan, actor string, ret
 	if callErr != nil {
 		nextState = CheckFailed
 		why = "Assessment failed: " + llm.Truncate(callErr.Error(), 1500)
-		if assessmentPaused(callErr) {
+		if assessmentPaused(ctx, callErr) {
 			nextState, refund = CheckReady, 1
 			why = "Assessment paused: " + llm.Truncate(callErr.Error(), 1500)
 		}

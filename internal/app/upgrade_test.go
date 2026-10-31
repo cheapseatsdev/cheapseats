@@ -318,6 +318,7 @@ func TestEvaluationDatasetUpgradePreservesReviewSession(t *testing.T) {
 		`INSERT INTO evaluation_imports VALUES ('import','source','digest','now')`,
 		`INSERT INTO evaluation_groupings VALUES ('import','method','{"cases":{}}','now')`,
 		`INSERT INTO evaluation_sessions VALUES ('session','import','reviewer','["case-a","case-b"]',1,'paused','now','now')`,
+		`INSERT INTO evaluation_sessions VALUES ('duplicate','import','reviewer','["case-a","case-b"]',0,'active','now','now')`,
 	} {
 		if _, err := old.Exec(query); err != nil {
 			t.Fatal(err)
@@ -333,6 +334,13 @@ func TestEvaluationDatasetUpgradePreservesReviewSession(t *testing.T) {
 	var cursor int
 	if err := db.QueryRow(`SELECT case_ids,cursor,state FROM evaluation_sessions WHERE id='session'`).Scan(&ids, &cursor, &state); err != nil || ids != `["case-a","case-b"]` || cursor != 1 || state != "paused" {
 		t.Fatalf("session changed: %s %d %s %v", ids, cursor, state, err)
+	}
+	resumed, err := evaluation.New(db.DB).Start(context.Background(), "import", "reviewer", "first")
+	if err != nil || resumed.ID != "session" || resumed.Cursor != 1 {
+		t.Fatalf("upgraded duplicate lost the progressed session: %+v %v", resumed, err)
+	}
+	if err := db.QueryRow(`SELECT case_ids,cursor,state FROM evaluation_sessions WHERE id='duplicate'`).Scan(&ids, &cursor, &state); err != nil || ids != `["case-a","case-b"]` || cursor != 0 || state != "done" {
+		t.Fatalf("duplicate repair lost its original row or progress: %s %d %s %v", ids, cursor, state, err)
 	}
 	if _, err := os.Stat(filepath.Join(data, "cheapseats.db.bak-v15")); err != nil {
 		t.Fatal(err)
