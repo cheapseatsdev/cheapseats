@@ -18,12 +18,16 @@ import (
 	"github.com/cheapseatsdev/cheapseats/internal/grade"
 )
 
-func TestEvaluationCommittedJudgmentCannotBeOverwrittenByAutosave(t *testing.T) {
+func TestEvaluationCommittedDecisionCannotBeReplacedByDraft(t *testing.T) {
 	for _, state := range []string{"reviewed", "unresolved"} {
 		t.Run(state, func(t *testing.T) {
 			s, wb := evaluationServer(t)
 			_, id := evaluationFixture(t, wb)
 			ctx := context.Background()
+			unfinished := evaluationRequest(s.Handler(), "GET", "/evaluation/cases/"+id, nil)
+			if unfinished.Code != 200 || !strings.Contains(unfinished.Body.String(), `value="draft"`) {
+				t.Fatal("unfinished case lost Save draft")
+			}
 			j := evaluation.Judgment{Verdict: grade.Absent, AbsenceReason: "not-named", FullAnswer: true}
 			kind := "judgment"
 			if state == "unresolved" {
@@ -39,10 +43,19 @@ func TestEvaluationCommittedJudgmentCannotBeOverwrittenByAutosave(t *testing.T) 
 			if page.Code != 200 || !strings.Contains(page.Body.String(), "data-committed") {
 				t.Fatal("committed form did not disable automatic server drafts")
 			}
+			if strings.Contains(page.Body.String(), `value="draft"`) {
+				t.Fatal("committed case still offers Save draft")
+			}
 			values := url.Values{"revision": {"1"}, "rubric": {evaluation.Rubric()}, "note": {"an unfinished edit"}}
 			response := evaluationRequest(h, "POST", "/api/evaluation/cases/"+id+"/draft", values)
 			if response.Code == 200 {
 				t.Fatal("autosave replaced committed judgment")
+			}
+			// A form opened before this change must not demote the decision.
+			values.Set("action", "draft")
+			response = evaluationRequest(h, "POST", "/evaluation/cases/"+id, values)
+			if response.Code < 400 || response.Code >= 500 {
+				t.Fatal("old Save draft form was not refused", response.Code)
 			}
 			c, err := wb.Case(ctx, id)
 			history, _ := wb.History(ctx, id)

@@ -205,7 +205,9 @@ the same development/held-out selection rules as starting a session normally.
 
 Uncommitted drafts autosave without advancing the queue. Edits to a saved judgment or
 unresolved decision stay in the browser tab until an
-explicit save; autosave never turns either decision back into a draft. If a save committed
+explicit save; autosave never turns either decision back into a draft. **Save draft**
+is available only for unfinished cases; saved decisions can be revised explicitly
+without first converting them to drafts. If a save committed
 before its page transition was
 interrupted, reopening the session offers **Continue session** without adding another
 decision to history. **Save and next** commits a validated

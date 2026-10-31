@@ -444,6 +444,13 @@ func (s *Server) evaluationSave(w http.ResponseWriter, r *http.Request) {
 	if action == "end" {
 		kind = "draft"
 	}
+	if action == "draft" && err == nil {
+		c, e := wb.Case(r.Context(), id)
+		err = e
+		if err == nil && (c.Review.State == "reviewed" || c.Review.State == "unresolved") {
+			err = errors.New("this decision is already saved; revise it explicitly instead of saving a draft")
+		}
+	}
 	preserveSaved := false
 	if action == "end" && err == nil {
 		if session == nil {
