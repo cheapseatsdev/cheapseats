@@ -33,3 +33,13 @@
 {{with .Grade}}<p>Model: {{.Verdict}} · top pick {{with .TopPick}}{{.}}{{else}}none{{end}} · namesake only {{.OtherProduct}} · tone {{with .Tone}}{{.}}{{else}}none{{end}}</p><p>{{.Reasoning}}</p>{{with .Evidence}}<blockquote class="evidence">{{.}}</blockquote>{{end}}{{end}}{{with .Error}}<p class="err">{{.}}</p>{{end}}{{else}}<p>No independent assessment has been saved yet. Preview and run a check to obtain one.</p>{{end}}
 </section>
 {{end}}
+{{define "evaluation-batch-offer"}}
+<section class="card"><h2>Run independent checks on these {{.Total}} judgments?</h2>
+<p>You have already reviewed these answers. {{.Plan.Model}} will assess them without seeing your labels. Run the set once, then compare all {{.Total}} results on one screen.</p>
+<p>{{.Cached}} / {{.Total}} assessments are already saved and will be reused. Up to {{.New}} assessments need to run.{{if .Subscription}} This uses the configured Claude Code subscription.{{else}} Estimated allowance for the new assessments: about ${{printf "%.4f" .Estimate}}, using configured prices and up to 16,000 output tokens per assessment.{{end}}</p>
+{{with .ReadyError}}<p class="warn">Provider unavailable: {{.}}. Saved results remain available.</p>{{end}}
+<form method="post" action="/evaluation/check-batches"><input type="hidden" name="plan" value="{{.PlanJSON}}">
+<details><summary>Budget and retry options</summary><label for="batch-budget">Total admission budget for these checks (USD)</label><input id="batch-budget" name="budget" type="number" min="0.01" max="1000" step="0.01" required value="{{printf "%.2f" .Plan.MaxUSD}}"><p class="muted small">Includes ${{printf "%.4f" .Plan.PriorUSD}} already recorded for these checks. One shared ceiling covers all selected checks and resumes, alongside each check's fixed limit and the daily budget. Reservations and final charges can differ; this is not a hard provider billing ceiling.</p><label><input type="checkbox" name="retry"> Include an explicit retry of failed or interrupted checks, within each check's two-attempt limit.</label></details>
+<button{{if and .New .ReadyError}} disabled{{end}}>{{if .New}}Run checks for all {{.Total}}{{else}}Compare all {{.Total}} saved assessments{{end}}</button>{{if and .New .ReadyError}} <button class="ghost" name="run" value="0">View available results</button>{{end}}</form>
+<p class="muted small">Your judgments stay saved. Agreements need no more clicks. Only differences need your decision.</p></section>
+{{end}}

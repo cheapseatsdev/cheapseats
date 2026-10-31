@@ -31,12 +31,12 @@ func TestEvaluationFlowConnectsSavedSessionChecksResolutionAndApproval(t *testin
 		t.Fatalf("save: %d %s", r.Code, r.Body.String())
 	}
 	r = evaluationRequest(h, "GET", r.Header().Get("Location"), nil)
-	if r.Code != 200 || !strings.Contains(r.Body.String(), "1 / 1 finished human judgments") || !strings.Contains(r.Body.String(), "/evaluation/checks?import="+a.ID) {
+	if r.Code != 200 || !strings.Contains(r.Body.String(), "1 / 1 finished human judgments") || !strings.Contains(r.Body.String(), `action="/evaluation/check-batches"`) {
 		t.Fatalf("session handoff: %d %s", r.Code, r.Body.String())
 	}
 	for _, path := range []string{"/evaluation?import=" + a.ID, "/evaluation/checks?import=" + a.ID} {
 		r = evaluationRequest(h, "GET", path, nil)
-		if r.Code != 200 || !strings.Contains(r.Body.String(), "Check saved judgments") {
+		if r.Code != 200 || !(strings.Contains(r.Body.String(), "Run independent checks") || strings.Contains(r.Body.String(), "Check saved judgments")) {
 			t.Fatalf("missing entry point: %s %d %s", path, r.Code, r.Body.String())
 		}
 		if strings.Contains(r.Body.String(), "IMPORTED_MODEL_NOTE_DO_NOT_DISCLOSE") {

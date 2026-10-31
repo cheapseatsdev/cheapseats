@@ -1,0 +1,40 @@
+{{define "title"}}Independent checks · Evaluation · {{end}}{{define "body"}}
+{{template "evaluation-confirmation" .}}<script defer src="{{asset "evaluation.js"}}"></script>
+<p><a href="/evaluation?import={{.Report.Batch.Plan.ImportID}}">← Evaluation</a></p>
+<h1 id="batch-heading" tabindex="-1">{{if .Running}}Running independent checks{{else}}Compare independent checks{{end}}</h1>
+<p class="sub">{{.Report.Total}} saved human judgments · {{.Report.Batch.Plan.Model}}. Model agreement does not add another human review.</p>
+{{with .Error}}<p class="err" role="alert">{{.}}</p>{{end}}{{if .Saved}}<p role="status">Kept {{.Saved}} saved judgments and recorded your explanation.</p>{{end}}
+{{if .Running}}
+<section class="card progress-card" data-check-batch-progress data-results="/evaluation/check-batches/{{.Report.Batch.Plan.ID}}" data-progress="/evaluation/check-batches/{{.Report.Batch.Plan.ID}}/progress">
+<h2>Checking the whole set</h2><p role="status" aria-live="polite" data-batch-status>{{.Report.Done}} / {{.Report.Total}} assessments saved · {{.Report.Failed}} failed. You will see all results together when this finishes.</p>
+<div class="pbar" role="progressbar" aria-label="Independent checks processed" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{printf "%.0f" .Percent}}"><i class="done" style="width:{{printf "%.1f" .Percent}}%"></i></div>
+<p>The batch continues if you leave this page. Saved assessments survive a pause or restart.</p><button class="ghost" type="button" data-progress-retry hidden>Retry progress updates</button>
+<form method="post" action="/evaluation/check-batches/{{.Report.Batch.Plan.ID}}/stop"><button class="ghost">Pause checks</button></form><noscript><p>Refresh this page to see progress and the completed comparison.</p></noscript>
+</section>
+{{else}}
+<div class="kpis"><div class="kpi"><b>{{.Report.Done}} / {{.Report.Total}}</b><small>assessments saved</small></div><div class="kpi"><b>{{.Report.Agreements}}</b><small>agree with your judgments</small></div><div class="kpi"><b>{{.Report.Differences}}</b><small>cases need a decision</small></div><div class="kpi"><b>{{.Report.Resolved}}</b><small>human decisions recorded</small></div><div class="kpi"><b>{{.Report.Failed}}</b><small>failed checks</small></div></div>
+{{with .Report.Batch.Error}}<p class="warn">The batch paused: {{.}}. Completed results remain saved.</p>{{end}}
+{{if or .Report.Waiting .Report.Failed .Report.Running}}<section class="card"><h2>Finish the remaining checks</h2><p>{{.Report.Waiting}} waiting · {{.Report.Failed}} failed · {{.Report.Running}} interrupted or still running. A failed check is unknown, not an absent brand. To change the budget or grader, return to Evaluation and start a new batch; saved assessments are reused.</p>{{with .ReadyError}}<p class="warn">Provider unavailable: {{.}}</p>{{end}}<form method="post" action="/evaluation/check-batches/{{.Report.Batch.Plan.ID}}/run"><label><input type="checkbox" name="retry"> Retry failed or interrupted checks explicitly. Completed assessments are reused.</label><p><button{{if .ReadyError}} disabled{{end}}>Resume remaining checks</button></p></form></section>{{end}}
+<h2>All {{.Report.Total}} comparisons</h2><p>Your judgments are already saved. Read the human and model labels side by side. Agreements need no action. Select differences to keep together with one explanation, or open a particular judgment to change it.</p>
+<form method="post" action="/evaluation/check-batches/{{.Report.Batch.Plan.ID}}/keep" data-batch-keep>
+<input type="hidden" name="rubric" value="{{.Report.Batch.Plan.Rubric}}">
+{{if .Report.Differences}}<p><label><input id="batch-select-all" type="checkbox"> Select all differences</label> <span class="muted small" data-selected-count aria-live="polite">0 selected</span></p>{{end}}
+{{$page:=.}}
+<div class="scroll"><table><thead><tr><th>Keep</th><th>Saved answer</th><th>Your judgment</th><th>Independent check</th><th>Comparison and action</th></tr></thead><tbody>
+{{range .Rows}}{{$row:=.}}<tr id="case-{{.Case.ID}}">
+<td>{{if .CanKeep}}<label><input type="checkbox" name="case" value="{{.Case.ID}}"><span class="sr">Keep my judgment for {{.Case.Record.Prompt}}</span></label><input type="hidden" name="revision_{{.Case.ID}}" value="{{.Case.Review.Revision}}">{{range .Pending}}<input type="hidden" name="checks_{{$row.Case.ID}}" value="{{.}}">{{end}}{{end}}</td>
+<td>{{.Case.Record.Prompt}}<br><span class="muted small">{{.Case.Record.Brand.Name}}</span><details><summary>Read saved answer</summary><div class="prose">{{markdown .Case.Record.Answer}}</div></details></td>
+<td><b>{{.Case.Review.Judgment.Verdict}}</b><br>top pick {{.Case.Review.Judgment.Expected.TopPick}}<br>namesake only {{.Case.Review.Judgment.Expected.OtherProduct}}<br>tone {{with .Case.Review.Judgment.Tone}}{{.}}{{else}}none{{end}}{{range .Case.Review.Judgment.Evidence}}<blockquote class="evidence">{{.}}</blockquote>{{end}}{{with .Case.Review.Judgment.Note}}<details><summary>Original review note</summary><p>{{.}}</p></details>{{end}}{{if ne .Case.Review.State "reviewed"}}<p class="warn">Human review is {{.Case.Review.State}}.</p>{{end}}{{if ne .Case.Review.Revision .InitialRevision}}<p class="muted small">Judgment updated since this batch started.</p>{{end}}</td>
+<td>{{with .Check}}{{with .Grade}}<b>{{.Verdict}}</b><br>top pick {{$row.ModelExpected.TopPick}}<br>namesake only {{.OtherProduct}}<br>tone {{with .Tone}}{{.}}{{else}}none{{end}}<p>{{.Reasoning}}</p>{{with .Evidence}}<blockquote class="evidence">{{.}}</blockquote>{{end}}{{else}}No assessment available.{{end}}{{if .Stale}}<p class="warn">Older evaluator or rules.</p>{{end}}{{else}}No assessment available.{{end}}{{with .Error}}<p class="err">{{.}}</p>{{end}}</td>
+<td>{{if .CanKeep}}<b>Needs your decision</b>{{with .Check.Fields}}<p>{{range $i,$v:=.}}{{if $i}}, {{end}}{{$v}}{{end}}</p>{{end}}{{else if ne .Case.Review.State "reviewed"}}Finish the human review.{{else if eq .State "done"}}{{if .Check.Resolved}}Human decision recorded.{{else if .Check.Stale}}Start a check with the current rules.{{else}}Agrees with your saved judgment.{{end}}{{else}}{{.State}} · result unknown{{end}}
+{{with .Issue}}<p class="err" role="alert">{{.}}</p>{{end}}
+<p><a href="/evaluation/cases/{{.Case.ID}}/resolve?import={{$page.Report.Batch.Plan.ImportID}}&amp;checks=1&amp;batch={{$page.Report.Batch.Plan.ID}}">{{if .CanKeep}}Change or inspect judgment{{else}}Open judgment{{end}}</a></p>
+{{if .OtherChecks}}<details><summary>Other assessments for this answer</summary>{{range .OtherChecks}}<p>{{.Plan.Model}} · {{.State}}{{with .Grade}} · {{.Verdict}} · {{.Reasoning}}{{end}}</p>{{end}}</details>{{end}}</td>
+</tr>{{end}}
+</tbody></table></div>
+{{if .Report.Differences}}<section class="card"><h2>Keep selected human judgments</h2><label for="batch-note">Why do your saved judgments fit these selected answers?</label><textarea id="batch-note" name="note" rows="3" maxlength="4000" required>{{.Note}}</textarea><p class="muted small">Your explanation applies to all selected cases and their pending checks. Each keep is saved with its human actor, revision and check IDs. No model label is accepted automatically.</p><button>Keep selected judgments</button></section>{{end}}
+</form>
+<section class="card"><h2>After comparing</h2><p>Resolve differences, finish unresolved human reviews, or explicitly exclude those cases when approving a dataset version. Matching assessments need no second save.</p><form method="post" action="/evaluation/datasets/prepare"><input type="hidden" name="import" value="{{.Report.Batch.Plan.ImportID}}"><button{{if .Report.Differences}} class="ghost"{{end}}>Preview dataset version</button></form><p><a href="/evaluation?import={{.Report.Batch.Plan.ImportID}}">Back to Evaluation</a></p></section>
+{{end}}
+<script defer src="{{asset "evaluation-batch.js"}}"></script>
+{{end}}
