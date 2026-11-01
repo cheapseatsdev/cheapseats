@@ -196,12 +196,12 @@ func TestClaudeStructuredRunsOnTheSubscription(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "api-key")
 	var out struct{ Verdict string }
 	prompt := strings.Repeat("a long prompt ", 20000) // past Linux's 128 KiB cap on one argument
-	if err := ClaudeStructured(context.Background(), "claude-haiku-5-5", "You grade.", prompt, map[string]any{"type": "object"}, &out); err != nil || out.Verdict != "mentioned" {
+	if err := ClaudeStructured(context.Background(), "claude-haiku-5-5", "You grade.", prompt, map[string]any{"type": "object", "additionalProperties": false}, &out); err != nil || out.Verdict != "mentioned" {
 		t.Fatalf("%+v %v", out, err)
 	}
 	got, _ := os.ReadFile(log)
 	args := string(got)
-	for _, want := range []string{"-p\n", "\n--json-schema\n{\"type\":\"object\"}\n", "\n--tools\n\n", "\n--max-turns\n3\n", "\n--safe-mode\n", "\n--model\nclaude-haiku-5-5\n", "KEY=unset"} {
+	for _, want := range []string{"-p\n", "\n--json-schema\n{\"additionalProperties\":false,\"type\":\"object\"}\n", "\n--tools\n\n", "\n--max-turns\n3\n", "\n--safe-mode\n", "\n--model\nclaude-haiku-5-5\n", "KEY=unset"} {
 		if !strings.Contains(args, want) {
 			t.Errorf("claude call lacks %q:\n%s", want, args)
 		}
@@ -267,5 +267,14 @@ func TestClaudeCLISendsNoTelemetry(t *testing.T) {
 	out, err := runCLI(context.Background(), config.ClaudeCode, "ANTHROPIC_API_KEY", "claude")
 	if err != nil || strings.TrimSpace(string(out)) != "1" {
 		t.Fatalf("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=%q, err %v", out, err)
+	}
+}
+
+// The CLI would take maxItems; the API answers it with an HTTP 400. Both paths refuse it.
+func TestClaudeStructuredRefusesSchemaTheAPIRefuses(t *testing.T) {
+	bad := map[string]any{"type": "array", "maxItems": 3, "items": map[string]any{"type": "string"}}
+	var out []string
+	if err := ClaudeStructured(context.Background(), "m", "s", "p", bad, &out); err == nil || !strings.Contains(err.Error(), "maxItems") {
+		t.Fatalf("schema the API refuses: %v", err)
 	}
 }

@@ -160,6 +160,9 @@ func OpenAI(ctx context.Context, body map[string]any) (map[string]any, error) {
 
 // Structured asks Claude for JSON matching schema and decodes it into out. Returns the usage.
 func Structured(ctx context.Context, model, system, user string, maxTokens int, schema map[string]any, out any) (map[string]any, error) {
+	if err := CheckSchema(schema); err != nil {
+		return nil, err
+	}
 	resp, err := Anthropic(ctx, map[string]any{
 		"model":      model,
 		"max_tokens": maxTokens,

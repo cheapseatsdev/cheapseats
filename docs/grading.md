@@ -35,7 +35,10 @@ the head-to-heads set read 84% visible for a brand no assistant knew.
 The grader reads the brand (name, aliases, about), the set's competitors, the question and the
 answer's text (`grade.Input`). It never sees the answer's citations or searches. Two rules apply
 after the model: an answer that never contains the brand's name or an alias is `absent` whatever
-the model said, and an `other_product` grade is `absent`.
+the model said, and an `other_product` grade is `absent`. The name check ignores case, spacing,
+Markdown emphasis and curly quotes, as the evidence check does, so `**Cheap** **Seats**` and a
+name broken across a line both count. Older grades missed those and could read `absent`;
+regrading corrects them.
 
 ## A method change
 
