@@ -45,6 +45,7 @@ func (s *Server) evaluationRoutes(mux *http.ServeMux) {
 	s.evaluationCheckRoutes(mux)
 	s.evaluationExperimentRoutes(mux)
 	s.evaluationBatchRoutes(mux)
+	s.evaluationImportRoutes(mux)
 }
 
 type evaluationRow struct {
@@ -208,6 +209,7 @@ type evaluationCaseData struct {
 	History                                                 []evaluation.Event
 	Session                                                 *evaluation.Session
 	ImportID                                                string
+	SourceURL                                               string
 	Error                                                   string
 	Saved                                                   bool
 	Position                                                int
@@ -266,6 +268,9 @@ func (s *Server) evaluationCaseData(r *http.Request, id string, session *evaluat
 	d.CheckQueue = r.URL.Query().Get("checks") == "1" || r.FormValue("checks") == "1"
 	d.CheckBatchID = r.FormValue("batch")
 	d.SavedJudgment = c.Review.Judgment
+	if src := c.Record.Source; src != nil && src.Run != "" && src.Result > 0 {
+		d.SourceURL = fmt.Sprintf("/runs/%s#result-%d", url.PathEscape(src.Run), src.Result)
+	}
 	d.Confirmation = s.evaluationConfirmation(r)
 	if d.Intent == "" {
 		d.Intent = "choice"

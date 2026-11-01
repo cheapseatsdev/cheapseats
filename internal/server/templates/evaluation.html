@@ -3,6 +3,7 @@
 <p class="sub">Review saved answers and test changes to grading. Importing and manual review make no model calls.</p>
 {{with .Error}}<p class="err" role="alert">{{.}}</p>{{end}}
 {{if .ReviewFinished}}<p role="status">Your judgment was saved. No more cases are eligible for this first-review session. Saved judgments and cases needing attention remain available below.</p>{{end}}
+<p><a class="iconlink" href="/evaluation/runs">Add answers from a saved run</a></p>
 {{if not .Import}}
 <section class="card"><h2>Review saved answers</h2><p>Import the bundled public golden records. Their existing labels are model proposals; importing them does not approve them.</p><form method="post" action="/evaluation/import"><button>Import saved review records</button></form></section>
 {{else}}
