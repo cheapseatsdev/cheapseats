@@ -16,7 +16,7 @@ Informational answers need not name a product. A competitor feature need not bec
 Every action, investigation and finding needs a title that names it, since a collapsed card shows
 only the title. A title that is empty, a placeholder, a single word or under six letters drops
 the item; the run's insights record what was omitted and why. Output with no insights to speak
-of (under 20 characters), or in which no item has a usable title, is a failed analysis rather than
+of (under 10 characters), or in which no item has a usable title, is a failed analysis rather than
 an empty one: the run records the reason as its analysis error, and a rebuild keeps the analysis it
 already had. Retrying usually gives a normal result.
 

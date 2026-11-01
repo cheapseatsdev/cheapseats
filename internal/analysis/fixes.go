@@ -322,7 +322,7 @@ var ErrDegenerate = errors.New("the analyst's output is unusable")
 
 // minInsights is the fewest characters of insights a real report has; one sentence of what the
 // run showed runs past it.
-const minInsights = 20
+const minInsights = 10
 
 // degenerate reports the analyst output that is a failed answer rather than an analysis: no
 // insights to speak of, or items none of which has a title that names it. One bad title among
