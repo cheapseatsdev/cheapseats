@@ -209,6 +209,78 @@ func TestCodeDigestFollowsImports(t *testing.T) {
 	}
 }
 
+// Codex's last cases. gofmt's rewrites of a file are made before hashing (CodeDigest hashes the
+// tree of format.Source's output), and a declaration is hashed with its kind and its own file's
+// imports.
+func TestCodeDigestFinalCases(t *testing.T) {
+	both := func(name string, a, b map[string][]byte, root string, wantEqual bool) {
+		t.Helper()
+		for _, names := range [][]string{{root}, nil} {
+			da, err := CodeDigest(a, names...)
+			if err != nil {
+				t.Fatalf("%s: %v", name, err)
+			}
+			db, err := CodeDigest(b, names...)
+			if err != nil {
+				t.Fatalf("%s: %v", name, err)
+			}
+			if (da == db) != wantEqual {
+				t.Errorf("%s (names %v): equal is %v, want %v", name, names, da == db, wantEqual)
+			}
+		}
+	}
+	one := func(src string) map[string][]byte { return map[string][]byte{"p.go": []byte(src)} }
+	gofmted := func(src string) map[string][]byte {
+		t.Helper()
+		out, err := format.Source([]byte(src))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(out) == src {
+			t.Fatalf("gofmt leaves %q alone, so this tests nothing", src)
+		}
+		return one(string(out))
+	}
+	for name, c := range map[string][2]string{
+		"func F() () {}":          {"package p\n\nfunc F() () {}\n", "F"},
+		"func (x (T)) M()":        {"package p\n\ntype T int\n\nfunc (x (T)) M() {}\n", "T"},
+		"duplicate blank imports": {"package p\n\nimport (\n\t_ \"embed\"\n\t_ \"embed\"\n)\n\nfunc F() {}\n", "F"},
+	} {
+		both(name, one(c[0]), gofmted(c[0]), c[1], true)
+	}
+	// The same blank import repeated in separate declarations, which gofmt leaves alone, is the
+	// same code too.
+	both("duplicate blank import declarations",
+		one("package p\n\nimport _ \"embed\"\nimport _ \"embed\"\n\nfunc F() {}\n"),
+		one("package p\n\nimport _ \"embed\"\n\nfunc F() {}\n"), "F", true)
+
+	// A file gofmt can't format is an error, not a digest of something else.
+	if _, err := CodeDigest(one("package p\n\nfunc {\n")); err == nil {
+		t.Errorf("a file that doesn't parse has a digest")
+	}
+
+	// The method on a parenthesized receiver is found as T.M and follows T.
+	recv := "package p\n\ntype T int\n\nfunc (x (T)) M() int { return 1 }\n"
+	if _, err := CodeDigest(one(recv), "T.M"); err != nil {
+		t.Errorf("T.M on a parenthesized receiver: %v", err)
+	}
+	both("a change to a method on a parenthesized receiver", one(recv), one(strings.Replace(recv, "return 1", "return 2", 1)), "T", false)
+
+	// a.go's m is math and b.go's math/cmplx; swapping them changes what both do, though the
+	// package's imports are the same.
+	swap := func(aPath, bPath string) map[string][]byte {
+		return map[string][]byte{
+			"a.go": []byte("package p\n\nimport m \"" + aPath + "\"\n\nfunc Root() any { return []any{m.Sqrt(-1), B()} }\n"),
+			"b.go": []byte("package p\n\nimport m \"" + bPath + "\"\n\nfunc B() any { return m.Sqrt(-1) }\n"),
+		}
+	}
+	both("swapping math and math/cmplx between files", swap("math", "math/cmplx"), swap("math/cmplx", "math"), "Root", false)
+
+	// C+1 == C is true for the float64 var and false for the untyped const.
+	both("const C = 1e20 and var C = 1e20", one("package p\n\nconst C = 1e20\n"), one("package p\n\nvar C = 1e20\n"), "C", false)
+	both("grouped const and var", one("package p\n\nconst (\n\tC = 1e20\n)\n"), one("package p\n\nvar (\n\tC = 1e20\n)\n"), "C", false)
+}
+
 // What the two switches parse to, so TestCodeDigestFollowsTheTree tests the difference it means to.
 func TestSwitchFormsParseDifferently(t *testing.T) {
 	for src, wantInit := range map[string]bool{

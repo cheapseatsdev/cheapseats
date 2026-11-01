@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"go/ast"
 	"go/constant"
+	"go/format"
 	"go/parser"
 	"go/token"
 	"hash"
 	"io"
 	"io/fs"
 	"reflect"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -51,13 +53,15 @@ func GoFiles(fsys fs.FS) map[string][]byte {
 	return files
 }
 
-// CodeDigest is the SHA-256 of Go code's syntax trees (hashNode): comments, semicolons and layout
-// aren't in a tree, so it changes with what the code does and not with how it's written up. files
+// CodeDigest is the SHA-256 of Go code's syntax trees (hashNode), each file parsed as gofmt writes
+// it: comments, semicolons and layout aren't in a tree, and what gofmt rewrites is rewritten
+// before hashing, so it changes with what the code does and not with how it's written up. files
 // are one package's files, by name. Without names, all of them count. With names, the roots, each
 // of which must be a top-level declaration (a func, a type, a var or const, or a method as
 // Type.Method), count with every declaration in the package they use, directly or not: whatever a
 // root's code names, and a type's methods, since encoding/json and the like call those unnamed,
-// and the imports of the files those declarations are in.
+// each declaration hashed with its kind (const, var, type) and the imports of its own file, which
+// say what package each name it uses from another one is.
 func CodeDigest(files map[string][]byte, names ...string) (string, error) {
 	paths := make([]string, 0, len(files))
 	for p := range files {
@@ -66,12 +70,15 @@ func CodeDigest(files map[string][]byte, names ...string) (string, error) {
 	sort.Strings(paths)
 	h := sha256.New()
 	fset := token.NewFileSet()
-	decls := map[string]ast.Node{}
-	declFile := map[string]string{} // the file a declaration is in
+	decls := map[string]codeDecl{}
 	fileImports := map[string][]string{}
 	methods := map[string][]string{} // a type's methods, as Type.Method
 	for _, p := range paths {
-		f, err := parser.ParseFile(fset, p, files[p], parser.SkipObjectResolution)
+		src, err := format.Source(files[p])
+		if err != nil {
+			return "", fmt.Errorf("%s: %w", p, err)
+		}
+		f, err := parser.ParseFile(fset, p, src, parser.SkipObjectResolution)
 		if err != nil {
 			return "", err
 		}
@@ -85,7 +92,7 @@ func CodeDigest(files map[string][]byte, names ...string) (string, error) {
 			switch d := d.(type) {
 			case *ast.FuncDecl:
 				name, recv := funcName(d)
-				decls[name], declFile[name] = d, p
+				decls[name] = codeDecl{d, token.FUNC, p}
 				if recv != "" {
 					methods[recv] = append(methods[recv], name)
 				}
@@ -93,7 +100,7 @@ func CodeDigest(files map[string][]byte, names ...string) (string, error) {
 				for _, s := range d.Specs {
 					switch s := s.(type) {
 					case *ast.TypeSpec:
-						decls[s.Name.Name], declFile[s.Name.Name] = s, p
+						decls[s.Name.Name] = codeDecl{s, d.Tok, p}
 					case *ast.ValueSpec:
 						// A const in a group can take its type and value from the one above it
 						// (iota), so the group counts as one.
@@ -103,7 +110,7 @@ func CodeDigest(files map[string][]byte, names ...string) (string, error) {
 						}
 						for _, n := range s.Names {
 							if n.Name != "_" {
-								decls[n.Name], declFile[n.Name] = c, p
+								decls[n.Name] = codeDecl{c, d.Tok, p}
 							}
 						}
 					}
@@ -131,7 +138,7 @@ func CodeDigest(files map[string][]byte, names ...string) (string, error) {
 	for len(queue) > 0 {
 		n := queue[0]
 		queue = queue[1:]
-		ast.Inspect(decls[n], func(x ast.Node) bool {
+		ast.Inspect(decls[n].node, func(x ast.Node) bool {
 			if id, ok := x.(*ast.Ident); ok {
 				add(id.Name)
 			}
@@ -146,25 +153,21 @@ func CodeDigest(files map[string][]byte, names ...string) (string, error) {
 		used = append(used, n)
 	}
 	sort.Strings(used)
-	// The imports of the files the used declarations are in say which package each name they use
-	// from another package is: encoding/json's json or another one's.
-	usedImports := map[string]bool{}
 	for _, n := range used {
-		for _, i := range fileImports[declFile[n]] {
-			usedImports[i] = true
-		}
-	}
-	importList := make([]string, 0, len(usedImports))
-	for i := range usedImports {
-		importList = append(importList, i)
-	}
-	sort.Strings(importList)
-	fmt.Fprintf(h, "imports %q\x00", importList)
-	for _, n := range used {
-		fmt.Fprintf(h, "%s\x00", n)
-		hashNode(h, reflect.ValueOf(decls[n]))
+		d := decls[n]
+		// Its own file's imports go with it: a.go's m can be math and b.go's math/cmplx.
+		fmt.Fprintf(h, "%s\x00%s\x00imports %q\x00", n, d.tok, fileImports[d.file])
+		hashNode(h, reflect.ValueOf(d.node))
 	}
 	return fmt.Sprintf("%x", h.Sum(nil)), nil
+}
+
+// codeDecl is a top-level declaration: its syntax, its kind (token.FUNC, or the const, var or type
+// of its GenDecl, since const C = 1e20 and var C = 1e20 are the same spec) and its file.
+type codeDecl struct {
+	node ast.Node
+	tok  token.Token
+	file string
 }
 
 // funcName is a func's name, or Type.Method and Type for a method.
@@ -172,9 +175,9 @@ func funcName(d *ast.FuncDecl) (name, recv string) {
 	if d.Recv == nil || len(d.Recv.List) != 1 {
 		return d.Name.Name, ""
 	}
-	t := d.Recv.List[0].Type
+	t := ast.Unparen(d.Recv.List[0].Type)
 	if s, ok := t.(*ast.StarExpr); ok {
-		t = s.X
+		t = ast.Unparen(s.X)
 	}
 	switch g := t.(type) { // a generic type's method: T[A], or T[A, B] with more parameters
 	case *ast.IndexExpr:
@@ -284,8 +287,8 @@ func hashFile(h hash.Hash, f *ast.File) {
 	hashNode(h, reflect.ValueOf(decls))
 }
 
-// imports are a file's imports as "name path" (the name empty when it's the package's own), sorted:
-// gofmt sorts them, and their order means nothing.
+// imports are a file's imports as "name path" (the name empty when it's the package's own), sorted
+// and without repeats: gofmt sorts them, and neither order nor a repeat means anything.
 func imports(f *ast.File) []string {
 	out := make([]string, 0, len(f.Imports))
 	for _, s := range f.Imports {
@@ -300,7 +303,7 @@ func imports(f *ast.File) []string {
 		out = append(out, name+" "+path)
 	}
 	sort.Strings(out)
-	return out
+	return slices.Compact(out)
 }
 
 // meaningfulPos are the positions whose presence is code: the "=" of an alias and the "..." that
