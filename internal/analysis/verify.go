@@ -96,7 +96,10 @@ var placeholderTitles = map[string]bool{
 // A title in a script written without spaces between words (Chinese, Japanese, Thai, ...) has
 // no words to count, so it needs only the letters; and a character of a script whose characters
 // are syllables or words (Han, kana, Hangul) counts as two letters: "价格异议" and "가격 문의"
-// clear the floor, "定价" doesn't, as "Pricing" doesn't.
+// clear the floor, "定价" doesn't, as "Pricing" doesn't. A vowel sign or virama of the
+// letter's own script (Devanagari and the other Indic scripts write vowels as marks on a
+// consonant) counts once with its letter, so "नया पेज" clears the floor as "New page" does,
+// while accents on a Latin letter, which belong to no script, and a pile of marks don't count.
 func titleProblem(title string) string {
 	t := strings.TrimSpace(title)
 	if t == "" {
@@ -106,12 +109,20 @@ func titleProblem(title string) string {
 		return "Its title is a placeholder."
 	}
 	n, unspaced := 0, false
+	var base rune // the letter a following vowel sign or virama may count with, or 0
 	for _, r := range t {
 		switch {
 		case unicode.In(r, syllabicScripts...):
 			n += 2
+			base = 0
 		case unicode.IsLetter(r) || unicode.IsDigit(r):
 			n++
+			base = r
+		case unicode.In(r, unicode.Mn, unicode.Mc) && base != 0 && sameScript(base, r):
+			n++
+			base = 0
+		default:
+			base = 0
 		}
 		unspaced = unspaced || unicode.In(r, unspacedScripts...)
 	}
@@ -125,8 +136,19 @@ func titleProblem(title string) string {
 // letters do, and scripts written without spaces between words.
 var (
 	syllabicScripts = []*unicode.RangeTable{unicode.Han, unicode.Hiragana, unicode.Katakana, unicode.Hangul, unicode.Yi}
-	unspacedScripts = []*unicode.RangeTable{unicode.Han, unicode.Hiragana, unicode.Katakana, unicode.Thai, unicode.Lao, unicode.Khmer, unicode.Myanmar, unicode.Tibetan}
+	unspacedScripts = []*unicode.RangeTable{unicode.Han, unicode.Hiragana, unicode.Katakana, unicode.Thai, unicode.Lao, unicode.Khmer, unicode.Myanmar, unicode.Tibetan, unicode.Yi}
 )
+
+// sameScript reports whether mark belongs to the script of letter. Combining marks shared
+// across scripts (accents) are in Inherited, which no letter is, so they never match.
+func sameScript(letter, mark rune) bool {
+	for _, table := range unicode.Scripts {
+		if unicode.Is(table, mark) {
+			return unicode.Is(table, letter)
+		}
+	}
+	return false
+}
 
 func omit(a *Analysis, what, title, why string) {
 	note := fmt.Sprintf("Omitted %s %q: %s", what, clip(title, 160), why)

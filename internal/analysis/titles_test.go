@@ -99,12 +99,22 @@ func TestTitlesInScriptsWithoutSpacesCountTheirLetters(t *testing.T) {
 		"หน้าราคาไม่มีแพ็กเกจฟรี", // Thai: the pricing page has no free plan
 		"가격 페이지", // Korean is spaced, with dense syllables
 		"Pricing 页面",
+		"ꀀꀁꀂ",        // Yi is written without spaces, with syllabic characters
+		"मूल्य सूची", // Hindi: price list, vowel signs and a virama on its consonants
+		"नया पेज",    // Hindi: new page
+		"ಬೆಲೆ ಪುಟ",   // Kannada: price page
 	} {
 		if why := titleProblem(title); why != "" {
 			t.Errorf("%q rejected: %s", title, why)
 		}
 	}
-	for _, title := range []string{"定价", "価格", "ราคา", "가격", "x 价"} {
+	for _, title := range []string{
+		"定价", "価格", "ราคา", "가격", "x 价", "ꀀꀁ",
+		"x\u0301\u0302\u0303\u0304 y\u0301\u0302", // accents on Latin letters are not letters
+		"x\u093e\u093f\u0940 y\u0940",             // nor are Devanagari vowel signs on a Latin letter
+		"का\u093f\u0940\u0941 की",                 // a pile of vowel signs counts once
+		"\u093e\u093f\u0940 \u0941\u0942\u0947",   // marks with no letter count for nothing
+	} {
 		if titleProblem(title) == "" {
 			t.Errorf("%q accepted", title)
 		}
