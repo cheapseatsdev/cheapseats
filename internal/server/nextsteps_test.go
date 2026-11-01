@@ -104,8 +104,9 @@ func TestNextStepsKeepsLegacyWorkAsReadOnlyInvestigation(t *testing.T) {
 		t.Fatalf("categories: %+v", steps)
 	}
 	fd := s.frontDoor(context.Background())
-	if len(fd.Advisory.Boundaries) != 1 || fd.Advisory.Boundaries[0] != "Claude and OpenAI only" {
-		t.Error("front door omits advisory boundaries")
+	// The advisory is internal strategy; a shared or public MCP server must not hand it out.
+	if js, _ := json.Marshal(fd); strings.Contains(string(js), "advisory") || strings.Contains(string(js), "Claude and OpenAI only") {
+		t.Errorf("front door exposes the advisory: %s", js)
 	}
 	if st := stepTo(fd, "get_next_steps"); st == nil || st.Args["kind"] != "investigations" {
 		t.Errorf("front door: %+v", fd.NextSteps)

@@ -67,7 +67,7 @@ func (g Grade) IsTopPick(brand string) bool {
 	return g.TopPick != nil && strings.EqualFold(*g.TopPick, brand)
 }
 
-var schema = map[string]any{
+var schema = llm.RegisterSchema("grade", "grader", map[string]any{
 	"type": "object",
 	"properties": map[string]any{
 		"verdict":       map[string]any{"type": "string", "enum": []string{"recommended", "mentioned", "absent"}},
@@ -84,7 +84,7 @@ var schema = map[string]any{
 	},
 	"required":             []string{"verdict", "position", "top_pick", "named", "reasoning", "why_not_top", "objections", "other_product", "tone", "praise", "evidence"},
 	"additionalProperties": false,
-}
+})
 
 // Verdicts are the three verdicts in the order they are defined.
 var Verdicts = []Verdict{Recommended, Mentioned, Absent}
@@ -216,13 +216,15 @@ func Input(cfg *config.Config, set sets.Set, prompt, answer string) string {
 	return b.String()
 }
 
-// namesBrand reports whether the answer contains the brand's name or an alias, ignoring case. It's
-// deliberately loose (a substring, so "rl" passes in "world"): it only ever overrules the model one
-// way, so a false match leaves the model's verdict standing.
+// namesBrand reports whether the answer contains the brand's name or an alias, folded the way
+// evidence quotes are: case, markdown marks, runs of space and curly quotes don't count, so
+// "**Cheap** **Seats**" and "Cheap\nSeats" name Cheap Seats. It's deliberately loose (a substring,
+// so "rl" passes in "world"): it only ever overrules the model one way, so a false match leaves the
+// model's verdict standing.
 func namesBrand(answer string, b config.Brand) bool {
-	text := strings.ToLower(answer)
+	text, _, _ := fold(answer)
 	for _, n := range append([]string{b.Name}, b.Aliases...) {
-		if n = strings.ToLower(strings.TrimSpace(n)); n != "" && strings.Contains(text, n) {
+		if n, _, _ = fold(strings.TrimSpace(n)); n != "" && strings.Contains(text, n) {
 			return true
 		}
 	}
