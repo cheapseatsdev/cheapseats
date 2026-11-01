@@ -43,7 +43,7 @@ Verification fails when its call fails or when none of the current pages could b
 
 A deployment with no advisory brief is not a failed verification. No candidate can pass the strategy check without one, on this run or any retry, so every candidate is an investigation that says the brief is missing, no pages are read, and the analysis is complete, with no error.
 
-When a rebuild fails and keeps the earlier analysis, `cheapseats fixes -rebuild <run-id>` prints the kept analysis, then the error and "Showing the run's earlier analysis, which the failed rebuild left in place.", and exits 1. `POST /api/runs/{id}/fixes` answers 500 with `error`, that sentence in `showing`, and in `analysis` the body `GET /api/runs/{id}/fixes` would return, which holds the kept analysis. Any other failure is a 500 with `error` alone. A first build whose verification failed stored its result, so both answer as for a clean build, with the error in the analysis.
+When a rebuild fails and keeps the earlier analysis, `cheapseats fixes -rebuild <run-id>` prints the analysis error with "Showing the run's earlier analysis, which the failed rebuild left in place.", then the kept analysis, then the error, and exits 1. The sentence is printed once: the closing error repeats it only when no analysis error above said it. `POST /api/runs/{id}/fixes` answers 500 with `error`, that sentence in `showing`, and in `analysis` the body `GET /api/runs/{id}/fixes` would return, which holds the kept analysis. Any other failure is a 500 with `error` alone. A first build whose verification failed stored its result, so both answer as for a clean build, with the error in the analysis.
 
 ## Separate completion from later results
 
