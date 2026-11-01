@@ -37,8 +37,10 @@ EOF
 
 remote "cat > '$dir/bin/cheapseats-watch' && chmod +x '$dir/bin/cheapseats-watch'" <<'EOF'
 #!/usr/bin/env bash
-# Emails each new problem with the last two days' runs, once: runs that ended partial, failed or
-# out of budget, fix lists that failed, and runs with no answer finished for two hours.
+# Emails each new problem once. Runs that ended partial, failed or out of budget count for two
+# days after they finish; a failed fix list counts whenever it fails, since a rebuild can be of
+# any run, however old; a run counts as stalled after two hours with no answer finished. Runs on
+# the VM (Linux): GNU date and systemd.
 set -euo pipefail
 to=$1
 dir="$HOME/cheapseats"
@@ -47,19 +49,25 @@ touch "$seen"
 db="file:$dir/data/cheapseats.db?mode=ro"
 since=$(date -u -d '2 days ago' +%Y-%m-%dT%H:%M:%SZ)
 stale=$(date -u -d '2 hours ago' +%Y-%m-%dT%H:%M:%SZ)
-problems=$(sqlite3 "$db" "
-  SELECT id || ' ' || status || ': ' || name || ' — ' || COALESCE(error, '') FROM runs
+# Each line is "key<TAB>message"; a key goes in the seen file once its message is sent. A failed
+# fix list keeps its error until the next good build replaces it, so its key is the run, the time
+# of its last good build and a checksum of the error: a rebuild that fails differently, or fails
+# after a good build, is new; the same failure next hour is not.
+problems=$(sqlite3 -separator $'\t' "$db" "
+  SELECT id || ' ' || status, id || ' ' || status || ': ' || name || ' — ' || replace(replace(COALESCE(error, ''), char(10), ' '), char(9), ' ') FROM runs
     WHERE status IN ('partial','failed','budget') AND finished_at >= '$since';
-  SELECT id || ' fix list failed: ' || name || ' — ' || fixes_error FROM runs
-    WHERE fixes_error IS NOT NULL AND finished_at >= '$since';
-  SELECT r.id || ' stalled: ' || r.name || ' — no answer finished since ' || COALESCE(MAX(x.finished_at), r.started_at)
+  SELECT id || ' fix list failed ' || COALESCE(fixes_at, 'never'), id || ' fix list failed: ' || name || ' — ' || replace(replace(fixes_error, char(10), ' '), char(9), ' ') FROM runs
+    WHERE fixes_error IS NOT NULL;
+  SELECT r.id || ' stalled', r.id || ' stalled: ' || r.name || ' — no answer finished since ' || COALESCE(MAX(x.finished_at), r.started_at)
     FROM runs r LEFT JOIN results x ON x.run_id = r.id
     WHERE r.status = 'running' GROUP BY r.id
     HAVING COALESCE(MAX(x.finished_at), r.started_at) < '$stale';")
 new=""
-while IFS= read -r line; do
-	[ -z "$line" ] && continue
-	key=${line%%:*}
+while IFS=$'\t' read -r key line; do
+	[ -z "$key" ] && continue
+	case $key in
+	*' fix list failed '*) key="$key $(printf '%s' "$line" | cksum | cut -d' ' -f1)" ;;
+	esac
 	if ! grep -qxF "$key" "$seen"; then
 		new="$new$line"$'\n'
 		printf '%s\n' "$key" >>"$seen"
