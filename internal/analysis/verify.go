@@ -511,7 +511,7 @@ func verifyDecision(d decision, f Fix, cfg *config.Config, pages []artifact) (Ve
 			return Verification{}, "The current target could not be read; its existing work and eligibility remain unknown."
 		}
 	}
-	v := Verification{Status: "verified", Summary: d.Summary, Sources: []string{}, Context: VerificationContext(cfg)}
+	v := Verification{Status: "verified", Summary: d.Summary, Sources: []string{}}
 	seen := map[string]bool{}
 	for _, gate := range gates {
 		c, ok := checkedProof(d.Checks[gate], gate, f, cfg, pages)
@@ -534,5 +534,6 @@ func verifyDecision(d decision, f Fix, cfg *config.Config, pages []artifact) (Ve
 	if len(v.Sources) == 0 {
 		return Verification{}, "No fetched artifact supports the proposed change."
 	}
+	v.Context = VerificationContext(cfg, f.Target, v)
 	return v, ""
 }

@@ -32,12 +32,12 @@ func verifiedServerEvidence(a *app.App, f analysis.Fix) analysis.Verification {
 	if !strings.Contains(target, "://") {
 		target = "https://" + target
 	}
-	v := analysis.Verification{Status: "verified", Summary: "Fixture artifact and scope checked.", Sources: []string{target}, Context: analysis.VerificationContext(a.Cfg)}
+	v := analysis.Verification{Status: "verified", Summary: "Fixture artifact and scope checked.", Sources: []string{target}}
 	for _, gate := range []string{"existing_work", "remaining_change", "capability", "strategy", "eligibility", "completion"} {
 		source := target
 		quote := "Fixture verified current artifact evidence."
 		if gate == "capability" {
-			source = "brand.facts"
+			source, quote = "brand.facts", a.Cfg.Brand.Facts[0] // a quoted fact must still be listed
 		}
 		if gate == "strategy" {
 			source = "brand.advisory"
@@ -48,6 +48,7 @@ func verifiedServerEvidence(a *app.App, f analysis.Fix) analysis.Verification {
 		}
 		v.Checks = append(v.Checks, analysis.VerificationCheck{Gate: gate, Source: source, Quote: quote, Reason: "The fixture explicitly verifies this gate for a transport test."})
 	}
+	v.Context = analysis.VerificationContext(a.Cfg, f.Target, v)
 	return v
 }
 

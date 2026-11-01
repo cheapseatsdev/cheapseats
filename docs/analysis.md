@@ -49,7 +49,7 @@ When a rebuild fails and keeps the earlier analysis, `cheapseats fixes -rebuild 
 
 An action's completion check describes the work itself: for example, a corrected link passes a local check, or a factual submission draft meets the published requirements. Later runs can show whether an answer found the page or recommended the product. Those observations are separate from completion and do not establish that the change caused them.
 
-Verification readiness is separate from the existing work states (`open`, `proposed`, `accepted`, `dismissed`). A recorded pull request does not prove improved visibility. Changing the product facts or advisory brief invalidates an earlier verification without calling a model from a report page.
+Verification readiness is separate from the existing work states (`open`, `proposed`, `accepted`, `dismissed`). A recorded pull request does not prove improved visibility. Changing the advisory brief, `about`, `audience` or `category`, a fact an action's checks quoted, or whether its pages are on a configured site invalidates an earlier verification without calling a model from a report page ([what invalidates it](next-steps.md#brand-brief)).
 
 ## Historical results and cost
 
