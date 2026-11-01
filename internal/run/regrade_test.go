@@ -72,20 +72,20 @@ func TestRegrade(t *testing.T) {
 	}
 
 	// Nothing changed: nothing to do, and the dry run says so.
-	p, err := e.PlanRegrade(ctx, runs, set)
+	p, err := e.PlanRegrade(ctx, runs, set, false)
 	if err != nil || len(p.Runs) != 0 || p.Current != 1 || p.CurrentAnswers != 6 || p.Unfinished != 1 || p.EstimatedUSD != 0 {
 		t.Fatalf("unchanged: %+v %v", p, err)
 	}
 
 	// A new competitor: every answer, under the same method.
 	set.Competitors = []sets.Competitor{{Name: "Coder"}}
-	p, _ = e.PlanRegrade(ctx, runs, set)
+	p, _ = e.PlanRegrade(ctx, runs, set, false)
 	if len(p.Runs) != 1 || p.Answers != 6 || p.Runs[0].FromMethod != p.Runs[0].ToMethod || p.EstimatedUSD <= 0 || p.Subscription {
 		t.Fatalf("competitors: %+v", p)
 	}
 	// On the claude CLI it's free.
 	e.Cfg.Grader = config.Model{Model: "g", Provider: config.ClaudeCode}
-	if p, _ := e.PlanRegrade(ctx, runs, set); !p.Subscription || p.EstimatedUSD != 0 || p.Answers != 6 || p.Runs[0].FromMethod == p.Runs[0].ToMethod {
+	if p, _ := e.PlanRegrade(ctx, runs, set, false); !p.Subscription || p.EstimatedUSD != 0 || p.Answers != 6 || p.Runs[0].FromMethod == p.Runs[0].ToMethod {
 		t.Fatalf("subscription: %+v", p)
 	}
 	e.Cfg.Grader = config.Model{Model: "g"}
@@ -93,7 +93,7 @@ func TestRegrade(t *testing.T) {
 	// The brand's about changes the method too. Dry runs cost nothing.
 	e.Cfg.Brand.About = "cloud workstations"
 	before := calls.Load()
-	p, _ = e.PlanRegrade(ctx, runs, set)
+	p, _ = e.PlanRegrade(ctx, runs, set, false)
 	if len(p.Runs) != 1 || p.Runs[0].FromMethod == p.Runs[0].ToMethod || calls.Load() != before {
 		t.Fatalf("about: %+v, %d calls", p, calls.Load()-before)
 	}
@@ -103,7 +103,7 @@ func TestRegrade(t *testing.T) {
 	down := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { http.Error(w, "bad request", 400) }))
 	defer down.Close()
 	llm.AnthropicURL = down.URL
-	rep, err := e.Regrade(ctx, runs, set)
+	rep, err := e.Regrade(ctx, runs, set, false)
 	llm.AnthropicURL = good
 	if err != nil || len(rep.Regraded) != 0 || rep.Failed[r.ID] == "" {
 		t.Fatalf("failing grader: %+v %v", rep, err)
@@ -114,13 +114,13 @@ func TestRegrade(t *testing.T) {
 
 	// A budget that can't cover it doesn't start it.
 	e.Cfg.Budget.DailyUSD = 0.000001
-	if rep, _ := e.Regrade(ctx, runs, set); rep.Stopped == "" || len(rep.Regraded) != 0 {
+	if rep, _ := e.Regrade(ctx, runs, set, false); rep.Stopped == "" || len(rep.Regraded) != 0 {
 		t.Fatalf("over budget: %+v", rep)
 	}
 	e.Cfg.Budget.DailyUSD = 0
 
 	before = calls.Load()
-	rep, err = e.Regrade(ctx, runs, set)
+	rep, err = e.Regrade(ctx, runs, set, false)
 	if err != nil || len(rep.Regraded) != 1 || rep.Answers != 6 || rep.CostUSD <= 0 || calls.Load()-before != 6 {
 		t.Fatalf("re-grade: %+v %v, %d calls", rep, err, calls.Load()-before)
 	}
@@ -152,7 +152,7 @@ func TestRegrade(t *testing.T) {
 	}
 	// Done: a second pass skips it.
 	runs, _ = e.Since(ctx, set.ID, "")
-	if p, _ := e.PlanRegrade(ctx, runs, set); len(p.Runs) != 0 || p.Current != 1 {
+	if p, _ := e.PlanRegrade(ctx, runs, set, false); len(p.Runs) != 0 || p.Current != 1 {
 		t.Fatalf("after: %+v", p)
 	}
 	if spent, _ := e.DB.SpentToday(ctx); spent <= 0 {
@@ -180,7 +180,7 @@ func TestRegradeWritesOnlyOverTheRunItRead(t *testing.T) {
 		e.DB.Exec(`UPDATE runs SET method='changed elsewhere' WHERE id=?`, id)
 	}
 	defer func() { beforeRegradeWrite = nil }()
-	rep, err := e.Regrade(ctx, runs, set)
+	rep, err := e.Regrade(ctx, runs, set, false)
 	if err != nil || len(rep.Regraded) != 0 || !strings.Contains(rep.Failed[r.ID], "changed while it was being re-graded") {
 		t.Fatalf("%+v %v", rep, err)
 	}
@@ -204,11 +204,11 @@ func TestRegradeSkipsRunsAskedDifferently(t *testing.T) {
 	}
 	e.Cfg.Brand.About = "cloud workstations"
 	runs, _ := e.Since(ctx, set.ID, "")
-	if p, _ := e.PlanRegrade(ctx, runs, set); len(p.Runs) != 1 || p.AskedDifferently != 0 {
+	if p, _ := e.PlanRegrade(ctx, runs, set, false); len(p.Runs) != 1 || p.AskedDifferently != 0 {
 		t.Fatalf("asked the same way: %+v", p)
 	}
 	e.Cfg.Brand.Audience = "an HR lead" // today's answer prompt differs from the run's
-	if p, _ := e.PlanRegrade(ctx, runs, set); len(p.Runs) != 0 || p.AskedDifferently != 1 || p.Answers != 0 {
+	if p, _ := e.PlanRegrade(ctx, runs, set, false); len(p.Runs) != 0 || p.AskedDifferently != 1 || p.Answers != 0 {
 		t.Fatalf("asked differently: %+v", p)
 	}
 }
@@ -254,8 +254,51 @@ func TestRegradeRetriesAFlakyAnswer(t *testing.T) {
 	llm.AnthropicURL = flaky.URL
 	defer func() { llm.AnthropicURL = good }()
 
-	rep, err := e.Regrade(ctx, runs, set)
+	rep, err := e.Regrade(ctx, runs, set, false)
 	if err != nil || len(rep.Regraded) != 1 || len(rep.Failed) != 0 {
 		t.Fatalf("a flaky answer lost the run: %+v %v", rep, err)
+	}
+}
+
+// A fix to the grading code doesn't change the grading inputs, so a run already graded with
+// today's is skipped unless forced. Forced, the plan counts and prices what it adds, the grades
+// are replaced with the old ones kept in grade_history, and the re-grade is recorded as forced.
+// A run asked differently still can't be forced into today's trend.
+func TestRegradeForce(t *testing.T) {
+	e, set, calls := setup(t, 0)
+	e.Cfg.Answerers = e.Cfg.Answerers[:1]
+	ctx := context.Background()
+	r, _ := e.Create(ctx, set, "manual")
+	if err := e.Execute(ctx, r.ID); err != nil {
+		t.Fatal(err)
+	}
+	runs, _ := e.Since(ctx, set.ID, "")
+	if p, _ := e.PlanRegrade(ctx, runs, set, false); len(p.Runs) != 0 || p.Current != 1 || p.Forced != 0 {
+		t.Fatalf("unforced: %+v", p)
+	}
+	p, err := e.PlanRegrade(ctx, runs, set, true)
+	if err != nil || len(p.Runs) != 1 || !p.Runs[0].Forced || p.Current != 0 || p.Forced != 1 || p.ForcedAnswers != 6 || p.Answers != 6 ||
+		p.ForcedUSD <= 0 || p.ForcedUSD != p.EstimatedUSD || p.Runs[0].FromMethod != p.Runs[0].ToMethod {
+		t.Fatalf("forced plan: %+v %v", p, err)
+	}
+
+	before := calls.Load()
+	rep, err := e.Regrade(ctx, runs, set, true)
+	if err != nil || len(rep.Regraded) != 1 || rep.Answers != 6 || calls.Load()-before != 6 {
+		t.Fatalf("forced re-grade: %+v %v, %d calls", rep, err, calls.Load()-before)
+	}
+	got, _ := e.Get(ctx, r.ID)
+	if got.Method != r.Method || len(got.Regrades) != 1 || !got.Regrades[0].Forced || got.Regrades[0].FromInputs != got.Regrades[0].ToInputs {
+		t.Fatalf("forced regrades: %+v", got.Regrades)
+	}
+	var history int
+	e.DB.QueryRow(`SELECT COUNT(*) FROM results WHERE run_id=? AND json_array_length(grade_history)=1`, r.ID).Scan(&history)
+	if history != 6 {
+		t.Fatalf("%d of 6 answers kept their replaced grade", history)
+	}
+
+	e.Cfg.Brand.Audience = "an HR lead" // today's answer prompt differs from the run's
+	if p, _ := e.PlanRegrade(ctx, runs, set, true); len(p.Runs) != 0 || p.AskedDifferently != 1 || p.Forced != 0 {
+		t.Fatalf("asked differently, forced: %+v", p)
 	}
 }

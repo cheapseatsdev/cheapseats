@@ -36,18 +36,20 @@ func (a *App) regradeRuns(ctx context.Context, target string, sinceDays int) ([]
 	return []run.Run{*r}, s, nil
 }
 
-// PlanRegrade is what re-grading target would do and cost, without grading anything.
-func (a *App) PlanRegrade(ctx context.Context, target string, sinceDays int) (run.RegradePlan, error) {
+// PlanRegrade is what re-grading target would do and cost, without grading anything. force also
+// takes runs already graded with today's inputs (run.Engine.PlanRegrade).
+func (a *App) PlanRegrade(ctx context.Context, target string, sinceDays int, force bool) (run.RegradePlan, error) {
 	runs, s, err := a.regradeRuns(ctx, target, sinceDays)
 	if err != nil {
 		return run.RegradePlan{}, err
 	}
-	return a.Runs.PlanRegrade(ctx, runs, s)
+	return a.Runs.PlanRegrade(ctx, runs, s, force)
 }
 
 // Regrade grades target's stored answers again under today's grader, brand and competitors,
-// skipping runs already graded that way, within the daily budget. One re-grade per set at a time.
-func (a *App) Regrade(ctx context.Context, target string, sinceDays int) (run.RegradeReport, error) {
+// skipping runs already graded that way unless forced, within the daily budget. One re-grade per
+// set at a time.
+func (a *App) Regrade(ctx context.Context, target string, sinceDays int, force bool) (run.RegradeReport, error) {
 	runs, s, err := a.regradeRuns(ctx, target, sinceDays)
 	if err != nil {
 		return run.RegradeReport{}, err
@@ -56,17 +58,17 @@ func (a *App) Regrade(ctx context.Context, target string, sinceDays int) (run.Re
 		return run.RegradeReport{}, fmt.Errorf("set %s is already being re-graded", s.ID)
 	}
 	defer a.analyses.Delete("regrade/" + s.ID)
-	return a.Runs.Regrade(ctx, runs, s)
+	return a.Runs.Regrade(ctx, runs, s, force)
 }
 
 // StartRegrade is Regrade in the background, for the web UI and MCP: it returns the plan at once.
-func (a *App) StartRegrade(target string, sinceDays int) (run.RegradePlan, error) {
+func (a *App) StartRegrade(target string, sinceDays int, force bool) (run.RegradePlan, error) {
 	ctx := context.Background()
 	runs, s, err := a.regradeRuns(ctx, target, sinceDays)
 	if err != nil {
 		return run.RegradePlan{}, err
 	}
-	p, err := a.Runs.PlanRegrade(ctx, runs, s)
+	p, err := a.Runs.PlanRegrade(ctx, runs, s, force)
 	if err != nil || len(p.Runs) == 0 {
 		return p, err
 	}
@@ -78,7 +80,7 @@ func (a *App) StartRegrade(target string, sinceDays int) (run.RegradePlan, error
 	}
 	go func() {
 		defer a.analyses.Delete("regrade/" + s.ID)
-		rep, err := a.Runs.Regrade(ctx, runs, s)
+		rep, err := a.Runs.Regrade(ctx, runs, s, force)
 		if err != nil {
 			slog.Error("re-grade", "target", target, "err", err)
 			return

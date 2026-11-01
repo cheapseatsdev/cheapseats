@@ -26,7 +26,8 @@ import (
 
 // GradeInputs fingerprints what grading an answer reads besides the answer itself: the grader
 // prompt and model, the brand as the grader knows it, and the competitors it folds names onto.
-// A run whose fingerprint is today's would grade the same, so re-grading skips it.
+// A run whose fingerprint is today's would grade the same, so re-grading skips it unless forced:
+// a fix to the grading code (its post-processing, say) changes grades without changing these.
 func GradeInputs(s Snapshot) string {
 	type competitor struct {
 		Name    string
@@ -65,6 +66,8 @@ type Regrade struct {
 	ToInputs   string  `json:"to_inputs"`
 	FromGrader string  `json:"from_grader"`
 	ToGrader   string  `json:"to_grader"`
+	// Forced: the run was already graded with today's inputs and re-graded anyway (-force).
+	Forced bool `json:"forced,omitempty"`
 }
 
 // PastGrade is a grade a re-grade replaced (results.grade_history, newest last).
@@ -84,9 +87,14 @@ type RegradePlan struct {
 	Subscription bool         `json:"subscription"`
 	Runs         []RegradeRun `json:"runs"`
 	Answers      int          `json:"answers"`
-	// Runs already graded with today's inputs, and their answers: skipped.
+	// Runs already graded with today's inputs, and their answers: skipped unless forced.
 	Current        int `json:"current_runs"`
 	CurrentAnswers int `json:"current_answers"`
+	// With force, those runs are in Runs instead (marked Forced): how many, their answers, and
+	// their part of EstimatedUSD.
+	Forced        int     `json:"forced_runs,omitempty"`
+	ForcedAnswers int     `json:"forced_answers,omitempty"`
+	ForcedUSD     float64 `json:"forced_usd,omitempty"`
 	// Runs left alone because they aren't finished or are running.
 	Unfinished int `json:"unfinished_runs"`
 	// Runs whose answers were asked under another answer prompt or search policy: those are part of
@@ -105,6 +113,8 @@ type RegradeRun struct {
 	EstimatedUSD float64 `json:"estimated_usd"`
 	FromMethod   string  `json:"from_method"`
 	ToMethod     string  `json:"to_method"`
+	// Already graded with today's inputs; in the plan because it was forced.
+	Forced bool `json:"forced,omitempty"`
 }
 
 // RegradeReport is what a re-grade did.
@@ -159,7 +169,9 @@ func (e *Engine) gradable(ctx context.Context, id string) ([]gradable, error) {
 }
 
 // PlanRegrade works out a re-grade of runs, whose set today is set, without grading anything.
-func (e *Engine) PlanRegrade(ctx context.Context, runs []Run, set sets.Set) (RegradePlan, error) {
+// force also takes runs already graded with today's inputs, for a change to the grading code those
+// inputs don't cover; runs asked differently are still skipped.
+func (e *Engine) PlanRegrade(ctx context.Context, runs []Run, set sets.Set, force bool) (RegradePlan, error) {
 	p := RegradePlan{Grader: e.Cfg.Grader.Ref(), Subscription: e.Cfg.Grader.Via() == config.ClaudeCode, Runs: []RegradeRun{}}
 	_, priced := e.Cfg.Pricing[e.Cfg.Grader.Model]
 	p.Unpriced = !p.Subscription && !priced
@@ -177,12 +189,13 @@ func (e *Engine) PlanRegrade(ctx context.Context, runs []Run, set sets.Set) (Reg
 			return p, stored(err)
 		}
 		now := e.Regraded(r.Snapshot, set)
-		if GradeInputs(r.Snapshot) == GradeInputs(now) {
+		current := GradeInputs(r.Snapshot) == GradeInputs(now)
+		if current && !force {
 			p.Current++
 			p.CurrentAnswers += len(gs)
 			continue
 		}
-		rr := RegradeRun{ID: r.ID, Name: r.Name, CreatedAt: r.CreatedAt, Answers: len(gs), FromMethod: r.Method, ToMethod: Method(now)}
+		rr := RegradeRun{ID: r.ID, Name: r.Name, CreatedAt: r.CreatedAt, Answers: len(gs), FromMethod: r.Method, ToMethod: Method(now), Forced: current}
 		if !p.Subscription {
 			cfg := *e.Cfg
 			for _, g := range gs {
@@ -194,14 +207,20 @@ func (e *Engine) PlanRegrade(ctx context.Context, runs []Run, set sets.Set) (Reg
 		p.Runs = append(p.Runs, rr)
 		p.Answers += rr.Answers
 		p.EstimatedUSD += rr.EstimatedUSD
+		if rr.Forced {
+			p.Forced++
+			p.ForcedAnswers += rr.Answers
+			p.ForcedUSD += rr.EstimatedUSD
+		}
 	}
 	return p, nil
 }
 
 // Regrade grades the planned runs' answers again and records the new grades, run by run. A run
-// whose grading fails is left as it was; one the day's budget can't cover isn't started.
-func (e *Engine) Regrade(ctx context.Context, runs []Run, set sets.Set) (RegradeReport, error) {
-	p, err := e.PlanRegrade(ctx, runs, set)
+// whose grading fails is left as it was; one the day's budget can't cover isn't started. force is
+// as for PlanRegrade.
+func (e *Engine) Regrade(ctx context.Context, runs []Run, set sets.Set, force bool) (RegradeReport, error) {
+	p, err := e.PlanRegrade(ctx, runs, set, force)
 	rep := RegradeReport{RegradePlan: p, Regraded: []string{}}
 	if err != nil {
 		return rep, err
@@ -228,7 +247,7 @@ func (e *Engine) Regrade(ctx context.Context, runs []Run, set sets.Set) (Regrade
 				break
 			}
 		}
-		n, cost, err := e.regradeRun(ctx, byID[rr.ID], set)
+		n, cost, err := e.regradeRun(ctx, byID[rr.ID], set, rr.Forced)
 		rep.CostUSD += cost
 		if err != nil {
 			if rep.Failed == nil {
@@ -252,7 +271,8 @@ func (e *Engine) Regrade(ctx context.Context, runs []Run, set sets.Set) (Regrade
 const regradeTries = 3
 
 // regradeRun grades one run's answers again, then writes them all, or nothing if any failed.
-func (e *Engine) regradeRun(ctx context.Context, r Run, set sets.Set) (int, float64, error) {
+// forced records that the run was already graded with today's inputs.
+func (e *Engine) regradeRun(ctx context.Context, r Run, set sets.Set, forced bool) (int, float64, error) {
 	e.mu.Lock()
 	if _, ok := e.active[r.ID]; ok || e.stopping.Load() {
 		e.mu.Unlock()
@@ -348,7 +368,7 @@ func (e *Engine) regradeRun(ctx context.Context, r Run, set sets.Set) (int, floa
 		json.Unmarshal([]byte(prior.String), &regrades)
 	}
 	regrades = append(regrades, Regrade{At: at, Answers: len(gs), CostUSD: cost, FromMethod: r.Method, ToMethod: Method(now),
-		FromInputs: from, ToInputs: to, FromGrader: r.Snapshot.Grader, ToGrader: now.Grader})
+		FromInputs: from, ToInputs: to, FromGrader: r.Snapshot.Grader, ToGrader: now.Grader, Forced: forced})
 	sj, _ := json.Marshal(now)
 	rj, _ := json.Marshal(regrades)
 	res, err := tx.Exec(`UPDATE runs SET snapshot=?, method=?, regrades=? WHERE id=? AND status='done' AND method=? AND snapshot=?`, string(sj), Method(now), string(rj), r.ID, method, snapJS)

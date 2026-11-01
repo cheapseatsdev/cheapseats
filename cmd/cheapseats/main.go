@@ -52,9 +52,10 @@ const usage = `cheapseats: how AI assistants answer your buyers' questions.
   cheapseats next-steps <run-id> [-rebuild] actions, investigations and market findings as markdown
   cheapseats fixes <run-id> [-rebuild]      alias for next-steps
   cheapseats themes <run-id> [-rebuild]     what the run's answers praise and object to, grouped
-  cheapseats regrade <set-id|run-id> [-since 28d] [-dry-run=false]
+  cheapseats regrade <set-id|run-id> [-since 28d] [-force] [-dry-run=false]
                                          grade stored answers again with today's grader, brand
-                                         and competitors (a dry run, its cost, unless -dry-run=false)
+                                         and competitors (a dry run, its cost, unless -dry-run=false;
+                                         -force: also runs already graded with today's inputs)
   cheapseats suggest-prompts <set-id> [-n 10]  new buyer questions for a set, as TOML to paste
                                          (one analyst call; writes nothing)
   cheapseats review <set-id> [-days 30] [-json] [-suggest] [-jev]
@@ -542,9 +543,10 @@ func regradeCmd(ctx context.Context, args []string) error {
 	fs := flag.NewFlagSet("regrade", flag.ExitOnError)
 	sinceFlag := fs.String("since", "28d", "for a set, only runs from this long ago on: 28d, 72h, or all")
 	dry := fs.Bool("dry-run", true, "say what would be re-graded and what it would cost, and grade nothing")
+	force := fs.Bool("force", false, "also re-grade runs already graded with today's inputs, after a fix to the grading code")
 	fs.Parse(positionalLast(args))
 	if fs.NArg() != 1 {
-		return errors.New("usage: cheapseats regrade <set-id|run-id> [-since 28d] [-dry-run=false]")
+		return errors.New("usage: cheapseats regrade <set-id|run-id> [-since 28d] [-force] [-dry-run=false]")
 	}
 	since, err := parseSince(*sinceFlag)
 	if err != nil {
@@ -554,18 +556,22 @@ func regradeCmd(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	p, err := a.PlanRegrade(ctx, fs.Arg(0), since)
+	p, err := a.PlanRegrade(ctx, fs.Arg(0), since, *force)
 	if err != nil {
 		return err
 	}
-	printRegradePlan(p)
+	printRegradePlan(os.Stdout, p)
 	if *dry || len(p.Runs) == 0 {
 		if len(p.Runs) > 0 {
-			fmt.Println("\nDry run: nothing graded. Run again with -dry-run=false to re-grade.")
+			again := "-dry-run=false"
+			if *force {
+				again = "-force -dry-run=false"
+			}
+			fmt.Printf("\nDry run: nothing graded. Run again with %s to re-grade.\n", again)
 		}
 		return nil
 	}
-	rep, err := a.Regrade(ctx, fs.Arg(0), since)
+	rep, err := a.Regrade(ctx, fs.Arg(0), since, *force)
 	if err != nil {
 		return err
 	}
@@ -601,42 +607,52 @@ func parseSince(s string) (int, error) {
 	return int((d + 24*time.Hour - 1) / (24 * time.Hour)), nil
 }
 
-func printRegradePlan(p run.RegradePlan) {
+func printRegradePlan(out io.Writer, p run.RegradePlan) {
 	how := "through the API"
 	if p.Subscription {
 		how = "on the claude CLI (subscription)"
 	}
-	fmt.Printf("Re-grading with %s, %s.\n", p.Grader, how)
-	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+	fmt.Fprintf(out, "Re-grading with %s, %s.\n", p.Grader, how)
+	w := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)
 	if len(p.Runs) > 0 {
 		fmt.Fprintln(w, "\nRUN\tCREATED\tANSWERS\tMETHOD\tEST. COST")
 	}
 	for _, r := range p.Runs {
 		method := "unchanged"
+		if r.Forced {
+			method = "unchanged (forced)"
+		}
 		if r.FromMethod != r.ToMethod {
 			method = shortHash(r.FromMethod) + " → " + shortHash(r.ToMethod)
 		}
 		fmt.Fprintf(w, "%s\t%s\t%d\t%s\t$%.2f\n", r.ID, r.CreatedAt[:10], r.Answers, method, r.EstimatedUSD)
 	}
 	w.Flush()
-	fmt.Printf("\n%d runs to re-grade, %d answers.", len(p.Runs), p.Answers)
+	fmt.Fprintf(out, "\n%d runs to re-grade, %d answers.", len(p.Runs), p.Answers)
+	if p.Forced > 0 {
+		fmt.Fprintf(out, " -force adds %d runs (%d answers) already graded with today's inputs", p.Forced, p.ForcedAnswers)
+		if !p.Subscription && !p.Unpriced {
+			fmt.Fprintf(out, ", about $%.2f", p.ForcedUSD)
+		}
+		fmt.Fprint(out, ".")
+	}
 	if p.Current > 0 {
-		fmt.Printf(" %d runs (%d answers) already graded with today's inputs: skipped.", p.Current, p.CurrentAnswers)
+		fmt.Fprintf(out, " %d runs (%d answers) already graded with today's inputs: skipped (-force re-grades them).", p.Current, p.CurrentAnswers)
 	}
 	if p.Unfinished > 0 {
-		fmt.Printf(" %d unfinished or running: left alone.", p.Unfinished)
+		fmt.Fprintf(out, " %d unfinished or running: left alone.", p.Unfinished)
 	}
 	if p.AskedDifferently > 0 {
-		fmt.Printf(" %d asked differently (another answer prompt or search policy): re-grading can't join them to today's trend, skipped.", p.AskedDifferently)
+		fmt.Fprintf(out, " %d asked differently (another answer prompt or search policy): re-grading can't join them to today's trend, skipped.", p.AskedDifferently)
 	}
-	fmt.Println()
+	fmt.Fprintln(out)
 	switch {
 	case p.Subscription:
-		fmt.Println("Cost: $0 (the claude CLI runs on your subscription).")
+		fmt.Fprintln(out, "Cost: $0 (the claude CLI runs on your subscription).")
 	case p.Unpriced:
-		fmt.Println("Cost: unknown, the grader's model has no [pricing]; add it before re-grading.")
+		fmt.Fprintln(out, "Cost: unknown, the grader's model has no [pricing]; add it before re-grading.")
 	default:
-		fmt.Printf("Estimated cost: $%.2f (from token counts and [pricing]), within the daily budget.\n", p.EstimatedUSD)
+		fmt.Fprintf(out, "Estimated cost: $%.2f (from token counts and [pricing]), within the daily budget.\n", p.EstimatedUSD)
 	}
 }
 
