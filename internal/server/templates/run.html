@@ -42,6 +42,9 @@
 {{if eq .Run.Status "done"}}<form method="post" action="/runs/{{.Run.ID}}/fixes"><button class="ghost">{{icon "refresh-cw"}}Regenerate analysis</button></form>{{end}}
 <h3 id="investigations">Investigations</h3><p class="sub">Read-only checks and decisions to resolve before changing anything.</p>{{template "next-investigations" .Investigations}}
 <h3 id="market-findings">Market findings</h3>{{template "next-findings" .MarketFindings}}
+{{with .Omitted}}<details id="omitted"><summary>Candidates not promoted ({{len .}})</summary><p class="sub">Candidates the analyst proposed that did not become actions, and what stopped each. Investigations and market findings made from one are listed above.</p>
+<div class="scroll"><table><thead><tr><th>Candidate</th><th>Target</th><th>Stage</th><th>Reason</th></tr></thead>
+<tbody>{{range .}}<tr><td>{{.Title}}</td><td class="url mono">{{.Target}}</td><td>{{.Stage}} · {{.Outcome}}</td><td>{{.Reason}}</td></tr>{{end}}</tbody></table></div></details>{{end}}
 {{with .Insights}}<h2 id="insights">Insights</h2><div class="card insights">{{markdown .}}</div>{{end}}
 
 {{with .Opinion}}{{if or .Sentiment.Named .Themes}}<h2 id="opinion">What the answers say about {{brand}}</h2>

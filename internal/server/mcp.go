@@ -134,7 +134,7 @@ func (s *Server) mcpHandler() http.Handler {
 			}
 			return nil, fmt.Errorf("run %s has no result %d", a.Run, a.Result)
 		})
-	addTool(srv, "get_next_steps", "Next steps from each set's latest analysis, separated into verified actions, read-only investigations and market findings. Only actions include implementation prompts. Legacy suggestions without recorded verification remain investigations. Respect the brand's chosen scope: an intentional limitation may need no change. Use kind to focus on one category, and brief to omit action handoffs. Free; uses stored analysis.",
+	addTool(srv, "get_next_steps", "Next steps from each set's latest analysis, separated into verified actions, read-only investigations and market findings. Only actions include implementation prompts. Legacy suggestions without recorded verification remain investigations. Respect the brand's chosen scope: an intentional limitation may need no change. Use kind to focus on one category, and brief to omit action handoffs. Set omitted to also list the candidates each analysis proposed that did not become actions, with the stage that stopped each (filter, cap or review) and why: use it to explain an analysis with few or no actions. Free; uses stored analysis.",
 		func(ctx context.Context, a struct {
 			Set      string `json:"set,omitempty" jsonschema:"only this prompt set"`
 			Kind     string `json:"kind,omitempty" jsonschema:"actions, investigations, market_findings, or empty for all"`
@@ -142,12 +142,13 @@ func (s *Server) mcpHandler() http.Handler {
 			Priority string `json:"priority,omitempty" jsonschema:"action priority: urgent, high, medium or low"`
 			Limit    int    `json:"limit,omitempty" jsonschema:"maximum items per category"`
 			Brief    bool   `json:"brief,omitempty" jsonschema:"omit action implementation prompts"`
+			Omitted  bool   `json:"omitted,omitempty" jsonschema:"also list the candidates not promoted to actions, and why"`
 		}) (any, error) {
 			steps, err := s.App.NextSteps(ctx)
 			if err != nil {
 				return nil, err
 			}
-			return s.selectNextSteps(steps, app.QuickWinFilter{Set: a.Set, Status: a.Status, Priority: a.Priority}, a.Kind, a.Limit, a.Brief), nil
+			return s.selectNextSteps(steps, app.QuickWinFilter{Set: a.Set, Status: a.Status, Priority: a.Priority}, a.Kind, a.Limit, a.Brief, a.Omitted), nil
 		})
 	addTool(srv, "get_quick_wins", "Compatibility view of verified actions only, from the latest analysis of every prompt set. Use get_next_steps for investigations and market findings. Each action has a ready-to-paste prompt for Claude Code, its status (open, proposed or accepted; dismissed fixes only when asked for) and the work submitted for it or earlier for the same page. A page that several sets' lists ask for is one card, with the other sets' fixes under also_in (each with the run_id and rank mark_fix takes). When a set's latest analysis failed, a second text block holds analysis_errors, as get_next_steps gives them: the error and which analysis the list shows instead.",
 		func(ctx context.Context, a struct {
@@ -171,7 +172,7 @@ func (s *Server) mcpHandler() http.Handler {
 			if err != nil {
 				return nil, err
 			}
-			failed := s.selectNextSteps(steps, app.QuickWinFilter{Set: a.Set}, "", 0, true).Errors
+			failed := s.selectNextSteps(steps, app.QuickWinFilter{Set: a.Set}, "", 0, true, false).Errors
 			if len(failed) == 0 {
 				return actionHandoffs(out, a.Brief), nil
 			}

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"os/exec"
 	"regexp"
 	"sort"
 	"strings"
@@ -355,6 +356,38 @@ func rejectCandidate(a *Analysis, f Fix, why string) {
 	omit(a, "candidate", f.Title, why)
 }
 
+// MaxOmissionReason is how many characters of an omission's reason are stored: enough for a
+// planProblem sentence or a reviewer's summary, not a page of it.
+const MaxOmissionReason = 300
+
+// omitCandidate records in a.Omitted a candidate that did not become a fix (Omission).
+func omitCandidate(a *Analysis, f Fix, stage, outcome, reason string) {
+	a.Omitted = append(a.Omitted, Omission{Title: cut(f.Title, 160), Type: f.Type, Target: cut(f.Target, 300), Stage: stage, Outcome: outcome, Reason: cut(reason, MaxOmissionReason)})
+}
+
+// cut shortens s to n characters, ending in an ellipsis when it had more.
+func cut(s string, n int) string {
+	s = strings.TrimSpace(s)
+	if r := []rune(s); len(r) > n {
+		return strings.TrimSpace(string(r[:n-1])) + "\u2026"
+	}
+	return s
+}
+
+// missingFields names the fields a candidate needs that it left empty, or none.
+func missingFields(f Fix) []string {
+	var out []string
+	for _, x := range []struct {
+		name  string
+		empty bool
+	}{{"title", f.Title == ""}, {"target", f.Target == ""}, {"claim", f.Claim == ""}, {"done_when", f.DoneWhen == ""}, {"evidence", f.Evidence == ""}, {"prompts", len(f.Prompts) == 0}} {
+		if x.empty {
+			out = append(out, x.name)
+		}
+	}
+	return out
+}
+
 // artifact is one page supplied to the verifier. Truncated says its text is incomplete: the
 // reader stopped short of the page, or the text was clipped to MaxVerificationPageRunes.
 type artifact struct {
@@ -481,12 +514,46 @@ func (e *VerificationError) Error() string {
 
 func (e *VerificationError) Unwrap() error { return e.Err }
 
+// ErrNoReadablePage is the verification error when none of the current pages could be read.
+var ErrNoReadablePage = errors.New("no current page could be read")
+
 // unreadable says why no page could be read, from the first page's error.
 func unreadable(pages []artifact) error {
 	if len(pages) == 0 {
-		return errors.New("no current page could be read")
+		return ErrNoReadablePage
 	}
-	return fmt.Errorf("no current page could be read (%d tried; %s: %s)", len(pages), pages[0].URL, pages[0].Error)
+	return fmt.Errorf("%w (%d tried; %s: %s)", ErrNoReadablePage, len(pages), pages[0].URL, pages[0].Error)
+}
+
+// FailureCategory names the kind of a verification failure from its type or sentinel, never
+// from its message: a failed call's error can carry the provider's reply, the claude CLI's
+// result or stderr, or a page's read error, and so answer text or a secret. It is what the
+// analysis-built log line and a candidate's omission say about the failure; the full error
+// goes only where it went before (the run's fixes_error). "" for no error.
+func FailureCategory(err error) string {
+	var api *llm.APIError
+	var exit *exec.ExitError
+	var syntax *json.SyntaxError
+	var typ *json.UnmarshalTypeError
+	switch {
+	case err == nil:
+		return ""
+	case errors.Is(err, ErrNoReadablePage):
+		return "no_pages"
+	case errors.Is(err, context.DeadlineExceeded):
+		return "timeout"
+	case errors.Is(err, context.Canceled):
+		return "canceled"
+	case errors.Is(err, llm.ErrNoKey):
+		return "no_key"
+	case errors.As(err, &api):
+		return fmt.Sprintf("http_%d", api.Status)
+	case errors.As(err, &syntax), errors.As(err, &typ):
+		return "decode"
+	case errors.As(err, &exit):
+		return "cli_exit"
+	}
+	return "call_failed"
 }
 
 func verifyCandidates(ctx context.Context, cfg *config.Config, set sets.Set, a Analysis, cost float64) (Analysis, float64, error) {
@@ -496,6 +563,7 @@ func verifyCandidates(ctx context.Context, cfg *config.Config, set sets.Set, a A
 		f.Prompts = validPrompts(f.Prompts, len(set.Prompts))
 		if why := titleProblem(f.Title); why != "" {
 			rejectCandidate(&a, f, why+" It claimed: "+clip(f.Claim, 300))
+			omitCandidate(&a, f, StageFilter, OutcomeDropped, why)
 			continue
 		}
 		target := f.Target
@@ -504,12 +572,16 @@ func verifyCandidates(ctx context.Context, cfg *config.Config, set sets.Set, a A
 		}
 		if why := planProblem(f.Check, f.Decision, f.Evidence, target); why != "" {
 			rejectCandidate(&a, f, why)
+			omitCandidate(&a, f, StageFilter, OutcomeDropped, why)
 			continue
 		}
-		if f.Title == "" || f.Target == "" || f.Claim == "" || f.DoneWhen == "" || f.Evidence == "" || len(f.Prompts) == 0 {
+		if missing := missingFields(f); len(missing) > 0 {
+			omitCandidate(&a, f, StageFilter, OutcomeDropped, "it has no "+strings.Join(missing, ", ")+".")
 			continue
 		}
 		if f.Type != NewPage && f.Type != FixPage && f.Type != Positioning && f.Type != Outreach && f.Type != Product {
+			// The type is in the omission's own field; the reason stays fixed, as the log counts it.
+			omitCandidate(&a, f, StageFilter, OutcomeDropped, "its type is not new-page, fix-page, positioning, outreach or product.")
 			continue
 		}
 		f.Verification = Verification{}
@@ -524,6 +596,9 @@ func verifyCandidates(ctx context.Context, cfg *config.Config, set sets.Set, a A
 	}
 	sort.SliceStable(fs, func(i, j int) bool { return fs[i].Rank < fs[j].Rank })
 	if len(fs) > MaxCandidates {
+		for _, f := range fs[MaxCandidates:] {
+			omitCandidate(&a, f, StageCap, OutcomeDropped, fmt.Sprintf("ranked %d; only the %d best-ranked candidates are reviewed.", f.Rank, MaxCandidates))
+		}
 		fs = fs[:MaxCandidates]
 	}
 	a.Fixes = []Fix{}
@@ -538,6 +613,7 @@ func verifyCandidates(ctx context.Context, cfg *config.Config, set sets.Set, a A
 	if cfg.Brand.Advisory.Text() == "" {
 		for _, f := range fs {
 			a.Investigations = append(a.Investigations, investigation(set, f, "No advisory positioning/goals/boundaries were supplied; product fit must be established before action."))
+			omitCandidate(&a, f, StageReview, OutcomeInvestigation, "not reviewed: no advisory positioning, goals or boundaries are configured.")
 		}
 		return a, cost, nil
 	}
@@ -552,6 +628,7 @@ func verifyCandidates(ctx context.Context, cfg *config.Config, set sets.Set, a A
 	if !readable {
 		for _, f := range fs {
 			a.Investigations = append(a.Investigations, investigation(set, f, "Current artifacts could not be read; the proposed gap is unverified."))
+			omitCandidate(&a, f, StageReview, OutcomeInvestigation, "not reviewed: no current page could be read.")
 		}
 		a.VerificationFailed = true
 		return a, cost, &VerificationError{Candidates: len(fs), Err: unreadable(pages)}
@@ -583,6 +660,7 @@ Do not mark verified unless all six gates pass with evidence. Current supplied a
 	if err != nil {
 		for _, f := range fs {
 			a.Investigations = append(a.Investigations, investigation(set, f, "Verification could not complete; the proposed work remains an investigation."))
+			omitCandidate(&a, f, StageReview, OutcomeInvestigation, "not reviewed: the verification call failed ("+FailureCategory(err)+").")
 		}
 		a.VerificationFailed = true
 		return a, cost, &VerificationError{Candidates: len(fs), Err: err}
@@ -597,11 +675,13 @@ Do not mark verified unless all six gates pass with evidence. Current supplied a
 		ds := byIndex[i]
 		if len(ds) != 1 {
 			a.Investigations = append(a.Investigations, investigation(set, f, "Verification did not return one unambiguous decision."))
+			omitCandidate(&a, f, StageReview, OutcomeInvestigation, fmt.Sprintf("the reviewer returned %d decisions for it, not one.", len(ds)))
 			continue
 		}
 		d := ds[0]
 		if d.Status == "reject" {
 			rejectCandidate(&a, f, d.Summary)
+			omitCandidate(&a, f, StageReview, OutcomeRejected, "reject: "+d.Summary)
 			continue
 		}
 		if d.Status == "boundary" || d.Status == "already-done" {
@@ -617,12 +697,17 @@ Do not mark verified unless all six gates pass with evidence. Current supplied a
 			if _, ok := checkedProof(basis, gate, f, cfg, pages); ok {
 				ps, ids := promptIDs(set, f.Prompts)
 				a.Findings = append(a.Findings, Finding{Title: f.Title, Detail: d.Summary, Evidence: f.Evidence + " | " + d.Checks[gate].Source + ": " + d.Checks[gate].Quote, Prompts: ps, PromptIDs: ids})
+				omitCandidate(&a, f, StageReview, OutcomeFinding, d.Status+": "+d.Summary)
 				continue
 			}
 		}
-		v, why := verifyDecision(d, f, cfg, pages)
+		v, why, short := judgeDecision(d, f, cfg, pages)
 		if why != "" {
 			a.Investigations = append(a.Investigations, investigation(set, f, why))
+			if d.Status == "boundary" || d.Status == "already-done" {
+				short = d.Status + ", but its quoted basis did not check out: " + d.Summary
+			}
+			omitCandidate(&a, f, StageReview, OutcomeInvestigation, short)
 			continue
 		}
 		f.Verification = v
@@ -672,11 +757,21 @@ func checkedProof(p proof, gate string, f Fix, cfg *config.Config, pages []artif
 }
 
 func verifyDecision(d decision, f Fix, cfg *config.Config, pages []artifact) (Verification, string) {
-	if d.Status != "verified" || strings.TrimSpace(d.Summary) == "" {
-		return Verification{}, "Current evidence does not establish an eligible action: " + d.Summary
+	v, why, _ := judgeDecision(d, f, cfg, pages)
+	return v, why
+}
+
+// judgeDecision is verifyDecision with, when it fails, a short reason for the candidate's
+// omission as well: the reviewer's status and summary, or the gate verification failed at.
+func judgeDecision(d decision, f Fix, cfg *config.Config, pages []artifact) (Verification, string, string) {
+	if d.Status == "verified" && strings.TrimSpace(d.Summary) == "" {
+		return Verification{}, "Current evidence does not establish an eligible action: " + d.Summary, "the reviewer marked it verified but gave no summary."
+	}
+	if d.Status != "verified" {
+		return Verification{}, "Current evidence does not establish an eligible action: " + d.Summary, d.Status + ": " + d.Summary
 	}
 	if f.Type == NewPage {
-		return Verification{}, "A new page requires checking the relevant existing-content inventory; sampled pages alone do not establish a missing artifact."
+		return Verification{}, "A new page requires checking the relevant existing-content inventory; sampled pages alone do not establish a missing artifact.", "verification failed: a new page needs an inventory of existing content."
 	}
 	if f.Type != Product {
 		// Only a target written as one absolute URL is ever read for its own sake. Another one
@@ -687,7 +782,7 @@ func verifyDecision(d decision, f Fix, cfg *config.Config, pages []artifact) (Ve
 			found = found || absoluteURL(f.Target) && p.URL == webURL(f.Target) && p.Text != ""
 		}
 		if !found {
-			return Verification{}, "The current target could not be read; its existing work and eligibility remain unknown."
+			return Verification{}, "The current target could not be read; its existing work and eligibility remain unknown.", "verification failed: the target page could not be read."
 		}
 	}
 	v := Verification{Status: "verified", Summary: d.Summary, Sources: []string{}}
@@ -695,7 +790,11 @@ func verifyDecision(d decision, f Fix, cfg *config.Config, pages []artifact) (Ve
 	for _, gate := range gates {
 		c, ok := checkedProof(d.Checks[gate], gate, f, cfg, pages)
 		if !ok {
-			return Verification{}, "Verification lacks a supported " + gate + " check: " + d.Summary
+			short := "verification failed at " + gate + ": its quote, source or reason did not check out."
+			if p := d.Checks[gate]; !p.Passed {
+				short = "verification failed at " + gate + ": the reviewer marked it not passed. " + p.Reason
+			}
+			return Verification{}, "Verification lacks a supported " + gate + " check: " + d.Summary, short
 		}
 		v.Checks = append(v.Checks, c)
 		if !strings.HasPrefix(c.Source, "brand.") && c.Source != "candidate.done_when" && !seen[c.Source] {
@@ -707,12 +806,12 @@ func verifyDecision(d decision, f Fix, cfg *config.Config, pages []artifact) (Ve
 		candidate := f
 		candidate.Verification = v
 		if !goalAllowsProduct(cfg, candidate) {
-			return Verification{}, "The proposed product change is not supported by a quoted explicit advisory goal."
+			return Verification{}, "The proposed product change is not supported by a quoted explicit advisory goal.", "verification failed at strategy: no quoted advisory goal allows the product change."
 		}
 	}
 	if len(v.Sources) == 0 {
-		return Verification{}, "No fetched artifact supports the proposed change."
+		return Verification{}, "No fetched artifact supports the proposed change.", "verification failed: no fetched page supports it."
 	}
 	v.Context = VerificationContext(cfg, f.Target, v)
-	return v, ""
+	return v, "", ""
 }

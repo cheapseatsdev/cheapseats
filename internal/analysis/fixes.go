@@ -321,7 +321,27 @@ Observed run evidence:
 	if err := degenerate(a); err != nil {
 		return Analysis{}, cost, unusable(ctx, err, prompt, resp)
 	}
-	return verifyCandidates(ctx, cfg, set, a, cost)
+	a, cost, err = verifyCandidates(ctx, cfg, set, a, cost)
+	logBuilt(ctx, a, cost, err)
+	return a, cost, err
+}
+
+// logBuilt logs one line for a built analysis, so the service log says why a run got the
+// actions it did: two analyses on 0.7.4 saved no actions and nothing recorded why. The run's
+// page lists each omitted candidate; this is the count. A degraded build (VerificationError)
+// logs it too, with the failure's category (FailureCategory). Every reason it counts under
+// filtered_by is a fixed sentence, never the analyst's text.
+func logBuilt(ctx context.Context, a Analysis, cost float64, err error) {
+	t := a.Tally()
+	attrs := []any{"run", strings.TrimPrefix(llm.Operation(ctx), "analysis/"),
+		"candidates", t.Candidates, "filtered", t.Filtered, "filtered_by", t.FilteredByText(), "capped", t.Capped,
+		"reviewed", t.Reviewed, "verified", t.Verified, "rejected", t.Rejected,
+		"findings", t.Findings, "investigations", t.Investigations, "cost_usd", fmt.Sprintf("%.4f", cost)}
+	if err != nil {
+		// The category, never the error: its message can carry a reply's text or a secret.
+		attrs = append(attrs, "verify_error", FailureCategory(err))
+	}
+	slog.Info("analysis built", attrs...)
 }
 
 // ErrDegenerate is Build's error for analyst output too thin to be an analysis. A rebuild once
