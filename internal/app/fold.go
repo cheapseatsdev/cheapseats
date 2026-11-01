@@ -36,7 +36,7 @@ func init() {
 			}
 			for _, d := range decisions {
 				if d.Candidate != "" {
-					fmt.Printf("  %-32s -> %-24s %.2f%s\n", d.Variant, d.Display, d.Confidence, map[bool]string{true: "", false: "  (below the threshold)"}[d.Folds])
+					fmt.Printf("  %-32s -> %-24s %.2f%s\n", d.Variant, d.Display, d.Confidence, d.note())
 				}
 			}
 		},
@@ -48,39 +48,51 @@ type aliasCache struct {
 	mu    sync.Mutex
 	valid bool
 	m     map[string]string
+	// used is, for each variant a stored decision folds, the candidate of the decision the board
+	// reads (a variant can have more than one), so the listing can say which one that is.
+	used map[string]string
 }
 
 // Aliases is the board's folding map: a lower-cased name the grader wrote, to the name it is
 // displayed as. It holds the configured competitors' aliases and the stored Jev decisions at or
 // above the configured confidence. Configuration wins: a decision never refolds a configured
 // alias or a configured competitor's own name. Chains are followed to their end, and names whose
-// decisions point round in a circle stay apart (resolveFolds).
+// decisions point round in a circle fold onto one row (resolveFolds).
 func (a *App) Aliases() map[string]string {
+	m, _ := a.aliasBoard()
+	return m
+}
+
+// aliasBoard is Aliases, and for each variant a decision folds, the candidate of that decision.
+func (a *App) aliasBoard() (map[string]string, map[string]string) {
 	a.aliases.mu.Lock()
 	defer a.aliases.mu.Unlock()
 	if a.aliases.valid {
-		return a.aliases.m
+		return a.aliases.m, a.aliases.used
 	}
-	m := map[string]string{}
+	m := map[string]fold{}
+	used := map[string]string{}
 	for _, c := range a.Cfg.Competitors {
 		for _, al := range c.Aliases {
 			if k := strings.ToLower(strings.TrimSpace(al)); k != "" && !strings.EqualFold(al, c.Name) {
-				m[k] = c.Name
+				m[k] = fold{display: c.Name, configured: true}
 			}
 		}
 	}
 	var rows *sql.Rows
 	err := sql.ErrConnDone
 	if a.DB != nil {
-		rows, err = a.DB.Query(`SELECT variant, display, confidence FROM name_decisions WHERE candidate != '' ORDER BY variant, confidence DESC`)
+		// candidate breaks a tie in confidence, so which of two equally likely decisions the
+		// board reads doesn't depend on the order SQLite returns them in.
+		rows, err = a.DB.Query(`SELECT variant, candidate, display, confidence FROM name_decisions WHERE candidate != '' ORDER BY variant, confidence DESC, candidate`)
 	}
 	if err == nil {
 		min := a.Cfg.FoldConfidence()
 		seen := map[string]bool{}
 		for rows.Next() {
-			var v, d string
+			var v, c, d string
 			var conf float64
-			if rows.Scan(&v, &d, &conf) != nil {
+			if rows.Scan(&v, &c, &d, &conf) != nil {
 				continue
 			}
 			if seen[v] || conf < min || strings.EqualFold(v, d) {
@@ -88,67 +100,100 @@ func (a *App) Aliases() map[string]string {
 			}
 			seen[v] = true
 			if _, fixed := m[v]; !fixed && !isCompetitorName(v, a.Cfg) {
-				m[v] = d
+				m[v] = fold{display: d, confidence: conf}
+				used[v] = c
 			}
 		}
 		rows.Close()
 	} else if a.DB != nil {
 		slog.Error("aliases", "err", err)
 	}
-	m = resolveFolds(m, strings.ToLower)
-	a.aliases.m, a.aliases.valid = m, true
-	return m
+	a.aliases.m, a.aliases.used, a.aliases.valid = resolveFolds(m, strings.ToLower), used, true
+	return a.aliases.m, a.aliases.used
+}
+
+// fold is one entry of a folding map before it is resolved: the display name a key folds onto,
+// the decision's confidence, and whether it comes from the config rather than a decision.
+type fold struct {
+	display    string
+	confidence float64
+	configured bool
+}
+
+// outranks reports whether f's display is chosen over g's as the name of a circle: configuration
+// first, then the higher confidence, then, at an exact tie, the display that sorts first byte by
+// byte (Go's string order, so "Peec" before "Peec AI" before "peec").
+func (f fold) outranks(g fold) bool {
+	if f.configured != g.configured {
+		return f.configured
+	}
+	if f.confidence != g.confidence {
+		return f.confidence > g.confidence
+	}
+	return f.display < g.display
 }
 
 // resolveFolds returns a folding map with every chain followed to its end, the same whatever
 // order Go ranges over m in. m maps a key to the display name it folds onto, and key turns a
-// display name back into a key. An entry that maps to itself (key(m[v]) == v) ends a chain.
+// display name back into a key. An entry that maps to itself (key(m[v].display) == v) ends a
+// chain.
 //
 // Each entry is a decision that one name is another, so followed in turn they say where a name
-// ends up: a -> b -> c folds a onto c. Where they point round in a circle (a -> b -> a) they
-// contradict each other about which name is the product's, and picking one would be a guess:
-// every name on the circle is left unfolded, and a name decided onto one of them folds onto that
-// name and no further.
-func resolveFolds(m map[string]string, key func(string) string) map[string]string {
+// ends up: a -> b -> c folds a onto c. Where they point round in a circle (a -> b -> a) every
+// decision on it agrees that the names are one product, and they differ only on how to spell
+// it, so every name on the circle folds onto one row. Its display is the one written by the
+// circle's strongest entry (fold.outranks): a configured one if there is one, else the highest
+// confidence, else the display that sorts first. A name decided onto any name on the circle
+// folds onto the same row. Only the display is chosen, and it is chosen the same way every time.
+func resolveFolds(m map[string]fold, key func(string) string) map[string]string {
 	// next is the key v's entry points at, or false where v ends a chain.
 	next := func(v string) (string, bool) {
-		d, ok := m[v]
+		f, ok := m[v]
 		if !ok {
 			return "", false
 		}
-		k := key(d)
+		k := key(f.display)
 		return k, k != v
 	}
-	// A walk from v that comes back to v puts v on a circle. One that runs for as many steps as m
-	// has entries without coming back has entered a circle v isn't on.
-	circle := map[string]bool{}
+	// A walk from v that comes back to v puts v on a circle, and the strongest entry met on the
+	// way names it: every name on one circle walks the same entries, so they all pick the same
+	// one. A walk that runs for as many steps as m has entries without coming back has entered a
+	// circle v isn't on.
+	circle := map[string]string{}
 	for v := range m {
-		x := v
+		best, x := m[v], v
 		for range len(m) {
 			k, ok := next(x)
 			if !ok {
 				break
 			}
 			if k == v {
-				circle[v] = true
+				circle[v] = best.display
 				break
+			}
+			if f, has := m[k]; has && f.outranks(best) {
+				best = f
 			}
 			x = k
 		}
 	}
 	out := make(map[string]string, len(m))
-	for v, d := range m {
-		if circle[v] {
+	for v, f := range m {
+		if d, ok := circle[v]; ok {
+			out[v] = d
 			continue
 		}
-		k, ok := next(v)
-		for ok && !circle[k] {
-			dk, has := m[k]
+		d := f.display
+		for k, ok := next(v); ok; k, ok = next(k) {
+			if cd, on := circle[k]; on {
+				d = cd
+				break
+			}
+			fk, has := m[k]
 			if !has {
 				break
 			}
-			d = dk
-			k, ok = next(k)
+			d = fk.display
 		}
 		out[v] = d
 	}
@@ -471,13 +516,16 @@ func firstSentence(s string) string {
 	return s
 }
 
-// NameDecisions lists the stored decisions, newest first, for the UI and the CLI.
+// NameDecisions lists the stored decisions, newest first, for the UI and the CLI, each with
+// what the board does with it: whether it is the decision the board reads for its variant, the
+// row the variant lands on after chains and circles are resolved, and why a match isn't read.
 func (a *App) NameDecisions(ctx context.Context) ([]NameDecision, error) {
 	rows, err := a.DB.QueryContext(ctx, `SELECT variant, candidate, display, confidence, source, decided_at FROM name_decisions ORDER BY decided_at DESC, variant`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
+	board, used := a.aliasBoard()
 	var out []NameDecision
 	for rows.Next() {
 		var d NameDecision
@@ -486,10 +534,40 @@ func (a *App) NameDecisions(ctx context.Context) ([]NameDecision, error) {
 			return nil, err
 		}
 		d.Candidate = cand.String
-		d.Folds = d.Candidate != "" && d.Confidence >= a.Cfg.FoldConfidence()
+		if d.Candidate == "" {
+			out = append(out, d)
+			continue
+		}
+		d.FoldsTo = board[d.Variant]
+		switch {
+		case isCompetitorName(d.Variant, a.Cfg):
+			d.Reason = "a configured competitor's name"
+		case configuredAlias(d.Variant, a.Cfg) != "":
+			d.Reason = "a configured alias of " + configuredAlias(d.Variant, a.Cfg)
+		case d.Confidence < a.Cfg.FoldConfidence():
+			d.Reason = "below the threshold"
+		case strings.EqualFold(d.Variant, d.Display):
+			d.Reason = "names the variant itself"
+		case used[d.Variant] != d.Candidate:
+			d.Reason = "another decision for this name is read"
+		default:
+			d.Folds = true
+		}
 		out = append(out, d)
 	}
 	return out, rows.Err()
+}
+
+// configuredAlias is the configured competitor a lower-cased name is an alias of, or "".
+func configuredAlias(k string, cfg *config.Config) string {
+	for _, c := range cfg.Competitors {
+		for _, al := range c.Aliases {
+			if strings.EqualFold(k, strings.TrimSpace(al)) && !strings.EqualFold(al, c.Name) {
+				return c.Name
+			}
+		}
+	}
+	return ""
 }
 
 type NameDecision struct {
@@ -499,6 +577,33 @@ type NameDecision struct {
 	Confidence float64 `json:"confidence"`
 	Source     string  `json:"source"`
 	DecidedAt  string  `json:"decided_at"`
-	// Whether the decision folds the variant today, at the configured confidence.
+	// Whether this is the decision the board reads for the variant today: a match at or above
+	// the configured confidence about a name the config doesn't already place.
 	Folds bool `json:"folds"`
+	// The row the variant's answers are shown under on the board, after chains are followed and
+	// circles folded (Aliases), which can differ from Display. Empty where nothing folds the
+	// variant, so it keeps a row of its own under the name the grader wrote.
+	FoldsTo string `json:"folds_to,omitempty"`
+	// Why a match isn't read (Folds false): the variant is a configured name, the decision is
+	// below the threshold, or another decision for the same name is read instead.
+	Reason string `json:"reason,omitempty"`
+}
+
+// note is what the CLI listing prints after a match: why it isn't read, and the row the variant
+// lands on where that isn't the decision's own display.
+func (d NameDecision) note() string {
+	var parts []string
+	if !d.Folds {
+		parts = append(parts, "not read: "+d.Reason)
+	}
+	switch {
+	case d.FoldsTo == "" && !d.Folds:
+		parts = append(parts, "keeps its own row")
+	case d.FoldsTo != "" && d.FoldsTo != d.Display:
+		parts = append(parts, "on the board as "+d.FoldsTo)
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return "  (" + strings.Join(parts, "; ") + ")"
 }

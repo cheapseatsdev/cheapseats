@@ -101,14 +101,28 @@ asked about the more established one; at a tie, the shorter name is asked.
 `name_decisions` stores the chosen match and its probability. `App.Aliases` combines eligible
 stored matches with configured aliases; `report.Options.Aliases` folds board names and top picks.
 A `none` decision leaves a separate product and is not asked again. Each undecided candidate takes
-one request; the CLI prints matches and probabilities.
+one request. The CLI prints each match with its probability and what the board does with it: the
+row the name lands on when that differs from the match, or why the match isn't read (the name is
+a configured competitor or alias, the match is below the threshold, or another match for the same
+name is read).
 
-Reading the decisions back is the same on every read. Configuration wins: a stored decision never
-refolds a configured alias or a configured competitor's own name. A chain of decisions is followed
-to its end, so a -> b -> c folds a onto c. Decisions that point round in a circle (a -> b -> a)
-contradict each other about which name is the product's, so every name on the circle stays its
-own row, and a name decided onto one of them folds onto that name and no further. Phrase clusters
-are read back by the same rule.
+Reading the decisions back is the same on every read:
+
+1. **Configuration wins.** A stored decision never refolds a configured alias or a configured
+   competitor's own name.
+2. **One decision per name.** Where a name has several matches at or above the threshold, the most
+   confident is read; at equal confidence, the candidate that sorts first.
+3. **Chains are followed to their end**, so a -> b -> c folds a onto c.
+4. **A circle is one product.** Decisions that point round in a circle (a -> b -> a, or longer)
+   agree that the names are one product and differ only on how to spell it. Every name on the
+   circle, and every name decided onto one of them, folds onto one row. Its display is that of the
+   circle's most confident decision; at equal confidence, the display that sorts first byte by byte
+   (so `Peec` before `Peec AI` before `peec`). A configured entry on a circle outranks any decision,
+   so a circle that touches a configured name folds onto it.
+
+For example, `gracker -> gracker.ai` (0.92), `gracker.ai -> Gracker` (0.85) and
+`grackerai -> Gracker` (0.83) put all three names on one row, `gracker.ai`. Phrase clusters are read
+back by the same rules, without the configuration step.
 
 Give Jev category and answer context, define what counts as the same product, and keep one name's
 candidates in each request. Bare names and unrelated batched questions can change the judgment.
