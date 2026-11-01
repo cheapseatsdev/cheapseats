@@ -158,20 +158,7 @@ var source embed.FS
 // and their JSON tags, constants, functions), and the shared code that builds a structured output
 // request and reads its reply on either transport. Comments and layout don't count.
 var code = sync.OnceValue(func() string {
-	entries, err := source.ReadDir(".")
-	if err != nil {
-		panic("grade: " + err.Error())
-	}
-	files := map[string][]byte{}
-	for _, e := range entries {
-		if strings.HasSuffix(e.Name(), "_test.go") {
-			continue
-		}
-		if files[e.Name()], err = source.ReadFile(e.Name()); err != nil {
-			panic("grade: " + err.Error())
-		}
-	}
-	d, err := llm.CodeDigest(files)
+	d, err := llm.CodeDigest(llm.GoFiles(source))
 	if err != nil {
 		panic("grade: " + err.Error())
 	}
