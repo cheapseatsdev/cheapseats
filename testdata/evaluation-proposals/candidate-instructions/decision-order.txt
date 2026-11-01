@@ -1,0 +1,8 @@
+
+Additional decision procedure (preserve the rules and output schema above):
+1. Identify the intended brand from its name, aliases and description. Distinguish it from another product with the same name and from the question's subject.
+2. Decide whether the answer states anything substantive about that intended brand. Apply the existing rules for ignorance, hypotheticals and hedged concrete claims.
+3. Read the answer's final position for the user's situation. Apply the existing definition of active primary endorsement and its small-set limit. Do not equate an earlier favorable sentence with a final recommendation.
+4. Decide separately whether the answer commits most strongly to one product. Do not infer a unique top pick from order of appearance or from equal alternatives.
+5. Assess tone toward the intended brand separately from endorsement strength. Preserve praise and criticism that the answer actually contains.
+6. Return the existing schema only, with no invented claims or additional fields. If the rubric is ambiguous, explain the ambiguity within the existing reasoning field rather than inventing a new rule.
