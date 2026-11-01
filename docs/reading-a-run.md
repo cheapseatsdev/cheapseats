@@ -27,6 +27,14 @@ is a check of work under the team's control; later model answers and citations r
 omits action implementation prompts. Action status and priority filters do not filter findings
 or investigations. The JSON API also accepts the existing action `gap` and `site` filters.
 
+Both also return `analysis_errors`: for each set whose latest finished run's analysis failed, the
+`run_id`, a readable `error`, the provider's `request_id` when it gave one, and `shown_run_id`,
+the run whose analysis the other lists hold for that set. That is an earlier run when the failed
+analysis saved nothing, the same run when a failed verification kept its candidates as
+investigations, and absent when no analysis is available. `set` filters these too; `kind` does not
+hide them. The Next steps page and the dashboard show the same message above the advice, and a
+run report shows its own analysis error with the request id instead of the provider's raw reply.
+
 `/quick-wins` remains a route alias. `/api/quick-wins` and MCP `get_quick_wins` remain
 compatibility views of verified actions only. They do not expose unverified historical suggestions
 as ready work. `get_run` and `GET /api/runs/{id}` include investigations and market findings alongside

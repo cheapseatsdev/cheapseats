@@ -1,5 +1,6 @@
 {{define "title"}}Next steps · {{end}}{{define "body"}}
 <div class="page-heading"><div><p class="eyebrow">Act on your results</p><h1>Next steps</h1><p class="sub">Choose verified work, investigate an open question, or record what the results teach you about the market.</p></div></div>
+{{template "analysis-errors" .AnalysisErrors}}
 <nav class="runnav" aria-label="Next steps categories">{{range .Tabs}}<a class="filter-option" href="{{.Href}}"{{if .On}} aria-current="page"{{end}}>{{.Label}} {{.N}}</a>{{end}}</nav>
 {{if eq .View "actions"}}
 <div class="meta-row"><span>{{len .QuickWins}} of {{.Total}} verified actions</span><details class="help-disclosure" id="quick-wins-method"><summary>How actions are ranked</summary><p>Core sets come first, then a prioritization estimate: target prompts per working day, weighted by remaining headroom (1 minus the last 14 days' recommended rate; named for info prompts). Only verified suggestions are actions. Lists use each set's latest analysis; ranking does not predict an effect. Record your commit or pull request to track work; <b>open</b> shows fixes without a standing attempt. A later fix for the same page stays open as a retry.</p></details></div>

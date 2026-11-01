@@ -206,3 +206,71 @@ func TestHTTPAttemptResponsesOmitStaleImplementationPrompts(t *testing.T) {
 		t.Fatalf("original history changed: %+v %v", stored, err)
 	}
 }
+
+// A new run's failed analysis was invisible where people look: the hub and the dashboard fell
+// back to the older run's analysis without a word, /api/next-steps had no error field, and the
+// run page printed the provider's raw JSON.
+func TestFailedAnalysisShowsWhereTheAdviceIs(t *testing.T) {
+	a, db, execute, _ := fixFixture(t)
+	older, latest := execute(), execute()
+	stored := `HTTP 400: {"type":"error","error":{"type":"invalid_request_error","message":"prompt is too long: 212000 tokens > 200000 maximum"},"request_id":"req_011FAKE"}`
+	if _, err := db.Exec(`UPDATE runs SET created_at=CASE id WHEN ? THEN '2026-10-01T00:00:00Z' ELSE '2026-10-02T00:00:00Z' END, fixes=CASE id WHEN ? THEN fixes END, fixes_error=CASE id WHEN ? THEN ? END WHERE id IN (?, ?)`, older, older, latest, stored, older, latest); err != nil {
+		t.Fatal(err)
+	}
+	s, err := New(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := s.Handler()
+	get := func(path string) string {
+		t.Helper()
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, httptest.NewRequest("GET", path, nil))
+		if w.Code != 200 {
+			t.Fatalf("%s: %d %s", path, w.Code, w.Body.String())
+		}
+		return w.Body.String()
+	}
+	readable := "HTTP 400: prompt is too long: 212000 tokens &gt; 200000 maximum (request <span class=\"mono\">req_011FAKE</span>)"
+	for _, path := range []string{"/next-steps", "/"} {
+		page := get(path)
+		for _, want := range []string{readable, "the analysis of the latest run, <a class=\"mono\" href=\"/runs/" + latest, "Showing the analysis from run <a class=\"mono\" href=\"/runs/" + older, "Write a credential-gateway guide"} {
+			if !strings.Contains(page, want) {
+				t.Errorf("%s lacks %q", path, want)
+			}
+		}
+	}
+	if page := get("/runs/" + latest); !strings.Contains(page, "Analysis failed: "+readable) || strings.Contains(page, "invalid_request_error") {
+		t.Errorf("run page shows the provider's raw reply or no request id")
+	}
+	var steps app.NextSteps
+	if err := json.Unmarshal([]byte(get("/api/next-steps")), &steps); err != nil {
+		t.Fatal(err)
+	}
+	if len(steps.Errors) != 1 || steps.Errors[0].RunID != latest || steps.Errors[0].ShownRunID != older || steps.Errors[0].RequestID != "req_011FAKE" || steps.Errors[0].Message != "HTTP 400: prompt is too long: 212000 tokens > 200000 maximum" {
+		t.Fatalf("analysis_errors: %+v", steps.Errors)
+	}
+	if text := get("/api/next-steps?set=another-set"); !strings.Contains(text, `"analysis_errors": []`) {
+		t.Errorf("a set filter keeps other sets' errors: %s", text)
+	}
+
+	// A failed verification keeps its investigations on the failed run itself.
+	if _, err := db.Exec(`UPDATE runs SET fixes=(SELECT fixes FROM runs WHERE id=?) WHERE id=?`, older, latest); err != nil {
+		t.Fatal(err)
+	}
+	if page := get("/next-steps"); !strings.Contains(page, "Its candidates are shown as investigations, unverified.") {
+		t.Error("hub hides that the shown analysis is the failed one")
+	}
+}
+
+func TestReadAnalysisErrorKeepsTheRequestIDOfACutReply(t *testing.T) {
+	// llm.APIError stores at most 400 characters of the reply, so a long one is cut mid-JSON.
+	cut := `verification could not complete, so its 3 candidates are investigations: HTTP 529: {"type":"error","request_id":"req_CUT","error":{"type":"overloaded_error","message":"Overloaded, please try` + "…"
+	got := app.ReadAnalysisError(cut)
+	if got.RequestID != "req_CUT" || got.Message != "verification could not complete, so its 3 candidates are investigations: HTTP 529: Overloaded, please try…" {
+		t.Errorf("%+v", got)
+	}
+	if got := app.ReadAnalysisError("analysis requires all results graded"); got.Message != "analysis requires all results graded" || got.RequestID != "" {
+		t.Errorf("plain error changed: %+v", got)
+	}
+}

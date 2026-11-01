@@ -4,6 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"regexp"
+	"strconv"
+	"strings"
 
 	"github.com/cheapseatsdev/cheapseats/internal/analysis"
 	"github.com/cheapseatsdev/cheapseats/internal/sets"
@@ -14,6 +17,55 @@ type NextSteps struct {
 	Actions        []QuickWin          `json:"actions"`
 	Investigations []NextInvestigation `json:"investigations"`
 	Findings       []NextFinding       `json:"market_findings"`
+	// Sets whose latest finished run's analysis failed. The other lists may still hold an
+	// older run's analysis of the set, so a failure can't hide behind it.
+	Errors []AnalysisError `json:"analysis_errors"`
+}
+
+// AnalysisError is a set's latest finished run whose analysis failed. ShownRunID is the run whose
+// analysis the lists show for the set instead: the same run when the failure kept its
+// investigations (a failed verification), an older run, or "" when there's none.
+type AnalysisError struct {
+	SetID      string `json:"set_id"`
+	SetName    string `json:"set_name"`
+	RunID      string `json:"run_id"`
+	ShownRunID string `json:"shown_run_id,omitempty"`
+	AnalysisFailure
+}
+
+// AnalysisFailure is a stored analysis error made readable: a provider's JSON reply becomes its
+// message, with the request id kept for support.
+type AnalysisFailure struct {
+	Message   string `json:"error"`
+	RequestID string `json:"request_id,omitempty"`
+}
+
+var (
+	errorMessage   = regexp.MustCompile(`"message"\s*:\s*"((?:[^"\\]|\\.)*)`) // to its closing quote, or the cut
+	errorRequestID = regexp.MustCompile(`"request_id"\s*:\s*"([^"\\]+)"`)
+)
+
+// ReadAnalysisError reads a stored fixes_error. The provider's reply is cut to 400 characters
+// when stored (llm.APIError), so a long one is no longer valid JSON: the message and request id
+// are found by pattern, and an error with neither is returned as it is.
+func ReadAnalysisError(stored string) AnalysisFailure {
+	out := AnalysisFailure{Message: stored}
+	i := strings.Index(stored, "{")
+	if i < 0 {
+		return out
+	}
+	body := stored[i:]
+	if m := errorRequestID.FindStringSubmatch(body); m != nil {
+		out.RequestID = m[1]
+	}
+	if m := errorMessage.FindStringSubmatch(body); m != nil {
+		msg, err := strconv.Unquote(`"` + m[1] + `"`)
+		if err != nil {
+			msg = m[1]
+		}
+		out.Message = strings.TrimSpace(strings.TrimSpace(stored[:i]) + " " + msg)
+	}
+	return out
 }
 
 type NextInvestigation struct {
@@ -32,7 +84,7 @@ type NextFinding struct {
 }
 
 func emptyNextSteps() NextSteps {
-	return NextSteps{Actions: []QuickWin{}, Investigations: []NextInvestigation{}, Findings: []NextFinding{}}
+	return NextSteps{Actions: []QuickWin{}, Investigations: []NextInvestigation{}, Findings: []NextFinding{}, Errors: []AnalysisError{}}
 }
 
 // NextSteps reads the latest completed analysis of each active prompt set. It does
@@ -53,11 +105,18 @@ func (a *App) NextSteps(ctx context.Context) (NextSteps, error) {
 	for _, s := range a.Sets() {
 		var id, body string
 		err := a.DB.QueryRowContext(ctx, `SELECT id, fixes FROM runs WHERE set_id=? AND fixes IS NOT NULL AND status='done' ORDER BY created_at DESC LIMIT 1`, s.ID).Scan(&id, &body)
-		if err == sql.ErrNoRows {
-			continue
+		if err != nil && err != sql.ErrNoRows {
+			return out, err
 		}
+		failed, err := a.latestAnalysisError(ctx, s, id)
 		if err != nil {
 			return out, err
+		}
+		if failed != nil {
+			out.Errors = append(out.Errors, *failed)
+		}
+		if id == "" {
+			continue
 		}
 		an, err := analysis.DecodeAnalysis(body)
 		if err != nil {
@@ -82,6 +141,21 @@ func (a *App) NextSteps(ctx context.Context) (NextSteps, error) {
 	}
 	out.Actions = a.groupQuickWins(ctx, out.Actions)
 	return out, nil
+}
+
+// latestAnalysisError is the set's latest finished run's analysis error, if it has one, with
+// shown the run whose analysis the lists use for the set.
+func (a *App) latestAnalysisError(ctx context.Context, s sets.Set, shown string) (*AnalysisError, error) {
+	var id string
+	var stored sql.NullString
+	err := a.DB.QueryRowContext(ctx, `SELECT id, fixes_error FROM runs WHERE set_id=? AND status='done' ORDER BY created_at DESC LIMIT 1`, s.ID).Scan(&id, &stored)
+	if err == sql.ErrNoRows || err == nil && !stored.Valid {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &AnalysisError{SetID: s.ID, SetName: s.Name, RunID: id, ShownRunID: shown, AnalysisFailure: ReadAnalysisError(stored.String)}, nil
 }
 
 // RunNextSteps preserves the historical run's prompt numbering and work history.
