@@ -175,7 +175,10 @@ func Triage(cfg *config.Config, set sets.Set, f Fix) Fix {
 
 func str() map[string]any { return map[string]any{"type": "string"} }
 
-var schema = llm.RegisterSchema("analysis.fixes", "analyst", map[string]any{
+// The model writes the fields in required's order (llm.RegisterOrderedSchema): the report and
+// each item's title first, as the prompt describes them, and fields often blank or defaulted
+// last. Sent sorted, with check first, the analyst sometimes wrote every field blank.
+var schema = llm.RegisterOrderedSchema("analysis.fixes", "analyst", map[string]any{
 	"type": "object",
 	"properties": map[string]any{
 		"insights": str(),
@@ -183,26 +186,26 @@ var schema = llm.RegisterSchema("analysis.fixes", "analyst", map[string]any{
 		"fixes": map[string]any{"type": "array", "items": map[string]any{
 			"type": "object",
 			"properties": map[string]any{
-				"rank":      map[string]any{"type": "integer"},
-				"type":      map[string]any{"type": "string", "enum": []string{"new-page", "fix-page", "positioning", "outreach", "product"}},
 				"title":     str(),
+				"type":      map[string]any{"type": "string", "enum": []string{"new-page", "fix-page", "positioning", "outreach", "product"}},
 				"target":    str(),
 				"claim":     str(),
-				"done_when": str(),
-				"check":     str(),
-				"decision":  str(),
 				"evidence":  str(),
 				"prompts":   map[string]any{"type": "array", "items": map[string]any{"type": "integer"}},
 				"effort":    map[string]any{"type": "string", "enum": []string{"S", "M", "L"}},
+				"rank":      map[string]any{"type": "integer"},
 				"displaces": map[string]any{"type": []string{"string", "null"}},
+				"done_when": str(),
+				"check":     str(),
+				"decision":  str(),
 			},
-			"required":             []string{"rank", "type", "title", "target", "claim", "done_when", "check", "decision", "evidence", "prompts", "effort", "displaces"},
+			"required":             []string{"title", "type", "target", "claim", "evidence", "prompts", "effort", "rank", "displaces", "done_when", "check", "decision"},
 			"additionalProperties": false,
 		}},
 		"investigations": map[string]any{"type": "array", "items": object(map[string]any{
-			"title": str(), "why": str(), "check": str(), "decision": str(), "evidence": str(), "target": str(),
-			"prompts": map[string]any{"type": "array", "items": map[string]any{"type": "integer"}},
-		}, "title", "why", "check", "decision", "evidence", "target", "prompts")},
+			"title": str(), "why": str(), "check": str(), "decision": str(), "evidence": str(),
+			"prompts": map[string]any{"type": "array", "items": map[string]any{"type": "integer"}}, "target": str(),
+		}, "title", "why", "check", "decision", "evidence", "prompts", "target")},
 		"market_findings": map[string]any{"type": "array", "items": object(map[string]any{
 			"title": str(), "detail": str(), "evidence": str(),
 			"prompts": map[string]any{"type": "array", "items": map[string]any{"type": "integer"}},
@@ -293,7 +296,7 @@ Set purpose: %s
 
 Read the observed answers below. With few samples, a prompt's count is noisy; do not treat one answer as proof of a stable preference. Distinguish a useful method from a product choice, independent discovery from a question that supplies the brand, and returned search results from fetches and citations. An absent brand or an unretrieved URL does not establish that a page is missing, badly worded, blocked, or that a product capability is needed. Memory answers are not evidence of current page content. Do not turn correct competitor recommendations or intentional exclusions into automatic roadmap work.
 
-Return insights (a short evidence-based report with no required headings or theme count), fixes (at most %d candidates, zero is fine), investigations and market_findings (zero is fine for each). Cite result IDs and exact answer excerpts for observations; label uncertainty. Do not repeat work recorded below. An accepted boundary belongs in market_findings, not an action. If strategy or current evidence is missing, propose a bounded investigation with what to check, why, and which decision it changes.
+Return insights (a short evidence-based report with no required headings or theme count; never empty, even when nothing else is returned), fixes (at most %d candidates, zero is fine), investigations and market_findings (zero is fine for each). Cite result IDs and exact answer excerpts for observations; label uncertainty. Do not repeat work recorded below. An accepted boundary belongs in market_findings, not an action. If strategy or current evidence is missing, propose a bounded investigation with what to check, why, and which decision it changes.
 
 Each fix candidate needs a specific title, type (new-page, fix-page, positioning, outreach, product), target, claim, evidence, affected 1-based prompt numbers, effort (S/M/L), rank and displaces (URL or null). It must also supply check (a bounded read-only check naming its exact target and the specific unknown) and decision (a concrete business choice this evidence could change, such as choosing an entry route, retaining a limitation, correcting a fact or seeking eligible inclusion). Start check with Read, Inspect, Compare, Check, Confirm, Verify, List, Review, Find, Search or Count. A generic 'read the page and promote if useful' or 'investigate further' earns no candidate. If no meaningful decision depends on a check, omit the candidate rather than creating research work. It must describe a material remaining change; do not change wording just because it is different. Public facts support truthful claims, not expanding the product. Outreach requires checking current inclusion, submission rules and eligibility. Product candidates require an explicit advisory goal permitting the change. done_when must describe work and checks under the team's control; later recommendations, rankings, retrieval, acceptance by another publisher and noisy run changes are observations, not completion requirements. Do not tell anyone to publish, send, or open third-party PRs as part of a candidate.
 

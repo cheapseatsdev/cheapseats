@@ -256,7 +256,7 @@ func ClaudeStructured(ctx context.Context, model, system, prompt string, schema 
 	if err := llm.Registered(schema); err != nil {
 		return err
 	}
-	js, err := json.Marshal(schema)
+	js, err := llm.SchemaJSON(schema)
 	if err != nil {
 		return err
 	}

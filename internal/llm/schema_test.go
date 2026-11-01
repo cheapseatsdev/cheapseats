@@ -2,6 +2,7 @@ package llm
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -41,6 +42,42 @@ func TestCheckSchemaRefusesWhatTheAPIRefuses(t *testing.T) {
 	})
 	if err := CheckSchema(ok); err != nil {
 		t.Fatalf("supported schema refused: %v", err)
+	}
+}
+
+// schemaTestOrderedShape is written with typed lists and maps, which an ordered schema must order
+// all the same.
+func schemaTestOrderedShape() map[string]any {
+	str := map[string]any{"type": "string"}
+	return map[string]any{"type": "object", "additionalProperties": false, "required": []string{"z", "a"},
+		"properties": map[string]any{
+			"a": str, "m": str,
+			"z": map[string]any{"anyOf": []map[string]any{{"type": "null"}, {"type": "object", "additionalProperties": false,
+				"required": []string{"y", "b"}, "properties": map[string]map[string]any{"b": str, "y": str}}}},
+		}}
+}
+
+var schemaTestOrdered = RegisterOrderedSchema("test.ordered", "grader", schemaTestOrderedShape())
+
+// An ordered schema's properties go in required's order, at every depth, with any property not
+// required after them, sorted; other keys stay sorted. The request body carries that order. A
+// schema not registered as ordered is sent exactly as encoding/json writes it.
+func TestSchemaJSONSendsPropertiesInRequiredOrder(t *testing.T) {
+	want := `{"additionalProperties":false,"properties":{"z":{"anyOf":[{"type":"null"},{"additionalProperties":false,"properties":{"y":{"type":"string"},"b":{"type":"string"}},"required":["y","b"],"type":"object"}]},"a":{"type":"string"},"m":{"type":"string"}},"required":["z","a"],"type":"object"}`
+	got, err := SchemaJSON(schemaTestOrdered)
+	if err != nil || string(got) != want {
+		t.Fatalf("SchemaJSON = %s, %v\nwant %s", got, err, want)
+	}
+	body, err := json.Marshal(structuredBody("m", "s", "u", 10, schemaTestOrdered))
+	if err != nil || !strings.Contains(string(body), `"schema":`+want) {
+		t.Fatalf("request body %s, %v: schema not in declared order", body, err)
+	}
+
+	plain := schemaTestOrderedShape()
+	plain["description"] = "not registered as ordered"
+	got, err = SchemaJSON(plain)
+	if js, _ := json.Marshal(plain); err != nil || string(got) != string(js) {
+		t.Fatalf("unordered schema sent as %s, %v; want %s", got, err, js)
 	}
 }
 
