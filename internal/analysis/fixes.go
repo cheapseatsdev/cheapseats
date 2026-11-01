@@ -4,6 +4,7 @@ package analysis
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"sort"
@@ -307,7 +308,49 @@ Observed run evidence:
 	if err != nil {
 		return Analysis{}, cost, err
 	}
+	if err := degenerate(a); err != nil {
+		return Analysis{}, cost, err
+	}
 	return verifyCandidates(ctx, cfg, set, a, cost)
+}
+
+// ErrDegenerate is Build's error for analyst output too thin to be an analysis. A rebuild once
+// returned empty insights and one untitled candidate; stored as a success, it replaced a good
+// analysis with an empty one. As an error the earlier analysis stays and fixes_error says why;
+// the same request retried gave a normal result.
+var ErrDegenerate = errors.New("the analyst's output is unusable")
+
+// minInsights is the fewest characters of insights a real report has; one sentence of what the
+// run showed runs past it.
+const minInsights = 20
+
+// degenerate reports the analyst output that is a failed answer rather than an analysis: no
+// insights to speak of, or items none of which has a title that names it. One bad title among
+// good items is dropped with a note instead (titleProblem).
+func degenerate(a Analysis) error {
+	if n := len([]rune(strings.TrimSpace(a.Insights))); n < minInsights {
+		return fmt.Errorf("%w: its insights are %d characters, under %d", ErrDegenerate, n, minInsights)
+	}
+	var titles []string
+	for _, f := range a.Fixes {
+		titles = append(titles, f.Title)
+	}
+	for _, n := range a.Investigations {
+		titles = append(titles, n.Title)
+	}
+	for _, n := range a.Findings {
+		titles = append(titles, n.Title)
+	}
+	bad := 0
+	for _, t := range titles {
+		if titleProblem(t) != "" {
+			bad++
+		}
+	}
+	if bad > 0 && bad == len(titles) {
+		return fmt.Errorf("%w: none of its %d items has a usable title", ErrDegenerate, bad)
+	}
+	return nil
 }
 
 // results2text writes each prompt's graded answers the way the analyst reads them.

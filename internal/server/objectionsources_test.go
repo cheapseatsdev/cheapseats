@@ -30,7 +30,7 @@ func TestObjectionSourcesReachEverySurface(t *testing.T) {
 			analystSaw = string(body)
 		}
 		mu.Unlock()
-		text := `{"insights":"x","fixes":[]}`
+		text := `{"insights":"No source opportunity worth a change.","fixes":[]}`
 		json.NewEncoder(w).Encode(map[string]any{"content": []any{map[string]any{"type": "text", "text": text}}, "stop_reason": "end_turn", "usage": map[string]any{"input_tokens": 1, "output_tokens": 1}})
 	}))
 	t.Cleanup(api.Close)

@@ -29,7 +29,7 @@ func TestCitationStability(t *testing.T) {
 		var text string
 		switch {
 		case strings.Contains(s, "evidence-led product and market analyst"):
-			text = `{"insights":"x","fixes":[]}`
+			text = `{"insights":"No source opportunity worth a change.","fixes":[]}`
 		case strings.Contains(s, "output_config"):
 			text = `{"verdict":"mentioned","position":2,"top_pick":"Docker Sandboxes","named":["Docker Sandboxes","Cheap Seats"],"reasoning":"r","why_not_top":"w","objections":[]}`
 		case strings.Contains(s, `"tools"`):
