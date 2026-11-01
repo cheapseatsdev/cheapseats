@@ -45,7 +45,7 @@ func TestBuildKeepsOnlyTheBestRankedCandidates(t *testing.T) {
 		return json.Unmarshal(b, out)
 	}
 	results := []run.Result{{ID: 7, PromptIdx: 0, Answerer: "fake", Track: answer.Search, Status: "done", Grade: &grade.Grade{Verdict: grade.Absent}, Answer: &answer.Answer{Text: "An answer."}}}
-	ctx := WithVerifier(context.Background(), func(context.Context, string) (string, error) { return "", errors.New("not read") })
+	ctx := WithVerifier(context.Background(), func(context.Context, string) (string, bool, error) { return "", false, errors.New("not read") })
 	a, _, err := Build(ctx, cfg, set, results, nil, nil)
 	// No page can be read, so verification fails with the candidates kept as investigations.
 	var verr *VerificationError

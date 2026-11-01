@@ -5,10 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/cheapseatsdev/cheapseats/internal/answer"
+	"github.com/cheapseatsdev/cheapseats/internal/audit"
 	"github.com/cheapseatsdev/cheapseats/internal/config"
 	"github.com/cheapseatsdev/cheapseats/internal/grade"
 	"github.com/cheapseatsdev/cheapseats/internal/run"
@@ -97,11 +100,11 @@ func TestBuildVerifiesCurrentWorkAndSeparatesUnknowns(t *testing.T) {
 		return json.Unmarshal(b, out)
 	}
 	results := []run.Result{{ID: 7, PromptIdx: 0, Answerer: "fake", Track: answer.Search, Status: "done", Grade: &grade.Grade{Verdict: grade.Absent}, Answer: &answer.Answer{Text: "A spreadsheet is enough for an initial baseline; a tracker earns its setup for repeat checks.", Searches: []answer.Query{{Query: "starter tracker", Results: []answer.Link{{URL: f.Target, Title: "Existing installation"}}}}}}}
-	ctx := WithVerifier(context.Background(), func(_ context.Context, u string) (string, error) {
+	ctx := WithVerifier(context.Background(), func(_ context.Context, u string) (string, bool, error) {
 		if u == f.Target {
-			return pages[0].Text, nil
+			return pages[0].Text, false, nil
 		}
-		return "", errors.New("not read")
+		return "", false, errors.New("not read")
 	})
 	a, _, err := Build(ctx, cfg, set, results, nil, nil)
 	if err != nil || len(a.Fixes) != 1 || len(a.Investigations) != 0 {
@@ -120,7 +123,9 @@ func TestBuildVerifiesCurrentWorkAndSeparatesUnknowns(t *testing.T) {
 		}
 	}
 	prompts = nil
-	a, _, err = Build(WithVerifier(context.Background(), func(context.Context, string) (string, error) { return "", errors.New("temporary network failure") }), cfg, set, results, nil, nil)
+	a, _, err = Build(WithVerifier(context.Background(), func(context.Context, string) (string, bool, error) {
+		return "", false, errors.New("temporary network failure")
+	}), cfg, set, results, nil, nil)
 	var verr *VerificationError
 	if !errors.As(err, &verr) || !a.VerificationFailed || len(a.Fixes) != 0 || len(a.Investigations) != 1 || len(prompts) != 1 {
 		t.Fatalf("failed reads must stay unknown, as a failed verification, without a redundant review call: %+v %v", a, err)
@@ -142,16 +147,132 @@ func TestReadArtifactsHasBoundedRequests(t *testing.T) {
 		cfg.Brand.Sites = append(cfg.Brand.Sites, config.Site{URL: fmt.Sprintf("https://site%d.example", i)})
 	}
 	n := 0
-	ctx := WithVerifier(context.Background(), func(context.Context, string) (string, error) {
+	ctx := WithVerifier(context.Background(), func(context.Context, string) (string, bool, error) {
 		n++
-		return strings.Repeat("x", MaxVerificationPageRunes+100), nil
+		return strings.Repeat("x", MaxVerificationPageRunes+100), false, nil
 	})
 	ps := readArtifacts(ctx, cfg, fs)
 	if n != MaxVerificationPages || len(ps) != MaxVerificationPages {
 		t.Fatalf("unbounded reads: %d", n)
 	}
-	if !strings.HasSuffix(ps[0].Text, "[excerpt truncated]") {
-		t.Fatal("unbounded page text")
+	for i, p := range ps {
+		if !p.Truncated || p.Text != strings.Repeat("x", MaxVerificationPageRunes)+truncatedMarker {
+			t.Fatalf("page %d (%s) not clipped to %d: %d runes, truncated=%v", i, p.URL, MaxVerificationPageRunes, len([]rune(p.Text)), p.Truncated)
+		}
+	}
+}
+
+// Truncated is set exactly when the text is incomplete: when verify's own clip applies, counting
+// characters rather than bytes, or when the reader says it stopped short of the page. The flag
+// and the marker reach the reviewer.
+func TestReadArtifactsMarksTruncated(t *testing.T) {
+	cfg, set, f, pages, _ := verificationFixture()
+	cfg.Brand.Sites = nil
+	type page struct {
+		text string
+		cut  bool
+	}
+	body := map[string]page{
+		"https://acme.example/whole":      {strings.Repeat("é", MaxVerificationPageRunes), false},
+		"https://acme.example/clipped":    {strings.Repeat("é", MaxVerificationPageRunes+1), false},
+		"https://acme.example/reader-cut": {"A short excerpt that the reader cut.", true},
+	}
+	var fs []Fix
+	for u := range body {
+		x := f
+		x.Target = u
+		fs = append(fs, x)
+	}
+	ctx := WithVerifier(context.Background(), func(_ context.Context, u string) (string, bool, error) { return body[u].text, body[u].cut, nil })
+	got := map[string]artifact{}
+	for _, p := range readArtifacts(ctx, cfg, fs) {
+		got[p.URL] = p
+	}
+	for u, want := range map[string]bool{"https://acme.example/whole": false, "https://acme.example/clipped": true, "https://acme.example/reader-cut": true} {
+		p := got[u]
+		if p.Truncated != want || strings.HasSuffix(p.Text, truncatedMarker) != want {
+			t.Errorf("%s: truncated=%v, marker=%v, want %v", u, p.Truncated, strings.HasSuffix(p.Text, truncatedMarker), want)
+		}
+	}
+	if p := got["https://acme.example/reader-cut"]; p.Text != body[p.URL].text+truncatedMarker {
+		t.Errorf("a reader-cut page lost its text or gained more than the marker: %q", p.Text)
+	}
+
+	// The reviewer sees the flag on every supplied page.
+	old := structuredCLI
+	t.Cleanup(func() { structuredCLI = old })
+	var prompt string
+	structuredCLI = func(_ context.Context, _, _, p string, _ map[string]any, out any) error {
+		prompt = p
+		return json.Unmarshal([]byte(`{"decisions":[]}`), out)
+	}
+	cut := WithVerifier(context.Background(), func(context.Context, string) (string, bool, error) { return pages[0].Text, true, nil })
+	if _, _, err := verifyCandidates(cut, cfg, set, Analysis{Fixes: []Fix{f}}, 0); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(prompt, `"truncated":true`) || !strings.Contains(prompt, truncatedMarker) {
+		t.Fatal("the reviewer was not shown the truncated flag and marker")
+	}
+}
+
+// A read that stops short of the page reaches the artifact as truncated, through the app's real
+// reader (audit.ReadCurrent, with no Exa Reader):
+//   - raw-cap: a readable paragraph, then inline script past audit.MaxBody, then the rest;
+//   - short-body: the server declares a longer Content-Length and closes after a readable prefix;
+//   - shell: a page empty without JavaScript, read with no Reader to render it.
+//
+// A whole page served the same way is not truncated.
+func TestReadStoppedShortIsTruncated(t *testing.T) {
+	restore := audit.AllowLoopbackForTests()
+	defer restore()
+	page := "Setup. Install the CLI with go install acme.example/tracker@latest. Run tracker init, then tracker serve, to start locally. The server stores answers in a local SQLite file."
+	more := "<p>" + strings.Repeat("The setup guide covers local installs for small teams. ", 4) + "</p>"
+	whole := "<html><body><p>" + page + "</p>" + more + "</body></html>"
+	for _, tc := range []struct {
+		name      string
+		serve     func(w http.ResponseWriter)
+		truncated bool
+	}{
+		{"whole", func(w http.ResponseWriter) { w.Write([]byte(whole)) }, false},
+		{"raw-cap", func(w http.ResponseWriter) {
+			w.Write([]byte("<html><body><p>" + page + "</p>" + more + "<script>" + strings.Repeat("var x = 1;\n", audit.MaxBody/10) + "</script><p>Requires Go 1.27 or later.</p></body></html>"))
+		}, true},
+		{"short-body", func(w http.ResponseWriter) {
+			conn, buf, err := w.(http.Hijacker).Hijack()
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			defer conn.Close()
+			prefix := "<html><body><p>" + page + "</p>" + more
+			fmt.Fprintf(buf, "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: %d\r\n\r\n%s", len(prefix)+5000, prefix)
+			buf.Flush()
+		}, true},
+		{"shell", func(w http.ResponseWriter) {
+			w.Write([]byte(`<html><body><div id="root"><p>` + page + `</p></div><script src="/app.js"></script></body></html>`))
+		}, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg, _, f, _, _ := verificationFixture()
+			cfg.Brand.Sites = nil
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/setup" {
+					http.NotFound(w, r)
+					return
+				}
+				w.Header().Set("content-type", "text/html; charset=utf-8")
+				tc.serve(w)
+			}))
+			defer srv.Close()
+			f.Target = srv.URL + "/setup"
+			read := func(ctx context.Context, u string) (string, bool, error) {
+				return audit.ReadCurrent(ctx, u, audit.CiteOptions{}) // no Reader
+			}
+			pages := readArtifacts(WithVerifier(context.Background(), read), cfg, []Fix{f})
+			if len(pages) != 1 || pages[0].Text == "" || pages[0].Truncated != tc.truncated {
+				t.Fatalf("truncated=%v, want %v: %+v", len(pages) == 1 && pages[0].Truncated, tc.truncated, pages)
+			}
+		})
 	}
 }
 
@@ -159,9 +280,9 @@ func TestWeakCandidateDoesNotCreateResearchBacklog(t *testing.T) {
 	cfg, set, f, _, _ := verificationFixture()
 	f.Decision = ""
 	reads := 0
-	ctx := WithVerifier(context.Background(), func(context.Context, string) (string, error) {
+	ctx := WithVerifier(context.Background(), func(context.Context, string) (string, bool, error) {
 		reads++
-		return "", errors.New("not needed")
+		return "", false, errors.New("not needed")
 	})
 	a, _, err := verifyCandidates(ctx, cfg, set, Analysis{Fixes: []Fix{f}}, 0)
 	if err != nil || reads != 0 || len(a.Fixes) != 0 || len(a.Investigations) != 0 || len(a.Findings) != 0 || !strings.Contains(a.Insights, "Omitted candidate") {
@@ -205,7 +326,7 @@ func TestVerifiedBoundaryBecomesFindingRatherThanWork(t *testing.T) {
 		}{[]decision{d}})
 		return json.Unmarshal(b, out)
 	}
-	ctx := WithVerifier(context.Background(), func(context.Context, string) (string, error) { return pages[0].Text, nil })
+	ctx := WithVerifier(context.Background(), func(context.Context, string) (string, bool, error) { return pages[0].Text, false, nil })
 	a, _, err := verifyCandidates(ctx, cfg, set, Analysis{Fixes: []Fix{f}}, 0)
 	if err != nil || len(a.Fixes) != 0 || len(a.Investigations) != 0 || len(a.Findings) != 1 {
 		t.Fatalf("accepted boundary became work: %+v %v", a, err)
@@ -224,7 +345,7 @@ func TestReviewerCanDiscardCandidateWithoutResearchTask(t *testing.T) {
 		}{[]decision{d}})
 		return json.Unmarshal(b, out)
 	}
-	ctx := WithVerifier(context.Background(), func(context.Context, string) (string, error) { return pages[0].Text, nil })
+	ctx := WithVerifier(context.Background(), func(context.Context, string) (string, bool, error) { return pages[0].Text, false, nil })
 	a, _, err := verifyCandidates(ctx, cfg, set, Analysis{Fixes: []Fix{f}}, 0)
 	if err != nil || len(a.Fixes) != 0 || len(a.Investigations) != 0 || len(a.Findings) != 0 || !strings.Contains(a.Insights, d.Summary) {
 		t.Fatalf("discarded candidate created a backlog or market claim: %+v %v", a, err)

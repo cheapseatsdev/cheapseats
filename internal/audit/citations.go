@@ -84,7 +84,7 @@ func CheckCitations(ctx context.Context, targets []Target, brand []string, compe
 	each(len(targets), func(i int) {
 		t := targets[i]
 		p := CitedPage{Target: t, Competitors: []string{}}
-		status, skipped, text, via := fetchText(ctx, o, robots, t.URL, day)
+		status, skipped, text, via, _ := fetchText(ctx, o, robots, t.URL, day)
 		p.Status, p.Skipped, p.Via = status, skipped, via
 		if skipped == "" {
 			p.NamesBrand = NamesAny(text, brand)
@@ -112,13 +112,17 @@ const (
 
 // fetchText is a page's visible text, from today's cache or fetched; skipped says why there's none.
 // A shell or a challenge is read through o.Reader when there is one, and via says so ("exa").
-func fetchText(ctx context.Context, o CiteOptions, robots *robotsCache, u, day string) (status int, skipped, text, via string) {
+// cut says the text may stop short of the page: the response passed MaxBody or ended early, the
+// text passed maxText, or the page is a shell that no Reader rendered (its text is what plain HTTP
+// got, not the page). The day cache doesn't record it, so text read from the cache reads as cut.
+func fetchText(ctx context.Context, o CiteOptions, robots *robotsCache, u, day string) (status int, skipped, text, via string, cut bool) {
 	cached := false
 	if o.DB != nil {
 		cached = o.DB.QueryRowContext(ctx, `SELECT status, error, text FROM page_fetches WHERE url=? AND day=?`, u, day).Scan(&status, &skipped, &text) == nil
+		cut = cached
 	}
 	if !cached {
-		status, skipped, text = fetchNow(ctx, o.Fetcher, robots, u)
+		status, skipped, text, cut = fetchNow(ctx, o.Fetcher, robots, u)
 		if o.DB != nil && ctx.Err() == nil {
 			o.DB.ExecContext(ctx, `INSERT OR REPLACE INTO page_fetches (url, day, status, error, text, fetched_at) VALUES (?,?,?,?,?,?)`,
 				u, day, status, skipped, text, time.Now().UTC().Format(time.RFC3339))
@@ -128,57 +132,67 @@ func fetchText(ctx context.Context, o CiteOptions, robots *robotsCache, u, day s
 	case shellReason, challengeReason:
 		if o.Reader != nil {
 			if read, _, ok := o.Reader(ctx, u); ok {
-				return status, "", ClipText(read), ViaExa
+				// A Reader's text may already have been cut to maxText (the app's is, before it is
+				// cached), which leaves it within a rune of maxText bytes: that reads as cut too.
+				return status, "", ClipText(read), ViaExa, len(read) > maxText-utf8.UTFMax
 			}
 		}
 		if skipped == shellReason {
 			skipped = "" // what plain HTTP got: a page with a little text, as before the fallback
+			cut = true   // but not the rendered page, so it can't show what the page lacks
 		}
 	}
-	return status, skipped, text, ""
+	return status, skipped, text, "", cut
 }
 
-func fetchNow(ctx context.Context, f *Fetcher, robots *robotsCache, raw string) (int, string, string) {
+func fetchNow(ctx context.Context, f *Fetcher, robots *robotsCache, raw string) (int, string, string, bool) {
 	u, err := url.Parse(raw)
 	if err != nil || u.Host == "" || u.Scheme != "http" && u.Scheme != "https" {
-		return 0, "not a web page", ""
+		return 0, "not a web page", "", false
 	}
 	if !robots.allowed(ctx, u) {
-		return 0, "robots.txt asks Cheap Seats not to fetch it", ""
+		return 0, "robots.txt asks Cheap Seats not to fetch it", "", false
 	}
 	r, err := f.Get(ctx, raw)
 	if err != nil {
-		return 0, "couldn't fetch it: " + err.Error(), ""
+		return 0, "couldn't fetch it: " + err.Error(), "", false
 	}
 	if r.Status != 200 {
-		return r.Status, "it answered " + strconv.Itoa(r.Status), ""
+		return r.Status, "it answered " + strconv.Itoa(r.Status), "", false
 	}
 	if challenge(r) {
-		return r.Status, challengeReason, ""
+		return r.Status, challengeReason, "", false
 	}
 	ct := r.ContentType()
 	if ct != "" && !strings.HasPrefix(ct, "text/") && !strings.Contains(ct, "html") && !strings.Contains(ct, "xml") {
-		return r.Status, "not a text page (" + ct + ")", ""
+		return r.Status, "not a text page (" + ct + ")", "", false
 	}
-	text := ClipText(Text(r.Body, ct))
+	text, clipped := clipText(Text(r.Body, ct))
+	cut := r.Cut || clipped
 	if html := strings.Contains(ct, "html") || ct == "" && looksHTML(r.Body); html && emptyShell(r.Body, runes(text)) {
-		return r.Status, shellReason, text
+		return r.Status, shellReason, text, cut
 	}
-	return r.Status, "", text
+	return r.Status, "", text, cut
 }
 
 // ClipText makes text valid UTF-8 (a Latin-1 page's bytes become U+FFFD, which matching reads as
 // a word break) and cuts it to maxText bytes, without splitting the last rune.
 func ClipText(text string) string {
+	text, _ = clipText(text)
+	return text
+}
+
+// clipText is ClipText, and whether it cut anything.
+func clipText(text string) (string, bool) {
 	text = strings.ToValidUTF8(text, "\uFFFD")
 	if len(text) <= maxText {
-		return text
+		return text, false
 	}
 	cut := maxText
 	for cut > 0 && !utf8.RuneStart(text[cut]) {
 		cut--
 	}
-	return text[:cut]
+	return text[:cut], true
 }
 
 // robotsCache fetches each host's robots.txt once per check.

@@ -101,12 +101,12 @@ func reviewWith(t *testing.T, fs []Fix, ds []decision, page string) (Analysis, [
 		}{ds})
 		return json.Unmarshal(b, out)
 	}
-	ctx := WithVerifier(context.Background(), func(_ context.Context, u string) (string, error) {
+	ctx := WithVerifier(context.Background(), func(_ context.Context, u string) (string, bool, error) {
 		reads = append(reads, u)
 		if page == "" {
-			return "", errors.New("not read")
+			return "", false, errors.New("not read")
 		}
-		return page, nil
+		return page, false, nil
 	})
 	a, _, err := verifyCandidates(ctx, cfg, set, Analysis{Insights: "Report.", Fixes: fs}, 0)
 	if err != nil {
