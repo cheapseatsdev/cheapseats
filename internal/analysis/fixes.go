@@ -253,7 +253,7 @@ func dismissedText(brand string, dismissed []Dismissed) string {
 var structuredCLI = answer.ClaudeStructured
 
 // Build runs the analyst over a finished run's results, with the fixes already tried in the set and
-// those the team dismissed.
+// those the team dismissed. A *VerificationError comes with a usable, degraded analysis.
 func Build(ctx context.Context, cfg *config.Config, set sets.Set, results []run.Result, tried []Tried, dismissed []Dismissed) (Analysis, float64, error) {
 	brand := cfg.Brand.Name
 	all := cfg.Brand.AllSites()

@@ -125,11 +125,24 @@ func (a *App) BuildFixes(ctx context.Context, id string) error {
 	ctx = analysis.WithObjections(ctx, sum.Objections) // with the pages behind each
 	ctx = analysis.WithMisstatements(ctx, a.misstatementLines(ctx, id, results))
 	an, cost, err := analysis.Build(ctx, &cfg, r.Snapshot.Set, results, a.triedFor(ctx, r.SetID), a.dismissedFor(ctx))
-	if err != nil {
+	return a.recordAnalysis(ctx, id, an, cost, err)
+}
+
+// recordAnalysis stores what Build returned for run id: the analysis, its error, or both.
+func (a *App) recordAnalysis(ctx context.Context, id string, an analysis.Analysis, cost float64, err error) error {
+	var verr *analysis.VerificationError
+	if err != nil && !errors.As(err, &verr) {
 		a.DB.ExecContext(ctx, `UPDATE runs SET fixes_error=?, analysis_cost_usd=analysis_cost_usd+? WHERE id=?`, err.Error(), cost, id)
 		return err
 	}
-	_, err = a.DB.ExecContext(ctx, `UPDATE runs SET fixes=?, insights=?, fixes_at=?, fixes_error=NULL, analysis_cost_usd=analysis_cost_usd+? WHERE id=?`, analysis.Encode(an), an.Insights, store.Now(), cost, id)
+	// A failed verification still leaves investigations worth keeping. They're stored with the
+	// error, so the run page and the watch script's fixes_error check see that it failed.
+	var failed sql.NullString
+	if verr != nil {
+		slog.Error("analysis verification", "run", id, "err", err)
+		failed = sql.NullString{String: err.Error(), Valid: true}
+	}
+	_, err = a.DB.ExecContext(ctx, `UPDATE runs SET fixes=?, insights=?, fixes_at=?, fixes_error=?, analysis_cost_usd=analysis_cost_usd+? WHERE id=?`, analysis.Encode(an), an.Insights, store.Now(), failed, cost, id)
 	return err
 }
 

@@ -214,6 +214,20 @@ func investigation(set sets.Set, f Fix, why string) Investigation {
 	return Investigation{Title: "Check: " + f.Title, Why: "This check informs the decision: " + f.Decision + " " + why, Check: f.Check, Decision: f.Decision, Evidence: f.Evidence, Prompts: ps, PromptIDs: ids, Target: f.Target}
 }
 
+// VerificationError is Build's error when the verification call failed. The analysis returned
+// with it is usable but degraded: every candidate is an investigation. The caller keeps it and
+// records the error, so the run doesn't read as a clean analysis with no actions.
+type VerificationError struct {
+	Candidates int
+	Err        error
+}
+
+func (e *VerificationError) Error() string {
+	return fmt.Sprintf("verification could not complete, so its %d candidates are investigations: %v", e.Candidates, e.Err)
+}
+
+func (e *VerificationError) Unwrap() error { return e.Err }
+
 func verifyCandidates(ctx context.Context, cfg *config.Config, set sets.Set, a Analysis, cost float64) (Analysis, float64, error) {
 	normalizeNotes(set, &a)
 	var fs []Fix
@@ -290,7 +304,7 @@ Do not mark verified unless all six gates pass with evidence. Current supplied a
 		for _, f := range fs {
 			a.Investigations = append(a.Investigations, investigation(set, f, "Verification could not complete; the proposed work remains an investigation."))
 		}
-		return a, cost, nil
+		return a, cost, &VerificationError{Candidates: len(fs), Err: err}
 	}
 	byIndex := map[int][]decision{}
 	for _, d := range reviewed.Decisions {

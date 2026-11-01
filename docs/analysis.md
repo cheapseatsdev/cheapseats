@@ -37,7 +37,7 @@ These checks support an editorial decision; they do not prove that a proposed ch
 
 Only verified actions receive an implementation handoff. It includes the product brief and verification evidence, keeps the change within scope and asks the implementer to check that it is still needed. Outreach handoffs prepare drafts; they do not send messages or open third-party pull requests.
 
-If verification cannot complete, only candidates with a useful specific check and decision remain investigations. Their cards retain that exact check, the decision, the reason it matters and supporting evidence. There is no generic “read the page and promote if useful” fallback. Standalone investigations also require a rationale, check, decision and evidence. If work already exists, or the proposal conflicts with an accepted boundary, the result can be a finding.
+If verification cannot complete, only candidates with a useful specific check and decision remain investigations. When the verification call itself fails, the investigations are kept and the run also records the failure as its analysis error: it is logged, the run page shows it above the investigations, `/api/runs/{id}/fixes` returns it in `error`, and the deployment's watch script reports it as a failed fix list. Rebuilding the analysis clears it. Their cards retain that exact check, the decision, the reason it matters and supporting evidence. There is no generic “read the page and promote if useful” fallback. Standalone investigations also require a rationale, check, decision and evidence. If work already exists, or the proposal conflicts with an accepted boundary, the result can be a finding.
 
 ## Separate completion from later results
 
