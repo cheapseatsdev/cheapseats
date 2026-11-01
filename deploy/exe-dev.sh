@@ -9,9 +9,13 @@
 #                                                capped at LIVE_BUDGET dollars, default 0.25)
 #
 # Builds a Linux binary from this checkout, ships the config as committed (a dirty config tree is
-# refused, so a run's recorded commit means what it says), checks it on the VM, swaps it in,
-# restarts, and rolls back if Cheap Seats doesn't come up healthy. Run from the repo root. The VM's
-# secrets live in ~/cheapseats/cheapseats.env there (see docs/exe-dev.md); this never sends them.
+# refused, so a run's recorded commit means what it says), checks it on the VM, swaps it in and
+# restarts. If Cheap Seats doesn't come up healthy, it rolls back to the previous binary and config,
+# except when the failed build migrated the database or its schema can't be read afterwards (or
+# there is no previous build): then Cheap Seats is left stopped and disabled, and the script prints
+# what to do. A database schema it can't read before the swap stops the deploy before anything
+# changes. Run from the repo root. The VM's secrets live in ~/cheapseats/cheapseats.env there (see
+# docs/exe-dev.md); this never sends them.
 set -euo pipefail
 
 vm=${1:?usage: deploy/exe-dev.sh <vm> <config dir>}
@@ -199,13 +203,72 @@ UMask=0077
 [Install]
 WantedBy=multi-user.target"
 printf '%s\n' "$unit" | remote "sudo tee /etc/systemd/system/cheapseats.service >/dev/null && sudo systemctl daemon-reload && sudo systemctl enable cheapseats >/dev/null 2>&1"
-# Keep the previous binary and config, to roll back to.
-remote "cd '$dir' && sudo systemctl stop cheapseats || true
+# The database's schema before the new build touches it, to tell after a failed start whether the
+# build migrated it (see below). sqlite3 reads it.
+remote "command -v sqlite3 >/dev/null 2>&1 || sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq sqlite3 >/dev/null"
+# Prints a number, "none" when there is no database, or nothing when it can't be read.
+schema() {
+	local v
+	v=$(remote "if [ -e '$dir/data/cheapseats.db' ]; then sqlite3 '$dir/data/cheapseats.db' 'PRAGMA user_version;' 2>/dev/null; else echo none; fi" || true)
+	case "$v" in none) echo none ;; '' | *[!0-9]*) ;; *) echo "$v" ;; esac
+}
+# Stop, read the schema and swap in one script on the VM, keeping the previous binary and config to
+# roll back to. Cheap Seats is down from the stop until the start, so nothing at this end may leave
+# it there: the script is a function, so none of it runs until all of it has arrived, and it ignores
+# the hangup and the closed pipe of a dropped connection or a Ctrl-C here, so it runs to the end.
+# A schema it can't read is found before anything changes; it then starts the previous build again
+# (if it was running) and the deploy stops, rather than go on without knowing what a failure did.
+IFS= read -r -d '' swap_script <<'EOF' || true
+swap() {
+	trap '' HUP PIPE
+	cd "$1" || exit 1
+	was=$(systemctl is-active cheapseats 2>/dev/null || true)
+	sudo systemctl stop cheapseats || true
+	before=none
+	if [ -e data/cheapseats.db ]; then
+		before=$(sqlite3 data/cheapseats.db 'PRAGMA user_version;' 2>/dev/null || true)
+		if ! [[ $before =~ ^[0-9]+$ ]]; then
+			if [ "$was" = active ]; then sudo systemctl start cheapseats || true; fi
+			echo "unreadable $was"
+			return
+		fi
+	fi
 	if [ -e bin/cheapseats ]; then mv -f bin/cheapseats bin/cheapseats.prev; fi
 	mv bin/cheapseats.new bin/cheapseats
-	rm -rf config.prev; if [ -e config ]; then mv config config.prev; fi
+	rm -rf config.prev
+	if [ -e config ]; then mv config config.prev; fi
 	mv config.new config
-	sudo systemctl start cheapseats"
+	sudo systemctl start cheapseats || true
+	echo "swapped $before"
+}
+swap "$@"
+EOF
+swapping=1
+# Says what happened if this end stops while the VM swaps.
+trap 'rm -rf "$work"; if [ "${swapping:-}" = 1 ]; then echo "stopped while the VM swapped in the new build. The VM finishes the swap and starts the new build on its own, but nothing checks that it came up or rolls it back: see ssh $host systemctl status cheapseats, and docs/exe-dev.md to roll back by hand" >&2; fi' EXIT
+swapped=$(remote bash -s "$dir" <<<"$swap_script" || true)
+swapped=$(printf '%s\n' "$swapped" | tail -n 1)
+case "$swapped" in
+"swapped "*)
+	before=${swapped#swapped }
+	;;
+"unreadable active")
+	swapping=0
+	echo "the schema of $dir/data/cheapseats.db couldn't be read, so a failed start couldn't be told apart from a migration; nothing was swapped, and Cheap Seats runs the previous build again" >&2
+	exit 1
+	;;
+"unreadable "*)
+	swapping=0
+	echo "the schema of $dir/data/cheapseats.db couldn't be read, so a failed start couldn't be told apart from a migration; nothing was swapped (Cheap Seats wasn't running before, and still isn't)" >&2
+	exit 1
+	;;
+*)
+	swapping=0
+	echo "lost the VM while swapping in the new build. If the swap had begun, the VM finishes it and starts the new build on its own, but nothing checks that it came up or rolls it back: see ssh $host systemctl status cheapseats, and docs/exe-dev.md to roll back by hand" >&2
+	exit 1
+	;;
+esac
+swapping=0
 
 say "healthy?"
 for _ in $(seq 1 30); do
@@ -223,8 +286,98 @@ for _ in $(seq 1 30); do
 done
 echo "Cheap Seats didn't come up; its log:" >&2
 remote "sudo journalctl -u cheapseats -n 30 --no-pager" >&2 || true
-if remote "test -e '$dir/bin/cheapseats.prev'"; then
-	echo "rolling back to the previous binary and config" >&2
-	remote "cd '$dir' && sudo systemctl stop cheapseats; mv -f bin/cheapseats.prev bin/cheapseats; rm -rf config; mv config.prev config; sudo systemctl start cheapseats"
+# systemd keeps restarting the failed build; stop it, so it can't migrate further or resume paid
+# work while the database is read and, perhaps, replaced.
+remote "sudo systemctl stop cheapseats" || true
+# Where the failed build stays stopped, it is disabled too, so a reboot of the VM doesn't start it
+# (resuming paid runs, perhaps migrating further). The next deploy enables the service again.
+leave_stopped() {
+	if [ "$(remote "sudo systemctl disable cheapseats >/dev/null 2>&1 && echo ok" || true)" = ok ]; then
+		echo "Cheap Seats is stopped and disabled, so a reboot doesn't start this build; the next deploy enables it again. To start this build anyway: ssh $host sudo systemctl enable --now cheapseats" >&2
+	else
+		echo "Cheap Seats is stopped, but disabling it failed, so a reboot of the VM would start this build. Disable it with: ssh $host sudo systemctl disable cheapseats" >&2
+	fi
+}
+after=$(schema)
+# Whether there is a previous build to go back to: a first deploy (perhaps with SEED_DB) has none.
+prev=$(remote "cd '$dir' && if [ -e bin/cheapseats.prev ] && [ -d config.prev ]; then echo yes; fi" || true)
+# Each migration commits on its own, so a start that failed partway leaves the database at a
+# schema between the two; one that failed in its first migration leaves it as it was. Only a
+# database at a later schema than before stops the previous build opening it. ($before is always
+# a number or "none" here: the swap refuses a schema it can't read.)
+if [ "$before" = none ] || [ "$after" = none ]; then
+	migrated=no # there was no database to protect
+elif [ -z "$after" ]; then
+	migrated=unknown
+elif [ "$after" -gt "$before" ]; then
+	migrated=yes
+else
+	migrated=no
 fi
+if [ "$migrated" = no ]; then
+	if [ "$prev" != yes ]; then
+		echo "there is no previous build on the VM to roll back to." >&2
+		leave_stopped
+		exit 1
+	fi
+	aside=""
+	if [ "$before" = none ] && [ "$after" != none ]; then
+		# The new build made a database at its own, newer schema, which the previous build can't
+		# open; it starts without one, as it would have before this deploy.
+		ts=$(date -u +%Y%m%dT%H%M%SZ)
+		aside="for f in data/cheapseats.db data/cheapseats.db-wal data/cheapseats.db-shm; do if [ -e \"\$f\" ]; then mv \"\$f\" \"\$f.failed-$ts\"; fi; done;"
+		echo "there was no database before this deploy; moving the one this build made to $dir/data/cheapseats.db.failed-$ts (with its -wal and -shm, if any)" >&2
+	fi
+	echo "rolling back to the previous binary and config" >&2
+	remote "cd '$dir' && sudo systemctl stop cheapseats; $aside mv -f bin/cheapseats.prev bin/cheapseats; rm -rf config; mv config.prev config; sudo systemctl start cheapseats"
+	exit 1
+fi
+# This build migrated the database (or its schema couldn't be read). The previous binary refuses
+# a migrated database, so rolling back the binary alone would leave it restarting forever.
+# Before migrating, the new build copied the database to cheapseats.db.bak-v<N>, N the schema it
+# found: the copy the previous build can open is the one named for the schema before this deploy.
+# A later restart that found the database partly migrated writes a copy at that schema too, which
+# the previous build can't open. Putting the copy back would undo the migration, but it would
+# also discard whatever the new build wrote after it (a resumed run records paid answers), and
+# only the operator can tell whether that matters or the new build is better fixed forward. So
+# the script doesn't restore it: Cheap Seats stays stopped and the script prints the steps.
+bak="$dir/data/cheapseats.db.bak-v$before"
+if [ "$migrated" = unknown ]; then
+	printf '\nNot rolling back: the database schema couldn\047t be read after the failed start (before this deploy: %s).\n' "$before" >&2
+	leave_stopped
+	echo "Check the schema with: ssh $host \"sqlite3 '$dir/data/cheapseats.db' 'PRAGMA user_version;'\"" >&2
+	exit 1
+fi
+if [ -z "$(remote "test -e '$bak' && echo yes" || true)" ]; then
+	bak=""
+fi
+printf '\nNot rolling back: this build migrated the database from schema %s to %s, and the previous\nbuild can\047t open it.\n' "$before" "$after" >&2
+leave_stopped
+if [ -z "$bak" ]; then
+	echo "The copy from before the migration, $dir/data/cheapseats.db.bak-v$before, isn't there; fix the build and deploy again." >&2
+	exit 1
+fi
+if [ "$prev" != yes ]; then
+	cat >&2 <<MSG
+There is no previous build on the VM to go back to, so fix the build and deploy again; the database
+stays as it is. The database as it was before this deploy is $bak.
+MSG
+	exit 1
+fi
+cat >&2 <<MSG
+The database as it was before this deploy is $bak (schema $before, which the
+previous build opens; any other cheapseats.db.bak-v* is from a different schema).
+
+Either fix the build and deploy again (the database stays as it is), or go back to the previous
+build with the database as it was before this deploy. Anything the new build wrote is kept in
+the .failed copies; it is not in the restored database:
+
+  ssh $host
+  cd '$dir' && sudo systemctl stop cheapseats
+  ts=\$(date -u +%Y%m%dT%H%M%SZ)
+  for f in data/cheapseats.db data/cheapseats.db-wal data/cheapseats.db-shm; do [ -e "\$f" ] && mv "\$f" "\$f.failed-\$ts"; done
+  cp -p '$bak' data/cheapseats.db
+  mv -f bin/cheapseats.prev bin/cheapseats && rm -rf config && mv config.prev config
+  sudo systemctl enable --now cheapseats && curl -fsS http://127.0.0.1:$port/healthz
+MSG
 exit 1

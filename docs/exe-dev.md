@@ -115,8 +115,29 @@ deploy/exe-dev.sh <vm> ../your-config
 
 The script builds a Linux binary, ships the committed config, runs `cheapseats check` on the VM
 and restarts. It records the config commit on every run and refuses committed symlinks, which
-could reach outside the config. If startup fails, it restores the previous binary and config.
-Runs in progress resume after restart.
+could reach outside the config. Runs in progress resume after restart.
+
+If startup fails, it restores the previous binary and config, except in three cases, where it
+leaves Cheap Seats stopped and prints what to do:
+
+- **The new build migrated the database.** The script compares the database's schema (`PRAGMA
+  user_version`, read with `sqlite3`, which it installs if missing) before the swap and after the
+  failure. A migration that failed and rolled back leaves the schema as it was, and the rollback
+  goes ahead. A database at a later schema can't be opened by the previous build, and putting the
+  pre-migration copy back would discard what the new build wrote after it. The script prints the
+  steps to restore `cheapseats.db.bak-v<N>`, `N` being the schema before the deploy, with the
+  previous build; or you fix the build and deploy again.
+- **The schema can't be read after the failure,** so the script can't tell whether the build
+  migrated it. It prints the command to read it.
+- **There is no previous build**, on a first deploy.
+
+Left stopped, Cheap Seats is also disabled, so a reboot of the VM doesn't start the failed build;
+the next deploy enables it again, and `sudo systemctl enable --now cheapseats` starts it by hand.
+If there was no database before the deploy and the failed build made one, at a schema the previous
+build may not know, the rollback moves it aside as `cheapseats.db.failed-<time>` and the previous
+build starts without one, as it did before. If the schema can't be read before the swap, the deploy
+stops there, with nothing changed, and starts Cheap Seats again if it was running. The stop, the
+schema read and the swap run as one script on the VM, which finishes even if the connection drops.
 
 With `LIVE_CHECK=1`, the check on the VM also runs `cheapseats check -live`
 ([the live schema check](deploying.md#the-live-schema-check)). It sends each structured output
@@ -138,5 +159,9 @@ if the API refuses one. It costs a few cents and is capped at `LIVE_BUDGET` doll
 | who's in | `ssh exe.dev share show <vm>`, and `CHEAPSEATS_ALLOWED_EMAILS` |
 
 To roll back by hand: stop Cheap Seats, put `bin/cheapseats.prev` and `config.prev` back as `bin/cheapseats`
-and `config`, and start it. A database from a newer Cheap Seats won't open in an older one; restore the
-`cheapseats.db.bak-v<N>` from before the upgrade too.
+and `config`, and start it with `sudo systemctl enable --now cheapseats` (a failed deploy that left it stopped
+also disabled it). A database from a newer Cheap Seats won't open in an older one; restore the
+`cheapseats.db.bak-v<N>` from before the upgrade too, `N` being the schema the older build knows
+(`bin/cheapseats.prev version` prints it), moving `cheapseats.db` and its `-wal` and `-shm` aside first
+(the failed deploy prints these commands). An upgrade that failed partway can leave copies at later
+schemas too; the older build can't open those.

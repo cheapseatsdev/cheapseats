@@ -2,6 +2,10 @@ package store
 
 import (
 	"context"
+	"database/sql"
+	"fmt"
+	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 )
@@ -111,5 +115,131 @@ func TestUpgradeAddsFactCheckTables(t *testing.T) {
 	db.QueryRow(`PRAGMA user_version`).Scan(&v)
 	if v != Schema() {
 		t.Errorf("schema %d", v)
+	}
+}
+
+// After a pre-migration copy is restored and the database used on the older release, the next
+// upgrade must copy the database as it now is. Keeping the first copy would hand anyone who rolls
+// back again data from before the first upgrade, silently dropping everything since.
+func TestUpgradeAfterRestoreBacksUpCurrentData(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "cheapseats.db")
+	bak := fmt.Sprintf("%s.bak-v%d", path, len(migrations)-1)
+	setMarker := func(v string) {
+		t.Helper()
+		db, err := OpenAt(dir, len(migrations)-1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer db.Close()
+		if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS upgrade_marker (v TEXT); DELETE FROM upgrade_marker; INSERT INTO upgrade_marker VALUES (?)`, v); err != nil {
+			t.Fatal(err)
+		}
+	}
+	upgrade := func() {
+		t.Helper()
+		db, err := Open(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		db.Close()
+	}
+	backedUp := func() string {
+		t.Helper()
+		db, err := sql.Open("sqlite", "file:"+bak+"?mode=ro")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer db.Close()
+		var v string
+		if err := db.QueryRow(`SELECT v FROM upgrade_marker`).Scan(&v); err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+
+	setMarker("before the first upgrade")
+	upgrade()
+	if got := backedUp(); got != "before the first upgrade" {
+		t.Fatalf("first backup holds %q", got)
+	}
+	// Roll back: put the copy back, run the older release on it, and change something.
+	for _, f := range []string{path, path + "-wal", path + "-shm"} {
+		os.Remove(f)
+	}
+	b, err := os.ReadFile(bak)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	setMarker("after the restore")
+	upgrade()
+	if got := backedUp(); got != "after the restore" {
+		t.Fatalf("the backup before the second upgrade holds %q: the stale copy from the first upgrade was kept", got)
+	}
+	if _, err := os.Stat(bak + ".partial"); !os.IsNotExist(err) {
+		t.Fatalf("the partial copy was left behind: %v", err)
+	}
+}
+
+// deploy/exe-dev.sh decides whether a failed deploy migrated the database by comparing
+// user_version before and after, and restores cheapseats.db.bak-v<before>. That holds only if a
+// migration that fails leaves the schema at the last one committed, and if restarts that find the
+// database partly migrated leave the copy named for the original schema as it was.
+func TestFailedMigrationKeepsSchemaAndFirstCopy(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "cheapseats.db")
+	db, err := sql.Open("sqlite", "file:"+path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	ok := func(n int) string { return fmt.Sprintf("CREATE TABLE t%d (x)", n) }
+	bad := "CREATE TABLE broken (x"
+	if err := migrate(db, path, []string{ok(1), ok(2)}); err != nil {
+		t.Fatal(err)
+	}
+	schemaOf := func(db *sql.DB) int {
+		t.Helper()
+		var v int
+		if err := db.QueryRow("PRAGMA user_version").Scan(&v); err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+	copyOf := func(v int) int {
+		t.Helper()
+		c, err := sql.Open("sqlite", fmt.Sprintf("file:%s.bak-v%d?mode=ro", path, v))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer c.Close()
+		return schemaOf(c)
+	}
+
+	// The first new migration fails: the schema is as it was, so the previous build still opens it.
+	if err := migrate(db, path, []string{ok(1), ok(2), bad}); err == nil {
+		t.Fatal("the broken migration succeeded")
+	}
+	if v := schemaOf(db); v != 2 {
+		t.Fatalf("after a failed first migration the schema is %d, want 2", v)
+	}
+	// A later one fails: the earlier ones stay committed, and the restart writes a copy at the
+	// partial schema without touching the one from before the deploy.
+	for range 2 {
+		if err := migrate(db, path, []string{ok(1), ok(2), ok(3), bad}); err == nil {
+			t.Fatal("the broken migration succeeded")
+		}
+	}
+	if v := schemaOf(db); v != 3 {
+		t.Fatalf("after a partial migration the schema is %d, want 3", v)
+	}
+	if v := copyOf(2); v != 2 {
+		t.Fatalf("bak-v2 holds schema %d", v)
+	}
+	if v := copyOf(3); v != 3 {
+		t.Fatalf("bak-v3 holds schema %d", v)
 	}
 }

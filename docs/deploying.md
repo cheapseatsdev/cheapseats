@@ -117,7 +117,9 @@ Cheap Seats by reviewing the `FROM` change. For a local trial,
   shell or `tar`, so copy it off the volume with a pod that mounts the claim.
 - exe.dev: `deploy/exe-dev-ops.sh` sets up nightly copies (see [exe-dev.md](exe-dev.md)).
 
-Cheap Seats also copies the database to `cheapseats.db.bak-v<N>` before any schema change.
+Cheap Seats also copies the database to `cheapseats.db.bak-v<N>` before any schema change, `N` being the
+schema it found. Each upgrade from schema `N` replaces the copy, so after a copy is restored and used, the
+next upgrade backs up the data as it is then; there is one copy per schema version.
 
 The database holds answers, fixes and share-link records. It is private to the service user:
 the data directory is `0700`; the database, its `-wal` and `-shm`, the `bak-v<N>` copies and
