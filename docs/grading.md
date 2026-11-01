@@ -164,8 +164,11 @@ same labels to inspect run-to-run disagreement before revisiting the threshold. 
 can be retried; each successful grade is scored once. These pilots compare grader outputs with
 earlier labels, not independent human truth.
 
-The manual GitHub workflow **golden** (`.github/workflows/golden.yml`) uses repository secret
-`ANTHROPIC_API_KEY` and fails without it. Its threshold input currently defaults to **0.90**,
-overriding the test's 0.925 default. It is separate from network-free `ci.yml` and runs in the
-`golden` environment: any reviewers required there approve before it spends. Inputs reject
-thresholds outside 0–1 and set names that do not match prompt-set ID syntax.
+The GitHub workflow **golden** (`.github/workflows/golden.yml`) runs this test on each release
+tag and by hand, beside the [live schema check](deploying.md#the-live-schema-check). It uses
+the secret `ANTHROPIC_API_KEY` (of the `golden` environment or the repository) and fails without
+it. Its threshold input defaults to **0.90**, overriding the test's 0.925 default, and a tag run
+uses the same default. It is separate from network-free `ci.yml` and runs in the `golden`
+environment. Any reviewers required there approve before it spends, and its deployment rules
+must allow the ref. Inputs reject thresholds outside 0–1 and set names that do not match
+prompt-set ID syntax.

@@ -1,12 +1,22 @@
-# The grader golden set (docs/grading.md): grades every labeled answer in
-# internal/grade/testdata/golden with the real grader and fails below the agreement threshold.
-# It calls the Anthropic API, so it never runs with ci.yml; run it by hand on a grader change.
-# It needs the repository secret ANTHROPIC_API_KEY; without it the run fails, it doesn't pass.
-# The job runs in the golden environment, so required reviewers set on that environment (repo
-# settings) approve each run before it can spend the key.
+# The real-provider checks before a release (docs/deploying.md#releasing-maintainers). Both call
+# the Anthropic API, so neither runs with ci.yml:
+#
+#   schemas  sends every structured output schema to the API once (cheapseats check -live, with
+#            the example config's grader and analyst models): a schema the API refuses fails
+#            here instead of in production. Capped at $0.25; a run costs a few cents.
+#   golden   grades every labeled answer in internal/grade/testdata/golden with the real grader
+#            and fails below the agreement threshold (docs/grading.md). A few cents.
+#
+# They run on each release tag, and by hand (run them on main before tagging). They need the
+# secret ANTHROPIC_API_KEY, in the golden environment or the repository; without it each job
+# fails, it doesn't pass. The jobs run in the golden environment, so its required reviewers
+# approve each run before it can spend the key, and its deployment rules must allow the ref:
+# main for a run by hand, and the tag pattern v*.*.* for a release tag.
 name: golden
 
 on:
+  push:
+    tags: ["v*.*.*"]
   workflow_dispatch:
     inputs:
       threshold:
@@ -20,6 +30,28 @@ permissions:
   contents: read
 
 jobs:
+  schemas:
+    environment: golden
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: the key is set
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "::error::the secret ANTHROPIC_API_KEY is not set (golden environment or repository); the schemas can't be checked"
+            exit 1
+          fi
+      - name: the API takes every structured output schema
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CHEAPSEATS_CONFIG: examples/cheapseats-config/cheapseats.toml
+        run: go run ./cmd/cheapseats check -live -no-jev
+
   golden:
     environment: golden
     runs-on: ubuntu-24.04
@@ -33,7 +65,7 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           if [ -z "$ANTHROPIC_API_KEY" ]; then
-            echo "::error::the repository secret ANTHROPIC_API_KEY is not set; the golden set can't be graded"
+            echo "::error::the secret ANTHROPIC_API_KEY is not set (golden environment or repository); the golden set can't be graded"
             exit 1
           fi
       - name: grade the golden set
@@ -42,7 +74,8 @@ jobs:
           CHEAPSEATS_GOLDEN: "1"
           # Inputs reach the script as variables, never spliced into it, and are checked first:
           # the threshold is a share from 0 to 1, the set a prompt set id (internal/sets idRe).
-          THRESHOLD: ${{ inputs.threshold }}
+          # A tag push has no inputs, so it takes the same defaults.
+          THRESHOLD: ${{ inputs.threshold || '0.90' }}
           SET: ${{ inputs.set }}
         run: |
           if ! [[ "$THRESHOLD" =~ ^(0(\.[0-9]+)?|1(\.0+)?)$ ]]; then

@@ -67,7 +67,7 @@ func (g Grade) IsTopPick(brand string) bool {
 	return g.TopPick != nil && strings.EqualFold(*g.TopPick, brand)
 }
 
-var schema = map[string]any{
+var schema = llm.RegisterSchema("grade", "grader", map[string]any{
 	"type": "object",
 	"properties": map[string]any{
 		"verdict":       map[string]any{"type": "string", "enum": []string{"recommended", "mentioned", "absent"}},
@@ -84,7 +84,7 @@ var schema = map[string]any{
 	},
 	"required":             []string{"verdict", "position", "top_pick", "named", "reasoning", "why_not_top", "objections", "other_product", "tone", "praise", "evidence"},
 	"additionalProperties": false,
-}
+})
 
 // Verdicts are the three verdicts in the order they are defined.
 var Verdicts = []Verdict{Recommended, Mentioned, Absent}
