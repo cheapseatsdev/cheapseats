@@ -101,7 +101,7 @@ func TestPagesRenderWithData(t *testing.T) {
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest("GET", "/runs/"+r.ID, nil))
 	// The grader's evidence, highlighted in the answer: the answer's own words, escaped.
-	for _, want := range []string{`<blockquote class="evidence">Docker Sandboxes or Cheap Seats</blockquote>`, `<pre>Use <mark title="the grader's evidence">Docker Sandboxes or Cheap Seats</mark>.</pre>`} {
+	for _, want := range []string{`<blockquote class="evidence">“Docker Sandboxes or Cheap Seats”</blockquote>`, `<pre>Use <mark title="the grader's evidence">Docker Sandboxes or Cheap Seats</mark>.</pre>`} {
 		if !strings.Contains(rec.Body.String(), want) {
 			t.Errorf("run page: want %q", want)
 		}

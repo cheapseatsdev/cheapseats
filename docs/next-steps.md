@@ -31,6 +31,12 @@ retain source quotes and reasons. Reads are evidence, not proof of future recomm
 New-page proposals remain investigations until equivalent existing content can be checked;
 bounded page reads do not establish a complete inventory.
 
+Evidence is stored as the analyst wrote it. When it is a list of quotes, such as
+`3756: "…". 3762: "…"`, the page shows each quote on its own line, linked to its answer on the
+run page. Escapes and inline Markdown copied from the answers are dropped for display. Evidence in
+any other form is shown as text. `cheapseats fixes` prints evidence the same way. The JSON API and
+MCP return the stored text unchanged.
+
 ## Brand brief
 
 Keep identity and public claims in `brand.about` and `brand.facts`. Record advisory priorities

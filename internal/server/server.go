@@ -39,6 +39,7 @@ import (
 	"github.com/cheapseatsdev/cheapseats/internal/app"
 	"github.com/cheapseatsdev/cheapseats/internal/audit"
 	"github.com/cheapseatsdev/cheapseats/internal/env"
+	"github.com/cheapseatsdev/cheapseats/internal/excerpt"
 	"github.com/cheapseatsdev/cheapseats/internal/grade"
 	"github.com/cheapseatsdev/cheapseats/internal/llm"
 	"github.com/cheapseatsdev/cheapseats/internal/opinion"
@@ -212,6 +213,12 @@ func New(a *app.App) (*Server, error) {
 			return fmt.Sprintf("#%d", n)
 		},
 		"markdown": analystMarkdown,
+		// Model-written text that quotes answers, cleaned for reading (see package excerpt):
+		// prose such as a claim or a reason, one quote to set between “ and ”, and evidence
+		// to render with the "cites" partial.
+		"prose": excerpt.Prose,
+		"quote": excerpt.Quote,
+		"cites": newCites,
 		// An answer split around its grade's evidence, to highlight it (see grade.Mark).
 		"mark": grade.Mark,
 		"evidence": func(x run.Result) string {
@@ -239,6 +246,36 @@ func New(a *app.App) (*Server, error) {
 	}
 	s.share = t
 	return s, nil
+}
+
+// citesView is evidence for the "cites" partial: its quotes, each linked to the answer or prompt
+// it names on the run's page, or, when it isn't a list of quotes, the text cleaned as prose.
+type citesView struct {
+	Label string
+	Items []citeItem
+	Text  string
+}
+
+type citeItem struct {
+	excerpt.Cite
+	Href string
+}
+
+func newCites(label, runID, evidence string) citesView {
+	v := citesView{Label: label}
+	cs := excerpt.Parse(evidence)
+	if cs == nil {
+		v.Text = excerpt.Prose(evidence)
+		return v
+	}
+	for _, c := range cs {
+		it := citeItem{Cite: c}
+		if c.Kind != "" && runID != "" {
+			it.Href = fmt.Sprintf("/runs/%s#%s-%d", url.PathEscape(runID), c.Kind, c.N)
+		}
+		v.Items = append(v.Items, it)
+	}
+	return v
 }
 
 func fmtRate(r report.Rate) string {

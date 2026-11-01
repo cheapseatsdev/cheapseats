@@ -237,6 +237,7 @@ article.fix-item,.fix-item>summary{display:grid;grid-template-columns:minmax(0,1
 .fix-priority{width:max-content;border-radius:5px}
 .fix-body{padding:0 0 var(--cs-space-5);max-width:880px}.fix-body>p:first-child{margin-top:0}.fix-body p{line-height:1.65}
 .fix-body pre{margin-bottom:var(--cs-space-3)}
+.cites{margin:var(--cs-space-3) 0}.cites>p{margin:0 0 var(--cs-space-2)}.cite{margin:0 0 var(--cs-space-3)}.cite blockquote.evidence{margin:0}.cite figcaption{margin-top:var(--cs-space-1)}
 .filter-toolbar{padding:0 0 var(--cs-space-5);border-bottom:1px solid var(--cs-border);margin-bottom:var(--cs-space-6)}
 .filter-toolbar+.fix-list{border-top:0}
 .filter-toolbar .row{margin:var(--cs-space-2) 0;gap:var(--cs-space-2)}

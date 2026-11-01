@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cheapseatsdev/cheapseats/internal/analysis"
 	"github.com/cheapseatsdev/cheapseats/internal/app"
 )
 
@@ -31,5 +32,22 @@ func TestNextStepsKeptAnalysisNoteOnce(t *testing.T) {
 		if n := strings.Count(all, app.KeptAnalysisNote); n != 1 {
 			t.Errorf("%s: %q appears %d times, want once:\n%s", tc.name, app.KeptAnalysisNote, n, all)
 		}
+	}
+}
+
+// A finding's evidence prints one clean quote a line, labelled with its result; prose evidence
+// prints inline. Result IDs are dummies.
+func TestNextStepsPrintsEvidenceQuotes(t *testing.T) {
+	next := app.NextSteps{Findings: []app.NextFinding{
+		{Finding: analysis.Finding{Title: "Quotes", Detail: "d", Evidence: `201: "Starter is $95/month". 202: "Add-ons cost about **$76/month**".`}},
+		{Finding: analysis.Finding{Title: "Prose", Detail: "d", Evidence: `Answers call it \"cheap\".`}},
+	}}
+	var stdout, stderr bytes.Buffer
+	if err := printNextSteps(&stdout, &stderr, "Set", true, next, nil); err != nil {
+		t.Fatal(err)
+	}
+	want := "  - Evidence:\n    - result 201: “Starter is $95/month”\n    - result 202: “Add-ons cost about $76/month”\n"
+	if !strings.Contains(stdout.String(), want) || !strings.Contains(stdout.String(), "  - Evidence: Answers call it \"cheap\".\n") {
+		t.Fatalf("got:\n%s", stdout.String())
 	}
 }
