@@ -35,7 +35,7 @@ func verificationFixture() (*config.Config, sets.Set, Fix, []artifact, decision)
 }
 
 func analysisRecordedVerification(cfg *config.Config, f Fix) Verification {
-	v := Verification{Status: "verified", Summary: "Current artifact checks support this scoped test action.", Context: VerificationContext(cfg), Sources: []string{webURL(f.Target)}}
+	v := Verification{Status: "verified", Summary: "Current artifact checks support this scoped test action.", Sources: []string{webURL(f.Target)}}
 	for _, gate := range gates {
 		c := VerificationCheck{Gate: gate, Source: webURL(f.Target), Quote: "Current artifact evidence for this scoped change.", Reason: "This explicit fixture records the completed artifact check for the proposed change."}
 		if gate == "strategy" {
@@ -48,6 +48,7 @@ func analysisRecordedVerification(cfg *config.Config, f Fix) Verification {
 		}
 		v.Checks = append(v.Checks, c)
 	}
+	v.Context = VerificationContext(cfg, f.Target, v)
 	return v
 }
 
@@ -256,7 +257,8 @@ func TestAnalysisEnvelopeAndLegacyTrust(t *testing.T) {
 
 func TestPersistedReadinessNeedsCompleteRecordedChecks(t *testing.T) {
 	cfg, _, f, _, _ := verificationFixture()
-	f.Verification = Verification{Status: "verified", Context: VerificationContext(cfg), Sources: []string{f.Target}}
+	f.Verification = Verification{Status: "verified", Sources: []string{f.Target}}
+	f.Verification.Context = VerificationContext(cfg, f.Target, f.Verification)
 	a, err := DecodeAnalysis(Encode(Analysis{Fixes: []Fix{f}}))
 	if err != nil || a.Fixes[0].Verification.Status == "verified" {
 		t.Fatalf("a claimed status/context without checks became ready: %+v %v", a, err)

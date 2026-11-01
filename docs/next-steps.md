@@ -35,12 +35,26 @@ boundaries = ["A hosted service is outside the current product scope."]
 
 This optional brief guides advice and question curation. Buyer answerers and graders do not
 receive it; it does not change measurement comparability. Advice uses the current brief,
-including when rebuilding an old run. Changing what the verifier judges fit against (`about`,
-`audience`, `category` or the advisory brief) sends every saved action back to be verified again.
-Changing or removing a fact does so only for the actions whose checks quoted it. Adding a fact or
-editing the name, aliases, domains, sites or owners leaves verified actions as they are; their
-handoffs and owners are rebuilt from the current config whenever they are shown. A relevant loss outside the product scope can remain a
+including when rebuilding an old run. A relevant loss outside the product scope can remain a
 market finding. Do not use boundaries to suppress evidence.
+
+A saved action stays verified until something it was judged against changes:
+
+- `about`, `audience`, `category` or the advisory brief: every saved action is verified again.
+- A fact an action's checks quoted: that action is verified again when the whole fact the quote
+  came from is edited (a "no longer" in front, an "except" after) or removed, even if the quoted
+  words survive in another fact. If the quoted words occur in several facts, editing any of them
+  counts. Adding a fact, reordering facts or editing one the action didn't quote changes nothing,
+  unless the new or edited fact repeats the quoted words.
+- A site or domain: an action is verified again when its target or a page its checks quoted
+  stops being on any configured site or domain, or starts being on one (owned work and outreach
+  are judged differently). Other site and domain edits change nothing.
+
+The name, aliases and owners change nothing: handoffs, sites and owners are rebuilt from the
+current config whenever an action is shown. The set description, which the verifier reads as the
+set's purpose, is not checked: editing it leaves verified actions as they are until the analysis is
+rebuilt. Verifications saved before this rule stay verified until any brand edit, then need a
+rebuild.
 
 ## History and compatibility
 

@@ -99,7 +99,7 @@ text = "How do I set up tracking in set `+s+`?"
 		}
 		for i := range lists[id] {
 			f := &lists[id][i]
-			f.Verification = analysis.Verification{Status: "verified", Context: analysis.VerificationContext(cfg), Sources: []string{f.Target}}
+			f.Verification = analysis.Verification{Status: "verified", Sources: []string{f.Target}}
 			for _, gate := range []string{"existing_work", "remaining_change", "capability", "strategy", "eligibility", "completion"} {
 				source := f.Target
 				quote := "Fixture evidence was independently checked."
@@ -111,6 +111,7 @@ text = "How do I set up tracking in set `+s+`?"
 				}
 				f.Verification.Checks = append(f.Verification.Checks, analysis.VerificationCheck{Gate: gate, Source: source, Quote: quote, Reason: "Fixture verification for this candidate."})
 			}
+			f.Verification.Context = analysis.VerificationContext(cfg, f.Target, f.Verification)
 		}
 		fj := analysis.Encode(analysis.Analysis{Fixes: lists[id]})
 		if _, err := db.Exec(`UPDATE runs SET status='done', finished_at=?, fixes=?, fixes_at=? WHERE id=?`, store.Now(), fj, store.Now(), r.ID); err != nil {

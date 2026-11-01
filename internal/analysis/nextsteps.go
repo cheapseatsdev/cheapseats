@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"slices"
+	"sort"
 	"strings"
 
 	"github.com/cheapseatsdev/cheapseats/internal/config"
@@ -21,28 +23,82 @@ type Verification struct {
 	Context string              `json:"context,omitempty"`
 }
 
-// VerificationContext invalidates advisory work when the current product brief
-// changes, without changing or re-grading the answer benchmark. It digests what the verifier
-// judges fit against, besides the pages and facts it quotes: what the product is (about,
-// audience, category) and the advisory brief. Editing any of these can change a strategy or
-// capability verdict without touching a quote, so every saved action is verified again.
+// VerificationContext digests what a verification was judged against, so Triage can tell when
+// a saved action needs verifying again without changing or re-grading the answer benchmark. It
+// is computed once the checks are known (target is the action's target):
 //
-// The rest of the brand is left out. The name, aliases, domains, sites and owners are not
-// criteria the verifier is given, and Triage rebuilds the handoff, site and owner from the
-// current config on every read. Facts are checked per action instead (quotedFactsHold): a
-// verified action rests on the facts its checks quoted, so adding a fact or correcting another
-// one leaves it verified. Digesting the whole brand demoted every action on any of those edits.
-func VerificationContext(cfg *config.Config) string {
+//   - What the product is (about, audience, category) and the advisory brief. Editing any of
+//     these can change a strategy or capability verdict without touching a quote, so every
+//     saved action is verified again.
+//   - Each whole fact a brand.facts check quoted from (quotedFacts), not just the quoted span.
+//     Prefixing "no longer" or appending "except the Free plan" to that fact, or removing it,
+//     changes the digest even when the quoted words survive, there or inside another fact.
+//     Adding a fact, or editing one the action didn't quote, leaves it unchanged.
+//   - Which of the target and the pages the checks quoted are on one of the brand's configured
+//     sites or domains (onSite). Removing the site such a page is on, or adding one that turns a
+//     third party's page into the brand's own, changes whether the work is owned or outreach.
+//     Adding, removing or narrowing other sites leaves the digest unchanged.
+//
+// The rest of the brand is left out. The name, aliases and owners are not criteria the verifier
+// is given, and Triage rebuilds the handoff, site and owner from the current config on every
+// read. The set's description is not digested either, though the verifier's prompt shows it as
+// the set's purpose: the whole-brand digest before this one left it out too, and editing it
+// leaves verified actions as they are until the analysis is rebuilt (docs/next-steps.md).
+func VerificationContext(cfg *config.Config, target string, v Verification) string {
+	var facts, owned []string
+	for _, c := range v.Checks {
+		if c.Source == "brand.facts" {
+			facts = append(facts, quotedFacts(cfg.Brand.Facts, c.Quote)...)
+		}
+	}
+	for _, u := range append([]string{target}, v.Sources...) {
+		if u := webURL(u); u != "" {
+			if _, ok := cfg.Brand.SiteOf(u); ok {
+				owned = append(owned, u)
+			}
+		}
+	}
 	b, _ := json.Marshal(struct {
 		About, Audience, Category, Advisory string
-	}{cfg.Brand.About, cfg.Brand.Audience, cfg.Brand.Category, cfg.Brand.Advisory.Text()})
+		Facts, OnSite                       []string
+	}{cfg.Brand.About, cfg.Brand.Audience, cfg.Brand.Category, cfg.Brand.Advisory.Text(), sortedSet(facts), sortedSet(owned)})
 	h := sha256.Sum256(b)
 	return hex.EncodeToString(h[:])
 }
 
+// quotedFacts is every whole fact a quote overlaps, wherever it occurs in the facts joined the
+// way checkedProof searched them. A quote spanning two facts depends on both.
+func quotedFacts(facts []string, quote string) []string {
+	joined := strings.Join(facts, "\n")
+	var out []string
+	for from := 0; quote != "" && from <= len(joined); {
+		i := strings.Index(joined[from:], quote)
+		if i < 0 {
+			break
+		}
+		start := from + i
+		end := start + len(quote)
+		pos := 0
+		for _, f := range facts {
+			if pos < end && start < pos+len(f) {
+				out = append(out, f)
+			}
+			pos += len(f) + 1
+		}
+		from = start + 1
+	}
+	return out
+}
+
+func sortedSet(xs []string) []string {
+	sort.Strings(xs)
+	return slices.Compact(xs)
+}
+
 // legacyVerificationContext is the whole-brand digest stored before VerificationContext was
 // narrowed. It still matches while the brand is unchanged, so upgrading doesn't demote actions
-// verified under it; any brand edit since then still needs them verified again.
+// verified under it; any brand edit since then still needs them verified again. That is
+// stricter than the current digest, never looser.
 func legacyVerificationContext(cfg *config.Config) string {
 	b, _ := json.Marshal(struct {
 		Brand    config.Brand
@@ -52,24 +108,11 @@ func legacyVerificationContext(cfg *config.Config) string {
 	return hex.EncodeToString(h[:])
 }
 
-// currentContext reports whether a stored verification was made against today's brief and facts.
-func currentContext(cfg *config.Config, v Verification) bool {
-	if v.Context == "" || v.Context != VerificationContext(cfg) && v.Context != legacyVerificationContext(cfg) {
-		return false
-	}
-	return quotedFactsHold(cfg, v)
-}
-
-// quotedFactsHold reports whether every fact a verification quoted is still among the brand's
-// facts, found the way the verifier's quote was checked (checkedProof).
-func quotedFactsHold(cfg *config.Config, v Verification) bool {
-	facts := strings.Join(cfg.Brand.Facts, "\n")
-	for _, c := range v.Checks {
-		if c.Source == "brand.facts" && !strings.Contains(facts, c.Quote) {
-			return false
-		}
-	}
-	return true
+// currentContext reports whether a stored verification was made against today's brief, the
+// facts it quoted and the sites its pages are on.
+func currentContext(cfg *config.Config, f Fix) bool {
+	c := f.Verification.Context
+	return c != "" && (c == VerificationContext(cfg, f.Target, f.Verification) || c == legacyVerificationContext(cfg))
 }
 
 type VerificationCheck struct {
