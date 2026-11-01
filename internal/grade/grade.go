@@ -5,9 +5,11 @@ package grade
 import (
 	"context"
 	"crypto/sha256"
+	"embed"
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 	"unicode"
 
 	"github.com/cheapseatsdev/cheapseats/internal/answer"
@@ -66,10 +68,7 @@ func (g Grade) IsTopPick(brand string) bool {
 	return g.TopPick != nil && strings.EqualFold(*g.TopPick, brand)
 }
 
-// schemaRole is the configured model the grader's schema is sent to: cfg.Grader.
-const schemaRole = "grader"
-
-var schema = llm.RegisterSchema("grade", schemaRole, map[string]any{
+var schema = llm.RegisterSchema("grade", "grader", map[string]any{
 	"type": "object",
 	"properties": map[string]any{
 		"verdict":       map[string]any{"type": "string", "enum": []string{"recommended", "mentioned", "absent"}},
@@ -147,15 +146,37 @@ func Answer(ctx context.Context, cfg *config.Config, set sets.Set, prompt, answe
 	return AnswerWithSystem(ctx, cfg, set, prompt, answer, System)
 }
 
-// evaluatorVersion stands for what the grader does that EvaluatorDigest can't hash as data: how
-// the request is made beyond the sample user message it hashes, and how a reply becomes a grade
-// (namesBrand, normalize, Quote and fold). Bump it with any change to that behaviour; a comment or
-// a rename is not one. TestEvaluatorBehaviourCodeIsPinned fails on any change to that code until
-// it's acknowledged.
-const evaluatorVersion = 1
-
 // maxTokens bounds the grader's reply on the API: room for thinking as well as the grade.
 const maxTokens = 16000
+
+// source is this package's Go files, for the digest of its code; _test.go files are left out.
+//
+//go:embed *.go
+var source embed.FS
+
+// code is the digest of the code the grader runs: every non-test file in this package (its types
+// and their JSON tags, constants, functions), and the shared code that builds a structured output
+// request and reads its reply on either transport. Comments and layout don't count.
+var code = sync.OnceValue(func() string {
+	entries, err := source.ReadDir(".")
+	if err != nil {
+		panic("grade: " + err.Error())
+	}
+	files := map[string][]byte{}
+	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), "_test.go") {
+			continue
+		}
+		if files[e.Name()], err = source.ReadFile(e.Name()); err != nil {
+			panic("grade: " + err.Error())
+		}
+	}
+	d, err := llm.CodeDigest(files)
+	if err != nil {
+		panic("grade: " + err.Error())
+	}
+	return "grade " + d + "\nllm " + llm.StructuredCode() + "\nanswer " + answer.StructuredCode()
+})
 
 // EvaluatorDigest identifies the grader by what it sends and how it reads the reply, not by its
 // source text: stored checks, batches and experiments made with another digest are stale. The
@@ -172,20 +193,17 @@ func EvaluatorDigest() string {
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
 
-// evaluatorInputs are what EvaluatorDigest hashes, in order. The user message is hashed as built
-// for a fixed brand and set, so its framing counts as well as its fields.
+// evaluatorInputs are what EvaluatorDigest hashes, in order: the code, the prompt, the schema as
+// sent, and the user message as built for a fixed brand and set, so its framing counts as well
+// as its fields.
 func evaluatorInputs(schemaJSON []byte) []string {
 	cfg := &config.Config{Brand: config.Brand{Name: "<brand>", Aliases: []string{"<alias>"}, About: "<about>"}}
 	set := sets.Set{Competitors: []sets.Competitor{{Name: "<competitor>", Aliases: []string{"<competitor alias>"}}, {Name: "<other>"}}}
 	return []string{
-		fmt.Sprintf("evaluator %d", evaluatorVersion),
-		"role " + schemaRole,
+		code(),
 		System,
 		string(schemaJSON),
 		Input(cfg, set, "<question>", "<answer>"),
-		fmt.Sprintf("max_tokens %d", maxTokens),
-		fmt.Sprintf("max_evidence %d", maxEvidence),
-		"marks " + marks,
 	}
 }
 

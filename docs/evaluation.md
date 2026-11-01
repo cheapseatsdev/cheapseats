@@ -369,9 +369,9 @@ absent cannot pass behind the old 92.5% aggregate threshold.
 Open an approved version and choose **Create a grader comparison**. Select a
 partition and one or two candidate prompts. The production control comes from the
 version's saved rubric. The configured model, transport, evaluator digest (the
-grader's prompt, schema and reply handling), answers, brand identity and
-competitors stay fixed. A candidate must preserve the rubric's meaning; a changed
-measurement definition needs separate review.
+grader's prompt, schema and code), answers, brand identity and competitors stay
+fixed. A candidate must preserve the rubric's meaning; a changed measurement
+definition needs separate review.
 
 The preview counts every selected case, grader and repetition, estimates an output
 allowance, and shows the admission budget. Each grader runs twice, including the
