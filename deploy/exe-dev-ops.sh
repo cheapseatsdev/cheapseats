@@ -4,14 +4,15 @@
 #   nightly  a copy of the database in ~/cheapseats/backups (14 kept), before the 09:00 UTC runs
 #   hourly   an email when a run ends partial, failed or out of budget, a fix list fails, a run
 #            stops making progress, or a set's newest day's recommended rate fell beyond noise
-#            against the day before (each problem once), sent with exe.dev's email gateway
+#            against the previous run day (each problem once), sent with exe.dev's email gateway
 #
 #   [PORT=8000] deploy/exe-dev-ops.sh <vm> <alert email>
 #
-# The rate check is the Rankings page's paired day-over-day test, read from /api/rankings with the
-# first of CHEAPSEATS_TOKENS in the VM's cheapseats.env (without a token, only runs are checked),
-# for the recommended rate only. Its margin is 95%, so a drop outside noise happens by chance about
-# one day in 40 for each set and track. PORT is the one deploy/exe-dev.sh was given.
+# The rate check is the Rankings page's paired day-over-day test, read from /api/rankings over the
+# last 8 days with the first of CHEAPSEATS_TOKENS in the VM's cheapseats.env (without a token, only
+# runs are checked), for the recommended rate only. Daily and weekly sets are compared; a set that
+# runs less often than weekly is not. Its margin is 95%, so a drop outside noise happens by chance
+# about one day in 40 for each set and track. PORT is the one deploy/exe-dev.sh was given.
 #
 # The email must be someone exe.dev lets the VM write to: the VM's owner, a teammate, or someone
 # who has signed in to it. Run again to change it. The backups are on the VM's own disk: they
@@ -48,8 +49,8 @@ remote "cat > '$dir/bin/cheapseats-watch' && chmod +x '$dir/bin/cheapseats-watch
 # partial, failed or out of budget count for two days after they finish; a failed fix list counts
 # whenever it fails, since a rebuild can be of any run, however old; a run counts as stalled after
 # two hours with no answer finished. A set and track whose newest day's recommended rate fell
-# beyond noise against the day before counts once for that day. Runs on the VM (Linux): GNU date
-# and systemd.
+# beyond noise against the previous run day counts once for that day. Runs on the VM (Linux): GNU
+# date and systemd.
 set -euo pipefail
 to=$1
 port=${2:-8000}
@@ -76,16 +77,17 @@ problems=$(sqlite3 -separator $'\t' "$db" "
     FROM runs r LEFT JOIN results x ON x.run_id = r.id
     WHERE r.status = 'running' GROUP BY r.id
     HAVING COALESCE(MAX(x.finished_at), r.started_at) < '$stale';")
-# Rate drops, from the app: each set and track whose newest day has a comparison with the day
-# before (same method) in which recommended fell and its interval misses 0. Lines are shaped like
-# the ones above, keyed "<set>/<track> <date> recommended down". The token reaches curl on stdin,
-# not in its arguments, where other users on the VM could read it. If the app does not answer or
-# its reply does not parse, the run problems still go out.
+# Rate drops, from the app: each set and track whose newest day has a comparison with the previous
+# run day (same method) in which recommended fell and its interval misses 0. The app compares only
+# days it loaded, so the 8 days asked for cover daily and weekly sets; one that runs less often is
+# not compared. Lines are shaped like the ones above, keyed "<set>/<track> <date> recommended
+# down". The token reaches curl on stdin, not in its arguments, where other users on the VM could
+# read it. If the app does not answer or its reply does not parse, the run problems still go out.
 token=$(sed -n 's/^CHEAPSEATS_TOKENS=//p' "$dir/cheapseats.env" 2>/dev/null | head -n 1 | cut -d, -f1 | tr -d '"' || true)
 if [ -n "$token" ]; then
 	fell=""
 	if rankings=$(printf 'header = "Authorization: Bearer %s"\n' "$token" |
-		curl -fsS --max-time 60 -K - "http://127.0.0.1:$port/api/rankings?lastDays=2"); then
+		curl -fsS --max-time 60 -K - "http://127.0.0.1:$port/api/rankings?lastDays=8"); then
 		if ! fell=$(printf '%s' "$rankings" | PYTHONIOENCODING=utf-8 python3 -c '
 import json, sys
 for r in json.load(sys.stdin) or []:
@@ -94,7 +96,7 @@ for r in json.load(sys.stdin) or []:
     if not c or c.get("recommended", 0) >= 0 or c.get("recommended_within_noise"):
         continue
     key = "%s/%s %s recommended down" % (r["set_id"], r["track"], days[0]["date"])
-    print("%s\t1\t%s: recommended %+.0f pts \u00b1%.0f vs the day before (%d prompts compared)" % (
+    print("%s\t1\t%s: recommended %+.0f pts \u00b1%.0f vs the previous run day (%d prompts compared)" % (
         key, key, 100 * c["recommended"], 100 * c.get("recommended_margin", 0), c.get("common", 0)))
 '); then
 			echo "cheapseats-watch: the rankings did not parse; checked runs only" >&2

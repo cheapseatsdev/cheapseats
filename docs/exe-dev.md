@@ -79,13 +79,14 @@ This guide covers the VM setup; its deploy script builds the app on your machine
    owner, a teammate, or someone who has signed in to it.
 
    The same check emails when a set's newest day's **recommended** rate fell beyond noise against
-   the day before, for either track: the Rankings page's paired day-over-day test (see
-   [statistics](statistics.md#rankings)), read from `/api/rankings` with the first token in
-   `CHEAPSEATS_TOKENS`. Named and top-pick rates are not checked. Each set, track and day is sent
-   once. The test's margin is 95%, so a drop outside noise happens by chance about 1 day in 40 for
-   each set and track; read it on Rankings before acting. Without a token, or when Cheap Seats
-   doesn't answer, only runs are checked. If Cheap Seats listens on a port other than 8000, give
-   the same `PORT` as to `deploy/exe-dev.sh`.
+   the previous run day, for either track: the Rankings page's paired day-over-day test (see
+   [statistics](statistics.md#rankings)), read from `/api/rankings` over the last 8 days with the
+   first token in `CHEAPSEATS_TOKENS`. Daily and weekly sets are compared; a set that runs less
+   often than weekly is not. Named and top-pick rates are not checked. Each set, track and day is
+   sent once. The test's margin is 95%, so a drop outside noise happens by chance about 1 day in
+   40 for each set and track; read it on Rankings before acting. Without a token, or when Cheap
+   Seats doesn't answer, only runs are checked. If Cheap Seats listens on a port other than 8000,
+   give the same `PORT` as to `deploy/exe-dev.sh`.
 
    ```bash
    deploy/exe-dev-ops.sh <vm> you@example.com
