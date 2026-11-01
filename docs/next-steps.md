@@ -15,7 +15,9 @@ page is missing or unindexed. Unreadable pages and unconfirmed eligibility remai
 Informational answers need not name a product. A competitor feature need not become a task.
 Every action, investigation and finding needs a title that names it, since a collapsed card shows
 only the title. A title that is empty, a placeholder, a single word or under six letters drops
-the item; the run's insights record what was omitted and why. Output with no insights to speak
+the item; the run's insights record what was omitted and why. In a script written without spaces
+between words (Chinese, Japanese, Thai and others) only the letters are counted, and a Han, kana
+or Hangul character counts as two: 价格异议 is a title, 定价 is not. Output with no insights to speak
 of (under 10 characters), or in which no item has a usable title, is a failed analysis rather than
 an empty one: the run records the reason as its analysis error, and a rebuild keeps the analysis it
 already had. Retrying usually gives a normal result.

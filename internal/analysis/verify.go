@@ -93,6 +93,10 @@ var placeholderTitles = map[string]bool{
 // titleProblem says why a title can't name its item on a card, or "" when it can. A title is
 // the only text a collapsed card shows: an analyst once titled a market finding "x". The floor
 // is two words and six letters or digits, which every real title clears ("Pricing objections").
+// A title in a script written without spaces between words (Chinese, Japanese, Thai, ...) has
+// no words to count, so it needs only the letters; and a character of a script whose characters
+// are syllables or words (Han, kana, Hangul) counts as two letters: "价格异议" and "가격 문의"
+// clear the floor, "定价" doesn't, as "Pricing" doesn't.
 func titleProblem(title string) string {
 	t := strings.TrimSpace(title)
 	if t == "" {
@@ -101,17 +105,28 @@ func titleProblem(title string) string {
 	if placeholderTitles[strings.ToLower(strings.Trim(t, " .:-_*\"'"))] {
 		return "Its title is a placeholder."
 	}
-	n := 0
+	n, unspaced := 0, false
 	for _, r := range t {
-		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+		switch {
+		case unicode.In(r, syllabicScripts...):
+			n += 2
+		case unicode.IsLetter(r) || unicode.IsDigit(r):
 			n++
 		}
+		unspaced = unspaced || unicode.In(r, unspacedScripts...)
 	}
-	if n < 6 || len(strings.Fields(t)) < 2 {
+	if n < 6 || len(strings.Fields(t)) < 2 && !unspaced {
 		return "Its title is too short to say what it is."
 	}
 	return ""
 }
+
+// Scripts whose characters are each a syllable or a word, so one says what about two Latin
+// letters do, and scripts written without spaces between words.
+var (
+	syllabicScripts = []*unicode.RangeTable{unicode.Han, unicode.Hiragana, unicode.Katakana, unicode.Hangul, unicode.Yi}
+	unspacedScripts = []*unicode.RangeTable{unicode.Han, unicode.Hiragana, unicode.Katakana, unicode.Thai, unicode.Lao, unicode.Khmer, unicode.Myanmar, unicode.Tibetan}
+)
 
 func omit(a *Analysis, what, title, why string) {
 	note := fmt.Sprintf("Omitted %s %q: %s", what, clip(title, 160), why)

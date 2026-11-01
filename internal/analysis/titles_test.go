@@ -86,3 +86,40 @@ func TestDegenerateAnalystOutputIsAnError(t *testing.T) {
 		}
 	}
 }
+
+// The floor counted space-separated words, so a title in Chinese, Japanese or Thai, written
+// without spaces, was always too short, and an analysis written all in one of them failed as
+// degenerate.
+func TestTitlesInScriptsWithoutSpacesCountTheirLetters(t *testing.T) {
+	for _, title := range []string{
+		"定价页面缺少免费版",      // Chinese: the pricing page omits the free tier
+		"价格异议",           // Chinese: pricing objections
+		"料金ページに無料プランがない", // Japanese
+		"料金ページ",          // Japanese: pricing page
+		"หน้าราคาไม่มีแพ็กเกจฟรี", // Thai: the pricing page has no free plan
+		"가격 페이지", // Korean is spaced, with dense syllables
+		"Pricing 页面",
+	} {
+		if why := titleProblem(title); why != "" {
+			t.Errorf("%q rejected: %s", title, why)
+		}
+	}
+	for _, title := range []string{"定价", "価格", "ราคา", "가격", "x 价"} {
+		if titleProblem(title) == "" {
+			t.Errorf("%q accepted", title)
+		}
+	}
+
+	cfg, set, _, _, _ := verificationFixture()
+	old := structuredCLI
+	t.Cleanup(func() { structuredCLI = old })
+	structuredCLI = func(_ context.Context, _, _, _ string, _ map[string]any, out any) error {
+		b, _ := json.Marshal(Analysis{Insights: "回答推荐了提供免费版的工具，第7条结果提到了两个。", Findings: []Finding{{Title: "买家比较上手时间", Detail: "回答权衡上手所需时间。", Evidence: "结果7", Prompts: []int{1}}}})
+		return json.Unmarshal(b, out)
+	}
+	results := []run.Result{{ID: 7, PromptIdx: 0, Answerer: "fake", Track: answer.Search, Status: "done", Grade: &grade.Grade{Verdict: grade.Absent}, Answer: &answer.Answer{Text: "An answer."}}}
+	a, _, err := Build(context.Background(), cfg, set, results, nil, nil)
+	if err != nil || len(a.Findings) != 1 {
+		t.Fatalf("a Chinese analysis failed or lost its finding: %v %+v", err, a)
+	}
+}
