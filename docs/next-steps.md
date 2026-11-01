@@ -13,6 +13,9 @@ The analyst generates candidates, verifies them against current artifacts and th
 then ranks eligible actions. Zero actions is valid. Missing retrieval does not establish that a
 page is missing or unindexed. Unreadable pages and unconfirmed eligibility remain unknown.
 Informational answers need not name a product. A competitor feature need not become a task.
+Every action, investigation and finding needs a title that names it, since a collapsed card shows
+only the title. A title that is empty, a placeholder, a single word or under six letters drops
+the item; the run's insights record what was omitted and why.
 
 Current-page reads use the audit fetcher's public-address guard, robots policy and daily cache.
 Optional rendered-content fallback follows the existing Exa configuration and accounting.

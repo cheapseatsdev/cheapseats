@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"sort"
 	"strings"
+	"unicode"
 
 	"github.com/cheapseatsdev/cheapseats/internal/config"
 	"github.com/cheapseatsdev/cheapseats/internal/llm"
@@ -60,7 +61,11 @@ func normalizeNotes(set sets.Set, a *Analysis) {
 	var investigations []Investigation
 	for _, n := range a.Investigations {
 		n.Prompts, n.PromptIDs = promptIDs(set, n.Prompts)
-		if strings.TrimSpace(n.Title) != "" && len(n.Prompts) > 0 && strings.TrimSpace(n.Why) != "" && usefulPlan(n.Check, n.Decision, n.Evidence, n.Target) {
+		if why := titleProblem(n.Title); why != "" {
+			omit(a, "investigation", n.Title, why+" It asked: "+clip(n.Why, 300))
+			continue
+		}
+		if len(n.Prompts) > 0 && strings.TrimSpace(n.Why) != "" && usefulPlan(n.Check, n.Decision, n.Evidence, n.Target) {
 			investigations = append(investigations, n)
 		}
 	}
@@ -68,11 +73,52 @@ func normalizeNotes(set sets.Set, a *Analysis) {
 	var findings []Finding
 	for _, n := range a.Findings {
 		n.Prompts, n.PromptIDs = promptIDs(set, n.Prompts)
-		if strings.TrimSpace(n.Title) != "" && len(n.Prompts) > 0 && strings.TrimSpace(n.Evidence) != "" {
+		if why := titleProblem(n.Title); why != "" {
+			omit(a, "market finding", n.Title, why+" It said: "+clip(n.Detail, 300))
+			continue
+		}
+		if len(n.Prompts) > 0 && strings.TrimSpace(n.Evidence) != "" {
 			findings = append(findings, n)
 		}
 	}
 	a.Findings = findings
+}
+
+// Titles a model writes when it has nothing to say there.
+var placeholderTitles = map[string]bool{
+	"title": true, "untitled": true, "tbd": true, "todo": true, "n/a": true, "none": true, "placeholder": true,
+	"finding": true, "market finding": true, "investigation": true, "fix": true, "candidate": true,
+}
+
+// titleProblem says why a title can't name its item on a card, or "" when it can. A title is
+// the only text a collapsed card shows: an analyst once titled a market finding "x". The floor
+// is two words and six letters or digits, which every real title clears ("Pricing objections").
+func titleProblem(title string) string {
+	t := strings.TrimSpace(title)
+	if t == "" {
+		return "It has no title."
+	}
+	if placeholderTitles[strings.ToLower(strings.Trim(t, " .:-_*\"'"))] {
+		return "Its title is a placeholder."
+	}
+	n := 0
+	for _, r := range t {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			n++
+		}
+	}
+	if n < 6 || len(strings.Fields(t)) < 2 {
+		return "Its title is too short to say what it is."
+	}
+	return ""
+}
+
+func omit(a *Analysis, what, title, why string) {
+	note := fmt.Sprintf("Omitted %s %q: %s", what, clip(title, 160), why)
+	if a.Insights != "" {
+		a.Insights += "\n\n"
+	}
+	a.Insights += note
 }
 
 // usefulPlan is a structural floor, not a substitute for the analyst's judgment:
@@ -108,11 +154,7 @@ func usefulPlan(check, decision, evidence, target string) bool {
 }
 
 func rejectCandidate(a *Analysis, f Fix, why string) {
-	note := fmt.Sprintf("Omitted candidate %q: %s", clip(f.Title, 160), why)
-	if a.Insights != "" {
-		a.Insights += "\n\n"
-	}
-	a.Insights += note
+	omit(a, "candidate", f.Title, why)
 }
 
 type artifact struct {
@@ -219,6 +261,10 @@ func verifyCandidates(ctx context.Context, cfg *config.Config, set sets.Set, a A
 	var fs []Fix
 	for _, f := range a.Fixes {
 		f.Prompts = validPrompts(f.Prompts, len(set.Prompts))
+		if why := titleProblem(f.Title); why != "" {
+			rejectCandidate(&a, f, why+" It claimed: "+clip(f.Claim, 300))
+			continue
+		}
 		if !usefulPlan(f.Check, f.Decision, f.Evidence, f.Target) {
 			rejectCandidate(&a, f, "no bounded read-only check and concrete business decision justify investigating it.")
 			continue
