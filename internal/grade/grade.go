@@ -5,7 +5,6 @@ package grade
 import (
 	"context"
 	"crypto/sha256"
-	_ "embed"
 	"fmt"
 	"slices"
 	"strings"
@@ -67,7 +66,10 @@ func (g Grade) IsTopPick(brand string) bool {
 	return g.TopPick != nil && strings.EqualFold(*g.TopPick, brand)
 }
 
-var schema = llm.RegisterSchema("grade", "grader", map[string]any{
+// schemaRole is the configured model the grader's schema is sent to: cfg.Grader.
+const schemaRole = "grader"
+
+var schema = llm.RegisterSchema("grade", schemaRole, map[string]any{
 	"type": "object",
 	"properties": map[string]any{
 		"verdict":       map[string]any{"type": "string", "enum": []string{"recommended", "mentioned", "absent"}},
@@ -145,16 +147,46 @@ func Answer(ctx context.Context, cfg *config.Config, set sets.Set, prompt, answe
 	return AnswerWithSystem(ctx, cfg, set, prompt, answer, System)
 }
 
-// Exact evaluator sources pin experiment/cache behavior as well as the prompt.
-//
-//go:embed grade.go
-var evaluatorSource string
+// evaluatorVersion stands for what the grader does that EvaluatorDigest can't hash as data: how
+// the request is made beyond the sample user message it hashes, and how a reply becomes a grade
+// (namesBrand, normalize, Quote and fold). Bump it with any change to that behaviour; a comment or
+// a rename is not one. TestEvaluatorBehaviourCodeIsPinned fails on any change to that code until
+// it's acknowledged.
+const evaluatorVersion = 1
 
-//go:embed evidence.go
-var evidenceSource string
+// maxTokens bounds the grader's reply on the API: room for thinking as well as the grade.
+const maxTokens = 16000
 
+// EvaluatorDigest identifies the grader by what it sends and how it reads the reply, not by its
+// source text: stored checks, batches and experiments made with another digest are stale. The
+// model and transport are recorded beside it, from the config.
 func EvaluatorDigest() string {
-	return fmt.Sprintf("%x", sha256.Sum256([]byte(evaluatorSource+"\x00"+evidenceSource)))
+	js, err := llm.SchemaJSON(schema)
+	if err != nil {
+		panic("grade: the grader's schema does not encode: " + err.Error())
+	}
+	h := sha256.New()
+	for _, part := range evaluatorInputs(js) {
+		fmt.Fprintf(h, "%d:%s\x00", len(part), part)
+	}
+	return fmt.Sprintf("%x", h.Sum(nil))
+}
+
+// evaluatorInputs are what EvaluatorDigest hashes, in order. The user message is hashed as built
+// for a fixed brand and set, so its framing counts as well as its fields.
+func evaluatorInputs(schemaJSON []byte) []string {
+	cfg := &config.Config{Brand: config.Brand{Name: "<brand>", Aliases: []string{"<alias>"}, About: "<about>"}}
+	set := sets.Set{Competitors: []sets.Competitor{{Name: "<competitor>", Aliases: []string{"<competitor alias>"}}, {Name: "<other>"}}}
+	return []string{
+		fmt.Sprintf("evaluator %d", evaluatorVersion),
+		"role " + schemaRole,
+		System,
+		string(schemaJSON),
+		Input(cfg, set, "<question>", "<answer>"),
+		fmt.Sprintf("max_tokens %d", maxTokens),
+		fmt.Sprintf("max_evidence %d", maxEvidence),
+		"marks " + marks,
+	}
 }
 
 // AnswerWithSystem uses the production transport and normalization with an
@@ -173,7 +205,7 @@ func AnswerWithSystem(ctx context.Context, cfg *config.Config, set sets.Set, pro
 		// Room for thinking as well as the grade: current Claude models think by default, thinking
 		// counts against max_tokens, and at 2048 a long think cut the grade off. Only use is billed.
 		var resp map[string]any
-		resp, err = llm.Structured(ctx, cfg.Grader.Model, system, in, 16000, schema, &g)
+		resp, err = llm.Structured(ctx, cfg.Grader.Model, system, in, maxTokens, schema, &g)
 		if resp != nil {
 			cost = cfg.Cost(cfg.Grader.Model, llm.Usage(resp, false))
 		}
