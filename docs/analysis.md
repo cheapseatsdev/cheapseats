@@ -57,11 +57,11 @@ Every candidate the analyst proposes ends as an action or in the analysis's `omi
 | `cap` | `dropped` | Its rank, beyond the eight best ranked |
 | `review` | `rejected` | The reviewer's `reject` and summary |
 | `review` | `finding` | The reviewer's `already-done` or `boundary` and summary; the market finding is in its own list |
-| `review` | `investigation` | The gate verification failed at, the reviewer's status and summary, or why review did not run (no advisory brief, no readable page, a failed verification call); the investigation is in its own list |
+| `review` | `investigation` | The gate verification failed at, the reviewer's status and summary (or that a `verified` came with no summary), or why review did not run (no advisory brief, no readable page, a failed verification call); the investigation is in its own list |
 
 A reason is cut to 300 characters. The run page lists them under **Candidates not promoted**, collapsed, below Market findings; `/api/runs/{id}` and `/api/runs/{id}/fixes` return them as `omitted`, and `/api/next-steps` and MCP `get_next_steps` add them when asked (`omitted=true`). An analysis stored before this has none.
 
-Building an analysis logs one `analysis built` line with the run, the candidates proposed, how many the filters dropped (`filtered`, and `filtered_by` counting each reason), the cap cut, reached review, were verified and were rejected, the analysis's findings and investigations, and the cost. A degraded build logs it with its error.
+Building an analysis logs one `analysis built` line with the run, the candidates proposed, how many the filters dropped (`filtered`, and `filtered_by` counting each reason), the cap cut, reached review, were verified and were rejected, the analysis's findings and investigations, and the cost. A degraded build logs it with `verify_error`, the failure's kind (`timeout`, `http_529`, `decode`, `cli_exit`, `no_pages`, `call_failed` and so on) rather than its message, which can carry a reply's text or a secret; an omission whose verification call failed names the same kind. Every reason `filtered_by` counts is a fixed sentence.
 
 `omitted` was added to the stored analysis envelope without a version change or a schema migration: it lives in the existing `runs.fixes` JSON, an older build reading a newer analysis ignores it, and a newer build reading an older one finds none.
 

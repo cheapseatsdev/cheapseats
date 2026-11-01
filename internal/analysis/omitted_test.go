@@ -10,6 +10,7 @@ import (
 
 	"github.com/cheapseatsdev/cheapseats/internal/config"
 	"github.com/cheapseatsdev/cheapseats/internal/llm"
+	"github.com/cheapseatsdev/cheapseats/internal/run"
 )
 
 // omittedCandidates is the verification fixture's candidate under ten ranks and titles, all of
@@ -107,7 +108,7 @@ func TestOmittedRecordsEveryStageOutcomeAndReason(t *testing.T) {
 		{"TBD", StageFilter, OutcomeDropped, "Its title is a placeholder."},
 		{unnamed.Title, StageFilter, OutcomeDropped, "its check does not name its target URL."},
 		{empty.Title, StageFilter, OutcomeDropped, "it has no claim, done_when."},
-		{unknown.Title, StageFilter, OutcomeDropped, `its type "blog-post" is not new-page, fix-page, positioning, outreach or product.`},
+		{unknown.Title, StageFilter, OutcomeDropped, "its type is not new-page, fix-page, positioning, outreach or product."},
 		{fs[8].Title, StageCap, OutcomeDropped, "ranked 9; only the 8 best-ranked candidates are reviewed."},
 		{fs[9].Title, StageCap, OutcomeDropped, "ranked 10; only the 8 best-ranked candidates are reviewed."},
 		{fs[1].Title, StageReview, OutcomeRejected, "reject: The wording change is immaterial to the setup decision."},
@@ -159,7 +160,7 @@ func TestOmittedSaysWhyReviewDidNotRun(t *testing.T) {
 		"call failed": {func(*config.Config) context.Context {
 			omittedReviewer(t, nil, errors.New("HTTP 529"))
 			return omittedPages("text")
-		}, "not reviewed: the verification call failed."},
+		}, "not reviewed: the verification call failed (call_failed)."},
 	} {
 		cfg, set, _, _, _ := verificationFixture()
 		a, _, _ := verifyCandidates(c.setup(cfg), cfg, set, Analysis{Fixes: fs}, 0)
@@ -222,5 +223,80 @@ func TestAnalysisBuiltIsLogged(t *testing.T) {
 	}
 	if cost != 0.0225 { // 3000 input and 300 output tokens at 5 and 25 per million
 		t.Errorf("cost = %v, want 0.0225", cost)
+	}
+}
+
+// A reviewer that says verified with no summary leaves the candidate an investigation, and the
+// omission says that rather than "verified: ".
+func TestOmittedVerifiedWithoutSummary(t *testing.T) {
+	cfg, set, _, pages, _ := verificationFixture()
+	fs, d := omittedCandidates(1)
+	d.Summary = "  "
+	omittedReviewer(t, []decision{d}, nil)
+	a, _, err := verifyCandidates(omittedPages(pages[0].Text), cfg, set, Analysis{Fixes: fs}, 0)
+	if err != nil || len(a.Fixes) != 0 || len(a.Investigations) != 1 {
+		t.Fatalf("%+v %v", a, err)
+	}
+	o := a.Omitted[0]
+	if o.Stage != StageReview || o.Outcome != OutcomeInvestigation || o.Reason != "the reviewer marked it verified but gave no summary." {
+		t.Errorf("omission = %+v", o)
+	}
+}
+
+// A failed verification's error can carry the claude CLI's result, its stderr, a provider's
+// reply or a page's read error. The log line and the stored omissions name its category only.
+func TestVerificationFailureTextStaysOutOfLogAndOmitted(t *testing.T) {
+	const secret = "sk-ant-SENTINEL-0123456789 and an answer quoting the run"
+	for _, c := range []struct {
+		name     string
+		err      error // the verifier call's error, or nil for an unreadable page
+		category string
+	}{
+		{"cli result", fmt.Errorf("claude: error_during_execution: %s", secret), "call_failed"},
+		{"provider reply", &llm.APIError{Status: 529, Body: secret}, "http_529"},
+		{"timeout", fmt.Errorf("claude: %w: %s", context.DeadlineExceeded, secret), "timeout"},
+		{"decode", fmt.Errorf("%s: %w", secret, &json.SyntaxError{}), "decode"},
+		{"unreadable page", nil, "no_pages"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			cfg, set, f, pages, _ := verificationFixture()
+			analyst, _ := json.Marshal(Analysis{Insights: "Answers favour tools with a free tier.", Fixes: []Fix{f}})
+			calls := 0
+			old := structuredCLI
+			t.Cleanup(func() { structuredCLI = old })
+			structuredCLI = func(_ context.Context, _, _, _ string, _ map[string]any, out any) error {
+				calls++
+				if calls == 1 {
+					return json.Unmarshal(analyst, out)
+				}
+				return c.err
+			}
+			read := func(context.Context, string) (string, bool, error) { return pages[0].Text, false, nil }
+			if c.err == nil {
+				read = func(context.Context, string) (string, bool, error) { return "", false, errors.New(secret) }
+			}
+			buf := captureLog(t)
+			ctx := WithVerifier(llm.WithOperation(context.Background(), "analysis/r-secret"), read)
+			a, _, err := Build(ctx, cfg, set, []run.Result{oneResult[0]}, nil, nil)
+			var verr *VerificationError
+			if !errors.As(err, &verr) {
+				t.Fatalf("want a VerificationError, got %v", err)
+			}
+			log := buf.String()
+			stored := Encode(a)
+			if strings.Contains(log, "SENTINEL") || strings.Contains(Encode(Analysis{Omitted: a.Omitted}), "SENTINEL") {
+				t.Errorf("the failure's text reached the log or omitted:\n%s\n%s", log, stored)
+			}
+			if !strings.Contains(log, "verify_error="+c.category) {
+				t.Errorf("log lacks verify_error=%s:\n%s", c.category, log)
+			}
+			want := "not reviewed: the verification call failed (" + c.category + ")."
+			if c.err == nil {
+				want = "not reviewed: no current page could be read."
+			}
+			if len(a.Omitted) != 1 || a.Omitted[0].Reason != want {
+				t.Errorf("omitted = %+v, want reason %q", a.Omitted, want)
+			}
+		})
 	}
 }

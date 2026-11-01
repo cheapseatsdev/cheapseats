@@ -329,7 +329,8 @@ Observed run evidence:
 // logBuilt logs one line for a built analysis, so the service log says why a run got the
 // actions it did: two analyses on 0.7.4 saved no actions and nothing recorded why. The run's
 // page lists each omitted candidate; this is the count. A degraded build (VerificationError)
-// logs it too, with the error.
+// logs it too, with the failure's category (FailureCategory). Every reason it counts under
+// filtered_by is a fixed sentence, never the analyst's text.
 func logBuilt(ctx context.Context, a Analysis, cost float64, err error) {
 	t := a.Tally()
 	attrs := []any{"run", strings.TrimPrefix(llm.Operation(ctx), "analysis/"),
@@ -337,7 +338,8 @@ func logBuilt(ctx context.Context, a Analysis, cost float64, err error) {
 		"reviewed", t.Reviewed, "verified", t.Verified, "rejected", t.Rejected,
 		"findings", t.Findings, "investigations", t.Investigations, "cost_usd", fmt.Sprintf("%.4f", cost)}
 	if err != nil {
-		attrs = append(attrs, "err", err)
+		// The category, never the error: its message can carry a reply's text or a secret.
+		attrs = append(attrs, "verify_error", FailureCategory(err))
 	}
 	slog.Info("analysis built", attrs...)
 }

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"os/exec"
 	"regexp"
 	"sort"
 	"strings"
@@ -513,12 +514,46 @@ func (e *VerificationError) Error() string {
 
 func (e *VerificationError) Unwrap() error { return e.Err }
 
+// ErrNoReadablePage is the verification error when none of the current pages could be read.
+var ErrNoReadablePage = errors.New("no current page could be read")
+
 // unreadable says why no page could be read, from the first page's error.
 func unreadable(pages []artifact) error {
 	if len(pages) == 0 {
-		return errors.New("no current page could be read")
+		return ErrNoReadablePage
 	}
-	return fmt.Errorf("no current page could be read (%d tried; %s: %s)", len(pages), pages[0].URL, pages[0].Error)
+	return fmt.Errorf("%w (%d tried; %s: %s)", ErrNoReadablePage, len(pages), pages[0].URL, pages[0].Error)
+}
+
+// FailureCategory names the kind of a verification failure from its type or sentinel, never
+// from its message: a failed call's error can carry the provider's reply, the claude CLI's
+// result or stderr, or a page's read error, and so answer text or a secret. It is what the
+// analysis-built log line and a candidate's omission say about the failure; the full error
+// goes only where it went before (the run's fixes_error). "" for no error.
+func FailureCategory(err error) string {
+	var api *llm.APIError
+	var exit *exec.ExitError
+	var syntax *json.SyntaxError
+	var typ *json.UnmarshalTypeError
+	switch {
+	case err == nil:
+		return ""
+	case errors.Is(err, ErrNoReadablePage):
+		return "no_pages"
+	case errors.Is(err, context.DeadlineExceeded):
+		return "timeout"
+	case errors.Is(err, context.Canceled):
+		return "canceled"
+	case errors.Is(err, llm.ErrNoKey):
+		return "no_key"
+	case errors.As(err, &api):
+		return fmt.Sprintf("http_%d", api.Status)
+	case errors.As(err, &syntax), errors.As(err, &typ):
+		return "decode"
+	case errors.As(err, &exit):
+		return "cli_exit"
+	}
+	return "call_failed"
 }
 
 func verifyCandidates(ctx context.Context, cfg *config.Config, set sets.Set, a Analysis, cost float64) (Analysis, float64, error) {
@@ -545,7 +580,8 @@ func verifyCandidates(ctx context.Context, cfg *config.Config, set sets.Set, a A
 			continue
 		}
 		if f.Type != NewPage && f.Type != FixPage && f.Type != Positioning && f.Type != Outreach && f.Type != Product {
-			omitCandidate(&a, f, StageFilter, OutcomeDropped, fmt.Sprintf("its type %q is not new-page, fix-page, positioning, outreach or product.", f.Type))
+			// The type is in the omission's own field; the reason stays fixed, as the log counts it.
+			omitCandidate(&a, f, StageFilter, OutcomeDropped, "its type is not new-page, fix-page, positioning, outreach or product.")
 			continue
 		}
 		f.Verification = Verification{}
@@ -624,7 +660,7 @@ Do not mark verified unless all six gates pass with evidence. Current supplied a
 	if err != nil {
 		for _, f := range fs {
 			a.Investigations = append(a.Investigations, investigation(set, f, "Verification could not complete; the proposed work remains an investigation."))
-			omitCandidate(&a, f, StageReview, OutcomeInvestigation, "not reviewed: the verification call failed.")
+			omitCandidate(&a, f, StageReview, OutcomeInvestigation, "not reviewed: the verification call failed ("+FailureCategory(err)+").")
 		}
 		a.VerificationFailed = true
 		return a, cost, &VerificationError{Candidates: len(fs), Err: err}
@@ -728,7 +764,10 @@ func verifyDecision(d decision, f Fix, cfg *config.Config, pages []artifact) (Ve
 // judgeDecision is verifyDecision with, when it fails, a short reason for the candidate's
 // omission as well: the reviewer's status and summary, or the gate verification failed at.
 func judgeDecision(d decision, f Fix, cfg *config.Config, pages []artifact) (Verification, string, string) {
-	if d.Status != "verified" || strings.TrimSpace(d.Summary) == "" {
+	if d.Status == "verified" && strings.TrimSpace(d.Summary) == "" {
+		return Verification{}, "Current evidence does not establish an eligible action: " + d.Summary, "the reviewer marked it verified but gave no summary."
+	}
+	if d.Status != "verified" {
 		return Verification{}, "Current evidence does not establish an eligible action: " + d.Summary, d.Status + ": " + d.Summary
 	}
 	if f.Type == NewPage {
