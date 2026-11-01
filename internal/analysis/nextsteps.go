@@ -22,14 +22,54 @@ type Verification struct {
 }
 
 // VerificationContext invalidates advisory work when the current product brief
-// changes, without changing or re-grading the answer benchmark.
+// changes, without changing or re-grading the answer benchmark. It digests what the verifier
+// judges fit against, besides the pages and facts it quotes: what the product is (about,
+// audience, category) and the advisory brief. Editing any of these can change a strategy or
+// capability verdict without touching a quote, so every saved action is verified again.
+//
+// The rest of the brand is left out. The name, aliases, domains, sites and owners are not
+// criteria the verifier is given, and Triage rebuilds the handoff, site and owner from the
+// current config on every read. Facts are checked per action instead (quotedFactsHold): a
+// verified action rests on the facts its checks quoted, so adding a fact or correcting another
+// one leaves it verified. Digesting the whole brand demoted every action on any of those edits.
 func VerificationContext(cfg *config.Config) string {
+	b, _ := json.Marshal(struct {
+		About, Audience, Category, Advisory string
+	}{cfg.Brand.About, cfg.Brand.Audience, cfg.Brand.Category, cfg.Brand.Advisory.Text()})
+	h := sha256.Sum256(b)
+	return hex.EncodeToString(h[:])
+}
+
+// legacyVerificationContext is the whole-brand digest stored before VerificationContext was
+// narrowed. It still matches while the brand is unchanged, so upgrading doesn't demote actions
+// verified under it; any brand edit since then still needs them verified again.
+func legacyVerificationContext(cfg *config.Config) string {
 	b, _ := json.Marshal(struct {
 		Brand    config.Brand
 		Advisory string
 	}{cfg.Brand, cfg.Brand.Advisory.Text()})
 	h := sha256.Sum256(b)
 	return hex.EncodeToString(h[:])
+}
+
+// currentContext reports whether a stored verification was made against today's brief and facts.
+func currentContext(cfg *config.Config, v Verification) bool {
+	if v.Context == "" || v.Context != VerificationContext(cfg) && v.Context != legacyVerificationContext(cfg) {
+		return false
+	}
+	return quotedFactsHold(cfg, v)
+}
+
+// quotedFactsHold reports whether every fact a verification quoted is still among the brand's
+// facts, found the way the verifier's quote was checked (checkedProof).
+func quotedFactsHold(cfg *config.Config, v Verification) bool {
+	facts := strings.Join(cfg.Brand.Facts, "\n")
+	for _, c := range v.Checks {
+		if c.Source == "brand.facts" && !strings.Contains(facts, c.Quote) {
+			return false
+		}
+	}
+	return true
 }
 
 type VerificationCheck struct {

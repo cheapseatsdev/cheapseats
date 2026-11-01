@@ -159,9 +159,9 @@ func Triage(cfg *config.Config, set sets.Set, f Fix) Fix {
 		f.Verification.Status = "unverified"
 		f.Verification.Summary = "The stored verification lacks complete evidence or an explicit product goal; verify this suggestion again."
 	}
-	if f.Verification.Status == "verified" && (f.Verification.Context == "" || f.Verification.Context != VerificationContext(cfg)) {
+	if f.Verification.Status == "verified" && !currentContext(cfg, f.Verification) {
 		f.Verification.Status = "unverified"
-		f.Verification.Summary = "The verification context is missing or the product brief changed; verify this suggestion again."
+		f.Verification.Summary = "The verification context is missing, or the product brief or a quoted fact changed; verify this suggestion again."
 	}
 	if f.Verification.Status == "verified" && len(f.Prompts) > 0 {
 		f.ClaudePrompt = claudePrompt(cfg, set, f)

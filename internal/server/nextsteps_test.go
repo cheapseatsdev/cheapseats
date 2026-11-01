@@ -37,7 +37,7 @@ func verifiedServerEvidence(a *app.App, f analysis.Fix) analysis.Verification {
 		source := target
 		quote := "Fixture verified current artifact evidence."
 		if gate == "capability" {
-			source = "brand.facts"
+			source, quote = "brand.facts", a.Cfg.Brand.Facts[0] // a quoted fact must still be listed
 		}
 		if gate == "strategy" {
 			source = "brand.advisory"

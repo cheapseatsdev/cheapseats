@@ -35,8 +35,11 @@ boundaries = ["A hosted service is outside the current product scope."]
 
 This optional brief guides advice and question curation. Buyer answerers and graders do not
 receive it; it does not change measurement comparability. Advice uses the current brief,
-including when rebuilding an old run. Changes to product facts or advisory context require
-saved actions to be verified again. A relevant loss outside the product scope can remain a
+including when rebuilding an old run. Changing what the verifier judges fit against (`about`,
+`audience`, `category` or the advisory brief) sends every saved action back to be verified again.
+Changing or removing a fact does so only for the actions whose checks quoted it. Adding a fact or
+editing the name, aliases, domains, sites or owners leaves verified actions as they are; their
+handoffs and owners are rebuilt from the current config whenever they are shown. A relevant loss outside the product scope can remain a
 market finding. Do not use boundaries to suppress evidence.
 
 ## History and compatibility
