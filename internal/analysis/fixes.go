@@ -313,7 +313,7 @@ Observed run evidence:
 		return Analysis{}, cost, err
 	}
 	if err := degenerate(a); err != nil {
-		return Analysis{}, cost, unusable(err, prompt, resp)
+		return Analysis{}, cost, unusable(ctx, err, prompt, resp)
 	}
 	return verifyCandidates(ctx, cfg, set, a, cost)
 }
@@ -357,21 +357,26 @@ func degenerate(a Analysis) error {
 	return nil
 }
 
-// rawReplyLog is how much of an unusable reply's text is logged.
-const rawReplyLog = 4000
+// rawReplyLog is how much of an unusable reply's text is logged. The text quotes the run's
+// answers, so the log keeps a short, redacted start of it: enough to see its shape.
+const rawReplyLog = 1000
 
-// unusable adds what the analyst was sent and what came back to a degenerate output's error,
-// and logs the start of the reply's text. Two analyses of a 48-answer run came back with empty
+// unusable logs what the analyst was sent and what came back for a degenerate output, and adds
+// the reply's stable shape to the error. Two analyses of a 48-answer run came back with empty
 // insights after about half a minute, billed, and nothing recorded said whether the reply
 // stopped early, went to thinking or was an empty answer. The error is stored as the run's
-// fixes_error, which a rebuild from the command line leaves without a log line.
-func unusable(err error, prompt string, resp map[string]any) error {
+// fixes_error and the ops watch alerts on a change in it, so it carries only what stays the
+// same when the failure repeats (stop reason, block types, whether there was text); the token
+// counts, text length, prompt size and the start of the text go to the log, with the run.
+func unusable(ctx context.Context, err error, prompt string, resp map[string]any) error {
+	attrs := []any{"run", strings.TrimPrefix(llm.Operation(ctx), "analysis/"), "err", err, "prompt_chars", len([]rune(prompt))}
 	if resp == nil {
-		return fmt.Errorf("%w (prompt %d characters)", err, len([]rune(prompt)))
+		slog.Warn("analyst output unusable", attrs...)
+		return err
 	}
-	slog.Warn("analyst output unusable", "err", err, "prompt_chars", len([]rune(prompt)), "reply", llm.Reply(resp),
-		"text", llm.Truncate(redact.Text(llm.ReplyText(resp)), rawReplyLog))
-	return fmt.Errorf("%w (prompt %d characters; %s)", err, len([]rune(prompt)), llm.Reply(resp))
+	slog.Warn("analyst output unusable", append(attrs, "reply", llm.Reply(resp),
+		"text", llm.Truncate(redact.Text(llm.ReplyText(resp)), rawReplyLog))...)
+	return fmt.Errorf("%w (%s)", err, llm.ReplyShape(resp))
 }
 
 // results2text writes each prompt's graded answers the way the analyst reads them.

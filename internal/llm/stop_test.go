@@ -1,8 +1,10 @@
 package llm
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -37,8 +39,8 @@ func TestStructuredRejectsEveryEarlyStop(t *testing.T) {
 		})
 		var out map[string]any
 		_, err := Structured(context.Background(), "m", "s", "u", 10, schemaTestRegistered, &out)
-		if err == nil || !strings.Contains(err.Error(), "stopped: "+sr) || !strings.Contains(err.Error(), "900 output tokens") {
-			t.Errorf("%s: want a stop error with the reply described, got %v", sr, err)
+		if err == nil || !strings.Contains(err.Error(), "stopped: "+sr+" (stop_reason "+sr+", blocks [text], text present)") || strings.Contains(err.Error(), "output tokens") {
+			t.Errorf("%s: want a stop error with the reply's stable shape, got %v", sr, err)
 		}
 	}
 }
@@ -81,7 +83,40 @@ func TestStructuredWithoutTextSaysWhatCameBack(t *testing.T) {
 	})
 	var out map[string]any
 	_, err := Structured(context.Background(), "m", "s", "u", 10, schemaTestRegistered, &out)
-	if err == nil || !strings.Contains(err.Error(), "blocks [thinking], 0 characters of text") {
+	if err == nil || !strings.Contains(err.Error(), "(stop_reason end_turn, blocks [thinking], no text)") {
 		t.Fatalf("want a decoding error describing the reply, got %v", err)
+	}
+}
+
+// The stored error is what the ops watch alerts on when it changes, so the same failure with
+// other token counts must give the same error; the counts are in the log line, with the run.
+func TestStructuredErrorsAreStableAndTheCountsAreLogged(t *testing.T) {
+	var buf bytes.Buffer
+	old := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(old) })
+	ctx := WithOperation(context.Background(), "analysis/r-stable")
+	var errs []string
+	for _, n := range []int{900, 4321} {
+		fakeReply(t, map[string]any{
+			"stop_reason": "model_context_window_exceeded",
+			"content":     []any{map[string]any{"type": "text", "text": strings.Repeat("x", n)}},
+			"usage":       map[string]any{"input_tokens": 100000 + n, "output_tokens": n},
+		})
+		var out map[string]any
+		_, err := Structured(ctx, "m", "s", "u", 10, schemaTestRegistered, &out)
+		if err == nil {
+			t.Fatal("want an error")
+		}
+		errs = append(errs, err.Error())
+	}
+	if errs[0] != errs[1] {
+		t.Errorf("the same stop gave different errors:\n%s\n%s", errs[0], errs[1])
+	}
+	log := buf.String()
+	for _, want := range []string{"operation=analysis/r-stable", "4321 output tokens", "104321 input tokens", "4321 characters of text"} {
+		if !strings.Contains(log, want) {
+			t.Errorf("log lacks %q:\n%s", want, log)
+		}
 	}
 }

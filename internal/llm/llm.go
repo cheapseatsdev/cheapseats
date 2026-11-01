@@ -12,6 +12,7 @@ import (
 	"github.com/cheapseatsdev/cheapseats/internal/bounded"
 	"github.com/cheapseatsdev/cheapseats/internal/config"
 	"github.com/cheapseatsdev/cheapseats/internal/redact"
+	"log/slog"
 	"math/rand/v2"
 	"net/http"
 	"os"
@@ -175,15 +176,44 @@ func Structured(ctx context.Context, model, system, user string, maxTokens int, 
 	// Only a reply that ended on its own is a whole answer. refusal and max_tokens were the
 	// two checked; model_context_window_exceeded and pause_turn are stops too, and a stop
 	// reason added later is safer read as one than decoded. "" is a reply without the field.
+	// The error is stored (fixes_error) and an alert is keyed on its text, so it says only what
+	// stays the same when the failure repeats; the counts go to the log line.
 	switch sr := Str(resp["stop_reason"]); sr {
 	case "", "end_turn", "stop_sequence":
 	default:
-		return resp, fmt.Errorf("structured output stopped: %s (%s)", sr, Reply(resp))
+		slog.Warn("structured output stopped", "operation", operation(ctx), "reply", Reply(resp))
+		return resp, fmt.Errorf("structured output stopped: %s (%s)", sr, ReplyShape(resp))
 	}
 	if err := json.Unmarshal([]byte(ReplyText(resp)), out); err != nil {
-		return resp, fmt.Errorf("decoding structured output: %w (%s)", err, Reply(resp))
+		slog.Warn("structured output undecodable", "operation", operation(ctx), "err", err, "reply", Reply(resp))
+		return resp, fmt.Errorf("decoding structured output: %w (%s)", err, ReplyShape(resp))
 	}
 	return resp, nil
+}
+
+// Operation is the label WithOperation gave ctx ("analysis/<run id>"), or "".
+func Operation(ctx context.Context) string { return operation(ctx) }
+
+// ReplyShape describes a Messages reply by what stays the same when it repeats: its stop
+// reason, content block types, and whether it had any text. Errors that are stored and alerted
+// on use it; Reply adds the counts, for a log line.
+func ReplyShape(resp map[string]any) string {
+	if resp == nil {
+		return "no reply"
+	}
+	sr := Str(resp["stop_reason"])
+	if sr == "" {
+		sr = "none"
+	}
+	var blocks []string
+	for _, b := range List(resp["content"]) {
+		blocks = append(blocks, Str(Map(b)["type"]))
+	}
+	text := "text present"
+	if strings.TrimSpace(ReplyText(resp)) == "" {
+		text = "no text"
+	}
+	return fmt.Sprintf("stop_reason %s, blocks [%s], %s", sr, strings.Join(blocks, " "), text)
 }
 
 // ReplyText is a Messages reply's text blocks joined, which Structured decodes. Thinking and
