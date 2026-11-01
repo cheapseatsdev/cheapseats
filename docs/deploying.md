@@ -69,8 +69,13 @@ ARG REVISION=""
 ENV CHEAPSEATS_CONFIG_REV=$REVISION
 ```
 
-Use one tag per config commit on either host. Roll back by deploying the previous tag; upgrade
-Cheap Seats by reviewing the `FROM` change. For a local trial,
+Use one tag per config commit on either host. Roll back a config change by deploying the previous
+tag. Upgrade Cheap Seats by reviewing the `FROM` change, and take a
+[`cheapseats backup`](#backups) first: an upgrade can migrate the database (0.7.0 takes it to schema
+19), and an older Cheap Seats won't open a newer database. To roll back across a schema change, stop
+Cheap Seats, move `cheapseats.db` and its `-wal` and `-shm` aside, put the `cheapseats.db.bak-v<N>`
+copy from before the upgrade (or your backup) in its place, then deploy the previous tag. Writes
+since the upgrade are lost. For a local trial,
 [mount the config checkout](#try-docker-with-api-keys) instead of building an image.
 
 ## What any deployment needs
