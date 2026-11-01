@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/cheapseatsdev/cheapseats/internal/config"
 	"github.com/cheapseatsdev/cheapseats/internal/llm"
@@ -206,7 +207,7 @@ func planProblem(check, decision, evidence, target string) string {
 // lower-cased, a leading www. dropped from the host, and one trailing slash removed. The path,
 // query and fragment keep their case (/Docs and /docs are different pages), and nothing else is
 // trimmed: a target ending in punctuation keeps it. checkNames strips sentence punctuation from
-// a URL found in a check (trimSentence) before this.
+// a bare URL found in a check (checkURLs) before this.
 func locator(u string) string {
 	u = strings.TrimSpace(u)
 	if i := strings.Index(u, "://"); i >= 0 {
@@ -224,9 +225,10 @@ func locator(u string) string {
 // or angle bracket, which a URL can't contain unescaped.
 var urlInCheck = regexp.MustCompile("(?i)https?://[^\\s<>\"'`]+")
 
-// trimSentence strips what prose puts after a URL in a check: sentence punctuation, closing
-// quotes, and a closing parenthesis the URL didn't open (Guide_(CLI) keeps its own). It is for
-// URLs found in a check only; a target is compared as written.
+// trimSentence strips what prose puts after a bare URL that ends a sentence or list item in a
+// check: sentence punctuation, closing quotes, and a closing parenthesis the URL didn't open
+// (Guide_(CLI) keeps its own). It is for bare URLs found in a check only; a delimited one and a
+// target are compared as written.
 func trimSentence(u string) string {
 	for u != "" {
 		switch last := u[len(u)-1]; {
@@ -243,12 +245,55 @@ func trimSentence(u string) string {
 	return u
 }
 
-// checkNames reports whether a check contains its target: some URL in the check, without the
-// sentence punctuation after it, is the target, compared as locators.
+// delimiters pairs each character that can open a delimited URL in a check with its closer.
+var delimiters = map[rune]rune{'<': '>', '(': ')', '[': ']', '"': '"', '\u201c': '\u201d', '\'': '\'', '`': '`'}
+
+// delimited is the URL starting at start in check when a delimiter pair wraps it, everything
+// inside exactly as written, and false when none does: the character before it opens no pair,
+// or whitespace comes before its closer. Brackets and parentheses nest, so (…/Guide_(CLI))
+// closes at the last ).
+func delimited(check string, start int) (string, bool) {
+	open, _ := utf8.DecodeLastRuneInString(check[:start])
+	closer, ok := delimiters[open]
+	if !ok {
+		return "", false
+	}
+	depth := 0
+	for i, r := range check[start:] {
+		switch {
+		case unicode.IsSpace(r):
+			return "", false
+		case r == closer && depth == 0:
+			return check[start : start+i], true
+		case r == closer:
+			depth--
+		case r == open:
+			depth++
+		}
+	}
+	return "", false
+}
+
+// checkURLs are the absolute URLs written in a check: one a delimiter pair wraps, exactly as
+// written inside it; a bare one without the sentence punctuation after it (trimSentence).
+func checkURLs(check string) []string {
+	var out []string
+	for _, at := range urlInCheck.FindAllStringIndex(check, -1) {
+		if u, ok := delimited(check, at[0]); ok {
+			out = append(out, u)
+			continue
+		}
+		out = append(out, trimSentence(check[at[0]:at[1]]))
+	}
+	return out
+}
+
+// checkNames reports whether a check contains its target: some URL in the check (checkURLs) is
+// the target, compared as locators.
 func checkNames(check, target string) bool {
 	want := locator(target)
-	for _, u := range urlInCheck.FindAllString(check, -1) {
-		if locator(trimSentence(u)) == want {
+	for _, u := range checkURLs(check) {
+		if locator(u) == want {
 			return true
 		}
 	}

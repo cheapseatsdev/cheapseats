@@ -32,6 +32,10 @@ func TestPlanProblemSaysWhichTestFailed(t *testing.T) {
 		{"Compare https://acme.example/pricing with https://acme.example/docs?tab=Install to confirm the links.", "https://acme.example/docs?tab=Install"},
 		// Sentence punctuation after a URL in the check is not part of it; the target's own is.
 		{"Read https://acme.example/a. Then confirm whether the install links work.", "https://acme.example/a"},
+		// A delimited URL is taken exactly as written inside its delimiters.
+		{"Read <https://acme.example/docs> and confirm whether the install links work.", "https://acme.example/docs"},
+		{"Read [https://acme.example/docs] and confirm whether the install links work.", "https://acme.example/docs"},
+		{"Read `https://acme.example/docs/` and confirm whether the install links work.", "https://acme.example/docs"},
 		{"Read https://acme.example/a, https://acme.example/b; then confirm whether the links work.", "https://acme.example/b"},
 		{"Read \u201chttps://acme.example/a\u201d and confirm whether the install links work.", "https://acme.example/a"},
 		{"Check the CLI guide (https://acme.example/Guide_(CLI)) to confirm whether the install links work.", "https://acme.example/Guide_(CLI)"},
@@ -51,6 +55,10 @@ func TestPlanProblemSaysWhichTestFailed(t *testing.T) {
 		{"Read https://acme.example/docs?tab=install and confirm whether the links work.", f.Decision, f.Evidence, "https://acme.example/docs?tab=Install", "its check does not name its target URL"},
 		// No punctuation is trimmed, and a longer URL that starts with the target is another page.
 		{"Read https://acme.example/Guide_ and confirm whether the install links work.", f.Decision, f.Evidence, "https://acme.example/Guide_(CLI)", "its check does not name its target URL"},
+		// Inside delimiters nothing is trimmed: the punctuation is part of the URL written there.
+		{"Read <https://acme.example/docs!> and confirm whether the install links work.", f.Decision, f.Evidence, "https://acme.example/docs", "its check does not name its target URL"},
+		{"Read \"https://acme.example/docs.\" and confirm whether the install links work.", f.Decision, f.Evidence, "https://acme.example/docs", "its check does not name its target URL"},
+		{"Read \u201chttps://acme.example/docs;\u201d and confirm whether the install links work.", f.Decision, f.Evidence, "https://acme.example/docs", "its check does not name its target URL"},
 		{"Read https://acme.example/Guide_(CLI and confirm whether the install links work.", f.Decision, f.Evidence, "https://acme.example/Guide_(CLI)", "its check does not name its target URL"},
 		{"Read https://acme.example/docs/old and confirm whether the install links work.", f.Decision, f.Evidence, "https://acme.example/docs", "its check does not name its target URL"},
 		{"Read the page.", f.Decision, f.Evidence, "", "its check is too short"},
