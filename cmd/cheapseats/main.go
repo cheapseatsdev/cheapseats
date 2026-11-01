@@ -395,35 +395,7 @@ func dispatch(ctx context.Context, cmd string, args []string) error {
 		if err != nil {
 			return err
 		}
-		for _, e := range next.Errors {
-			msg := e.Message
-			if e.RequestID != "" {
-				msg += " (request " + e.RequestID + ")"
-			}
-			fmt.Fprintln(os.Stderr, "next steps analysis error:", msg)
-			fmt.Fprintln(os.Stderr, e.Showing())
-		}
-		if fx == nil && len(next.Investigations) == 0 && len(next.Findings) == 0 {
-			fmt.Println("No completed Next steps analysis yet.")
-			return nil
-		}
-		fmt.Printf("# Next steps: %s\n\n%d actions · %d investigations · %d market findings\n\n", r.Snapshot.Set.Name, len(next.Actions), len(next.Investigations), len(next.Findings))
-		fmt.Println("## Actions")
-		for _, q := range next.Actions {
-			fmt.Printf("\n- **%s**\n  - Change: %s\n  - Where: %s\n  - Done when: %s\n  - Verification: %s\n", q.Title, q.Claim, q.Target, q.DoneWhen, q.Verification.Summary)
-		}
-		fmt.Println("\n## Investigations")
-		for _, inv := range next.Investigations {
-			fmt.Printf("\n- **%s**\n  - Why: %s\n  - Read-only check: %s\n  - Decision: %s\n", inv.Title, inv.Why, inv.Check, inv.Decision)
-		}
-		fmt.Println("\n## Market findings")
-		for _, f := range next.Findings {
-			fmt.Printf("\n- **%s**: %s\n  - Evidence: %s\n", f.Title, f.Detail, f.Evidence)
-		}
-		if kept != nil {
-			return fmt.Errorf("next steps rebuild failed: %w\n%s", kept, app.KeptAnalysisNote)
-		}
-		return nil
+		return printNextSteps(os.Stdout, os.Stderr, r.Snapshot.Set.Name, fx != nil, next, kept)
 	case "themes":
 		fs := flag.NewFlagSet("themes", flag.ExitOnError)
 		rebuild := fs.Bool("rebuild", false, "run the theme pass again first (one grader call)")

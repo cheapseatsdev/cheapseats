@@ -67,7 +67,7 @@ func shownBeside(failedRun, shownRun string, shown analysis.Analysis) string {
 func (e AnalysisError) Showing() string {
 	switch e.Shown {
 	case ShownEarlier:
-		return "Showing the run's earlier analysis, which the failed rebuild left in place."
+		return KeptAnalysisNote
 	case ShownUnverified:
 		return "Its candidates are shown as investigations, unverified: the run has no verified analysis to show instead."
 	case ShownOlderRun:
