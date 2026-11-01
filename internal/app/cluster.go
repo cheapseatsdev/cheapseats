@@ -63,17 +63,19 @@ type phraseCache struct {
 
 // PhraseClusters is the counting map for one kind: a folded phrase the grader wrote, to the
 // wording of the cluster it counts under, as that wording was first written. It holds the stored
-// decisions at or above the configured confidence, one hop deep, and a phrase that is its own
-// cluster maps to its own first wording. An empty map leaves every count as it is.
+// decisions at or above the configured confidence, chains followed to their end and circles
+// folded onto one wording (resolveFolds), and a phrase that is its own cluster maps to its own
+// first wording. An empty map leaves every
+// count as it is.
 func (a *App) PhraseClusters(kind string) map[string]string {
 	a.phrases.mu.Lock()
 	defer a.phrases.mu.Unlock()
 	if m, ok := a.phrases.m[kind]; ok {
 		return m
 	}
-	m := map[string]string{}
+	m := map[string]fold{}
 	if a.DB != nil {
-		rows, err := a.DB.Query(`SELECT phrase, cluster, display, confidence FROM phrase_clusters WHERE kind=? ORDER BY phrase, confidence DESC`, kind)
+		rows, err := a.DB.Query(`SELECT phrase, cluster, display, confidence FROM phrase_clusters WHERE kind=? ORDER BY phrase, confidence DESC, cluster`, kind)
 		if err != nil {
 			slog.Error("phrase clusters", "kind", kind, "err", err)
 		} else {
@@ -91,22 +93,17 @@ func (a *App) PhraseClusters(kind string) map[string]string {
 				if c != "" && conf < min {
 					continue
 				}
-				m[p] = d
+				m[p] = fold{display: d, confidence: conf}
 			}
 			rows.Close()
 		}
 	}
-	// One hop: a phrase clustered onto a phrase that is itself clustered.
-	for p, d := range m {
-		if d2, ok := m[grade.Fold(d)]; ok && grade.Fold(d2) != p {
-			m[p] = d2
-		}
-	}
+	out := resolveFolds(m, grade.Fold)
 	if a.phrases.m == nil {
 		a.phrases.m = map[string]map[string]string{}
 	}
-	a.phrases.m[kind] = m
-	return m
+	a.phrases.m[kind] = out
+	return out
 }
 
 func (a *App) invalidatePhrases() {
