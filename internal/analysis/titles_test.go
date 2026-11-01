@@ -4,11 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/cheapseatsdev/cheapseats/internal/answer"
+	"github.com/cheapseatsdev/cheapseats/internal/config"
 	"github.com/cheapseatsdev/cheapseats/internal/grade"
+	"github.com/cheapseatsdev/cheapseats/internal/llm"
 	"github.com/cheapseatsdev/cheapseats/internal/run"
 )
 
@@ -83,6 +88,42 @@ func TestDegenerateAnalystOutputIsAnError(t *testing.T) {
 		}
 		if !errors.Is(err, ErrDegenerate) || !strings.Contains(err.Error(), c.want) || calls != 1 {
 			t.Errorf("%s: want %q before verification, got %v after %d calls", name, c.want, err, calls)
+		}
+	}
+}
+
+// Run r-20261101-050336-9f0f23 got empty insights from the API twice, each billed, and the
+// error said only that. Through the API, the error now carries what the reply was (stop reason,
+// tokens, blocks, text length) and the prompt's size, so the stored fixes_error tells the next
+// one apart from a truncation, a reply that went to thinking or a short empty answer.
+func TestDegenerateAPIOutputSaysWhatTheReplyWas(t *testing.T) {
+	cfg, set, _, _, _ := verificationFixture()
+	cfg.Analyst = config.Model{Model: "claude-opus-5-5"}
+	text := `{"fixes":[],"insights":"","investigations":[],"market_findings":[]}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"stop_reason": "end_turn",
+			"content": []any{
+				map[string]any{"type": "thinking", "thinking": "", "signature": "s"},
+				map[string]any{"type": "text", "text": text},
+			},
+			"usage": map[string]any{"input_tokens": 118000, "output_tokens": 950},
+		})
+	}))
+	t.Cleanup(srv.Close)
+	old := llm.AnthropicURL
+	llm.AnthropicURL = srv.URL
+	t.Cleanup(func() { llm.AnthropicURL = old })
+	t.Setenv("ANTHROPIC_API_KEY", "test")
+	t.Setenv(config.AnthropicBaseURLVar, "")
+	results := []run.Result{{ID: 7, PromptIdx: 0, Answerer: "fake", Track: answer.Search, Status: "done", Grade: &grade.Grade{Verdict: grade.Absent}, Answer: &answer.Answer{Text: "An answer."}}}
+	_, _, err := Build(context.Background(), cfg, set, results, nil, nil)
+	if !errors.Is(err, ErrDegenerate) {
+		t.Fatalf("want ErrDegenerate, got %v", err)
+	}
+	for _, want := range []string{"insights are 0 characters", "stop_reason end_turn", "118000 input tokens", "950 output tokens", "blocks [thinking text]", fmt.Sprintf("%d characters of text", len(text)), "prompt "} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error lacks %q: %v", want, err)
 		}
 	}
 }

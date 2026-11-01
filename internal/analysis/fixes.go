@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math"
 	"sort"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"github.com/cheapseatsdev/cheapseats/internal/config"
 	"github.com/cheapseatsdev/cheapseats/internal/grade"
 	"github.com/cheapseatsdev/cheapseats/internal/llm"
+	"github.com/cheapseatsdev/cheapseats/internal/redact"
 	"github.com/cheapseatsdev/cheapseats/internal/report"
 	"github.com/cheapseatsdev/cheapseats/internal/run"
 	"github.com/cheapseatsdev/cheapseats/internal/sets"
@@ -306,12 +308,12 @@ Observed run evidence:
 	prompt += misstatementsText(ctx, brand)
 
 	var a Analysis
-	cost, err := generate(ctx, cfg, prompt, schema, &a)
+	cost, resp, err := generate(ctx, cfg, prompt, schema, &a)
 	if err != nil {
 		return Analysis{}, cost, err
 	}
 	if err := degenerate(a); err != nil {
-		return Analysis{}, cost, err
+		return Analysis{}, cost, unusable(err, prompt, resp)
 	}
 	return verifyCandidates(ctx, cfg, set, a, cost)
 }
@@ -353,6 +355,23 @@ func degenerate(a Analysis) error {
 		return fmt.Errorf("%w: none of its %d items has a usable title", ErrDegenerate, bad)
 	}
 	return nil
+}
+
+// rawReplyLog is how much of an unusable reply's text is logged.
+const rawReplyLog = 4000
+
+// unusable adds what the analyst was sent and what came back to a degenerate output's error,
+// and logs the start of the reply's text. Two analyses of a 48-answer run came back with empty
+// insights after about half a minute, billed, and nothing recorded said whether the reply
+// stopped early, went to thinking or was an empty answer. The error is stored as the run's
+// fixes_error, which a rebuild from the command line leaves without a log line.
+func unusable(err error, prompt string, resp map[string]any) error {
+	if resp == nil {
+		return fmt.Errorf("%w (prompt %d characters)", err, len([]rune(prompt)))
+	}
+	slog.Warn("analyst output unusable", "err", err, "prompt_chars", len([]rune(prompt)), "reply", llm.Reply(resp),
+		"text", llm.Truncate(redact.Text(llm.ReplyText(resp)), rawReplyLog))
+	return fmt.Errorf("%w (prompt %d characters; %s)", err, len([]rune(prompt)), llm.Reply(resp))
 }
 
 // results2text writes each prompt's graded answers the way the analyst reads them.

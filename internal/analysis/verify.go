@@ -30,15 +30,17 @@ func WithVerifier(ctx context.Context, read VerifyPage) context.Context {
 	return context.WithValue(ctx, verifierKey{}, read)
 }
 
-func generate(ctx context.Context, cfg *config.Config, prompt string, shape map[string]any, out any) (float64, error) {
+// generate asks the analyst for JSON matching shape. It returns the cost and the API's reply,
+// which is nil through the claude CLI, for describing an output that decoded but is unusable.
+func generate(ctx context.Context, cfg *config.Config, prompt string, shape map[string]any, out any) (float64, map[string]any, error) {
 	if cfg.Analyst.Via() == config.ClaudeCode {
-		return 0, structuredCLI(ctx, cfg.Analyst.Model, System, prompt, shape, out)
+		return 0, nil, structuredCLI(ctx, cfg.Analyst.Model, System, prompt, shape, out)
 	}
 	resp, err := llm.Structured(ctx, cfg.Analyst.Model, System, prompt, 16000, shape, out)
 	if resp == nil {
-		return 0, err
+		return 0, nil, err
 	}
-	return cfg.Cost(cfg.Analyst.Model, llm.Usage(resp, false)), err
+	return cfg.Cost(cfg.Analyst.Model, llm.Usage(resp, false)), resp, err
 }
 
 func clip(s string, n int) string {
@@ -402,7 +404,7 @@ Do not mark verified unless all six gates pass with evidence. Current supplied a
 	var reviewed struct {
 		Decisions []decision `json:"decisions"`
 	}
-	extra, err := generate(ctx, cfg, prompt, reviewSchema, &reviewed)
+	extra, _, err := generate(ctx, cfg, prompt, reviewSchema, &reviewed)
 	cost += extra
 	if err != nil {
 		for _, f := range fs {

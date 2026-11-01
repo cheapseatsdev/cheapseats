@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -171,19 +172,52 @@ func Structured(ctx context.Context, model, system, user string, maxTokens int, 
 	if err != nil {
 		return nil, err
 	}
-	if sr := Str(resp["stop_reason"]); sr == "refusal" || sr == "max_tokens" {
-		return resp, fmt.Errorf("structured output stopped: %s", sr)
+	// Only a reply that ended on its own is a whole answer. refusal and max_tokens were the
+	// two checked; model_context_window_exceeded and pause_turn are stops too, and a stop
+	// reason added later is safer read as one than decoded. "" is a reply without the field.
+	switch sr := Str(resp["stop_reason"]); sr {
+	case "", "end_turn", "stop_sequence":
+	default:
+		return resp, fmt.Errorf("structured output stopped: %s (%s)", sr, Reply(resp))
 	}
+	if err := json.Unmarshal([]byte(ReplyText(resp)), out); err != nil {
+		return resp, fmt.Errorf("decoding structured output: %w (%s)", err, Reply(resp))
+	}
+	return resp, nil
+}
+
+// ReplyText is a Messages reply's text blocks joined, which Structured decodes. Thinking and
+// any other blocks are left out.
+func ReplyText(resp map[string]any) string {
 	text := ""
 	for _, b := range List(resp["content"]) {
 		if Str(Map(b)["type"]) == "text" {
 			text += Str(Map(b)["text"])
 		}
 	}
-	if err := json.Unmarshal([]byte(text), out); err != nil {
-		return resp, fmt.Errorf("decoding structured output: %w", err)
+	return text
+}
+
+// Reply describes a Messages reply for an error or a log line: its stop reason, input and
+// output tokens, content block types and the length of its text. An output that decodes but
+// says nothing can then be told apart: a short reply that ended on its own, one whose output
+// went to thinking, or a text block missing.
+func Reply(resp map[string]any) string {
+	if resp == nil {
+		return "no reply"
 	}
-	return resp, nil
+	u := Map(resp["usage"])
+	sr := Str(resp["stop_reason"])
+	if sr == "" {
+		sr = "none"
+	}
+	var blocks []string
+	for _, b := range List(resp["content"]) {
+		blocks = append(blocks, Str(Map(b)["type"]))
+	}
+	return fmt.Sprintf("stop_reason %s, %d input tokens, %d output tokens, blocks [%s], %d characters of text",
+		sr, Int(u["input_tokens"])+Int(u["cache_read_input_tokens"])+Int(u["cache_creation_input_tokens"]), Int(u["output_tokens"]),
+		strings.Join(blocks, " "), len([]rune(ReplyText(resp))))
 }
 
 // structuredBody is a Messages request for JSON matching schema; ProbeSchema sends the same shape.
