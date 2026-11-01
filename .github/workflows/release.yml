@@ -4,6 +4,11 @@ name: release
 # the Helm chart to oci://ghcr.io/<owner>/charts/cheapseats at the same version, and a GitHub
 # release is drafted from the commits since the last tag. Run it by hand to build without
 # publishing.
+#
+# Publishing waits for the live schema check (schemas.yml): every structured output schema sent
+# to the real API once, a few cents. It runs in the golden environment, so the release waits
+# until one of its required reviewers approves. If the check fails, or is rejected or never
+# approved, the release job fails before it builds and nothing is published.
 on:
   push:
     tags: ["v*.*.*"]
@@ -14,11 +19,31 @@ permissions:
   packages: write
 
 jobs:
+  schemas:
+    # Only a run that publishes needs it; a build by hand on a branch skips it.
+    if: startsWith(github.ref, 'refs/tags/v')
+    uses: ./.github/workflows/schemas.yml
+    secrets: inherit
+    permissions:
+      contents: read
+
   release:
+    needs: schemas
+    # Runs when schemas passed or was skipped, and fails in its first step on a tag if schemas
+    # didn't pass, so a blocked release is a red run that says why, not a skipped job.
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-24.04
     env:
       PUBLISH: ${{ startsWith(github.ref, 'refs/tags/v') }}
     steps:
+      - name: the live schema check passed
+        env:
+          SCHEMAS: ${{ needs.schemas.result }}
+        run: |
+          if [ "$PUBLISH" = true ] && [ "$SCHEMAS" != success ]; then
+            echo "::error::the live schema check (schemas.yml) did not pass ($SCHEMAS), so nothing is published. Re-run the failed jobs once it can pass (approval rejected or timed out, a transient API error); a schema the API refused needs a fix on main and a new tag."
+            exit 1
+          fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -16,8 +17,10 @@ import (
 	"github.com/cheapseatsdev/cheapseats/internal/llm"
 )
 
-// Every schema the app sends is registered, so the live check covers each. A schema declared
-// without llm.RegisterSchema drops out of this list.
+// The registry holds the app's schemas with the roles that send them. That every schema sent is
+// registered is enforced where it is sent: llm.Structured and answer.ClaudeStructured refuse an
+// unregistered one (their packages test that). This list catches a schema registered under the
+// wrong role, which would send the live check to the wrong model.
 func TestLiveEverySchemaIsRegistered(t *testing.T) {
 	var got []string
 	for _, s := range llm.Schemas() {
@@ -129,6 +132,20 @@ func TestLiveCheckStopsAtItsBudget(t *testing.T) {
 	}
 	if len(*bodies) != 1 {
 		t.Fatalf("%d requests sent past the budget, want 1", len(*bodies))
+	}
+}
+
+// flag.Float64 accepts NaN and Inf; neither may stand in for a budget, since against NaN the
+// spend never reaches it. Nothing is sent.
+func TestLiveCheckRefusesABudgetThatIsNotAnAmount(t *testing.T) {
+	bodies, cfg := liveFakeAPI(t, "", 1000)
+	for _, b := range []float64{math.NaN(), math.Inf(1), math.Inf(-1), 0, -1} {
+		if err := liveSchemaCheck(context.Background(), cfg, liveTestSchemas(), b, io.Discard); err == nil || !strings.Contains(err.Error(), "-live-budget") {
+			t.Errorf("budget %v: %v", b, err)
+		}
+	}
+	if len(*bodies) != 0 {
+		t.Fatalf("%d requests sent without a budget", len(*bodies))
 	}
 }
 

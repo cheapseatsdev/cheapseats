@@ -252,6 +252,10 @@ func ClaudeStructured(ctx context.Context, model, system, prompt string, schema 
 	if err := llm.CheckSchema(schema); err != nil {
 		return err
 	}
+	// Only a registered schema has been through cheapseats check -live.
+	if err := llm.Registered(schema); err != nil {
+		return err
+	}
 	js, err := json.Marshal(schema)
 	if err != nil {
 		return err

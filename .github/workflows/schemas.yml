@@ -1,0 +1,42 @@
+# The live schema check (docs/deploying.md#the-live-schema-check): cheapseats check -live sends
+# every structured output schema to the Anthropic API once, with the example config's grader and
+# analyst models, so a schema the API refuses fails here instead of in production. Capped at
+# $0.25; a run costs a few cents. CI uses fake providers, so ci.yml can't do this.
+#
+# release.yml calls it on each release tag and publishes nothing unless it passes. Run it by hand
+# on main before tagging. It runs in the golden environment: its required reviewers approve each
+# run before it can spend the key (so a release waits for that approval), and its deployment
+# rules must allow the ref, main for a run by hand and v*.*.* for a release tag. It needs the
+# secret ANTHROPIC_API_KEY, in that environment or the repository; without it the job fails, it
+# doesn't pass.
+name: schemas
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  schemas:
+    environment: golden
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: the key is set
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "::error::the secret ANTHROPIC_API_KEY is not set (golden environment or repository); the schemas can't be checked"
+            exit 1
+          fi
+      - name: the API takes every structured output schema
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CHEAPSEATS_CONFIG: examples/cheapseats-config/cheapseats.toml
+        run: go run ./cmd/cheapseats check -live -no-jev
