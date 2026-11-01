@@ -1,6 +1,7 @@
 package llm
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -136,6 +137,115 @@ func (c *schemaCheck) node(path string, v any) {
 			c.node(path+"."+k+"."+name, s)
 		}
 	}
+}
+
+// SchemaJSON is schema as it is sent. Structured outputs write an object's fields in the order
+// its schema lists them, and encoding/json sorts a map's keys, which put a fix's check (often
+// blank) before its title: the analyst then sometimes wrote every field blank. So each object's
+// properties follow its required list, the order the schema declares, with any property left out
+// of required after them, sorted. Every other key stays sorted.
+func SchemaJSON(schema map[string]any) ([]byte, error) {
+	var b bytes.Buffer
+	if err := writeSchema(&b, schema); err != nil {
+		return nil, err
+	}
+	return b.Bytes(), nil
+}
+
+// sentSchema marshals as SchemaJSON, in a request body.
+type sentSchema map[string]any
+
+func (s sentSchema) MarshalJSON() ([]byte, error) { return SchemaJSON(s) }
+
+func writeSchema(b *bytes.Buffer, v any) error {
+	switch v := v.(type) {
+	case map[string]any:
+		keys := make([]string, 0, len(v))
+		for k := range v {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		b.WriteByte('{')
+		for i, k := range keys {
+			if i > 0 {
+				b.WriteByte(',')
+			}
+			writeKey(b, k)
+			props, ok := v[k].(map[string]any)
+			if k != "properties" || !ok {
+				if err := writeSchema(b, v[k]); err != nil {
+					return err
+				}
+				continue
+			}
+			b.WriteByte('{')
+			for j, name := range propertyOrder(props, v["required"]) {
+				if j > 0 {
+					b.WriteByte(',')
+				}
+				writeKey(b, name)
+				if err := writeSchema(b, props[name]); err != nil {
+					return err
+				}
+			}
+			b.WriteByte('}')
+		}
+		b.WriteByte('}')
+	case []any:
+		b.WriteByte('[')
+		for i, x := range v {
+			if i > 0 {
+				b.WriteByte(',')
+			}
+			if err := writeSchema(b, x); err != nil {
+				return err
+			}
+		}
+		b.WriteByte(']')
+	default:
+		js, err := json.Marshal(v)
+		if err != nil {
+			return err
+		}
+		b.Write(js)
+	}
+	return nil
+}
+
+func writeKey(b *bytes.Buffer, k string) {
+	js, _ := json.Marshal(k)
+	b.Write(js)
+	b.WriteByte(':')
+}
+
+// propertyOrder is props' names in the order of required ([]string as written, []any once
+// decoded), then the rest sorted.
+func propertyOrder(props map[string]any, required any) []string {
+	var names []string
+	switch r := required.(type) {
+	case []string:
+		names = r
+	case []any:
+		for _, x := range r {
+			names = append(names, Str(x))
+		}
+	}
+	out := make([]string, 0, len(props))
+	seen := map[string]bool{}
+	for _, n := range names {
+		if _, ok := props[n]; ok && !seen[n] {
+			out = append(out, n)
+			seen[n] = true
+		}
+	}
+	var rest []string
+	for n := range props {
+		if !seen[n] {
+			rest = append(rest, n)
+		}
+	}
+	sort.Strings(rest)
+	return append(out, rest...)
 }
 
 func isObject(t any) bool {

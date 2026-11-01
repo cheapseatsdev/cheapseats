@@ -166,3 +166,100 @@ func TestLiveCheckSkipsCLIRoles(t *testing.T) {
 		t.Fatal("passed with nothing checked")
 	}
 }
+
+// Structured outputs write fields in the order the schema sends them. Sent alphabetically, the
+// analyst's fixes item opened with check, often blank, and some replies were every field blank
+// (run r-20261101-050336-9f0f23: 9 of 35 replays; 0 of 20 with insights and title first). So
+// every schema sends each object's properties in its declared (required) order, and the fixes
+// schema's order is pinned. grade is the one schema whose declared order is alphabetical: see
+// the comment on it.
+func TestLiveSchemasSendPropertiesInDeclaredOrder(t *testing.T) {
+	sent := map[string]map[string][]string{}
+	for _, s := range llm.Schemas() {
+		js, err := llm.SchemaJSON(s.Schema)
+		if err != nil {
+			t.Fatalf("%s: %v", s.Name, err)
+		}
+		props, required := liveSchemaOrders(t, js)
+		sent[s.Name] = props
+		alphabetical := true
+		for path, names := range props {
+			if !reflect.DeepEqual(names, required[path]) {
+				t.Errorf("%s%s: properties sent as %v, required %v", s.Name, path, names, required[path])
+			}
+			alphabetical = alphabetical && sort.StringsAreSorted(names)
+		}
+		if alphabetical && s.Name != "grade" {
+			t.Errorf("%s: every object's properties are alphabetical, as encoding/json would send them", s.Name)
+		}
+		// The content is the schema as written; only the order changes.
+		var a, b any
+		plain, _ := json.Marshal(s.Schema)
+		json.Unmarshal(plain, &a)
+		json.Unmarshal(js, &b)
+		if !reflect.DeepEqual(a, b) {
+			t.Errorf("%s: sent %s, want the content of %s", s.Name, js, plain)
+		}
+	}
+	fixes := sent["analysis.fixes"]
+	for path, want := range map[string][]string{
+		"":                   {"insights", "fixes", "investigations", "market_findings"},
+		".fixes[]":           {"title", "type", "target", "claim", "evidence", "prompts", "effort", "rank", "displaces", "done_when", "check", "decision"},
+		".investigations[]":  {"title", "why", "check", "decision", "evidence", "prompts", "target"},
+		".market_findings[]": {"title", "detail", "evidence", "prompts"},
+	} {
+		if !reflect.DeepEqual(fixes[path], want) {
+			t.Errorf("analysis.fixes%s sent as %v, want %v", path, fixes[path], want)
+		}
+	}
+}
+
+// liveSchemaOrders reads schema JSON in the order it was written: for each object (by path, ""
+// for the root, ".x" for property x, "[]" for items), its property names and its required list.
+func liveSchemaOrders(t *testing.T, js []byte) (props, required map[string][]string) {
+	t.Helper()
+	props, required = map[string][]string{}, map[string][]string{}
+	dec := json.NewDecoder(strings.NewReader(string(js)))
+	var value func(path string)
+	value = func(path string) {
+		tok, err := dec.Token()
+		if err != nil {
+			t.Fatal(err)
+		}
+		switch tok {
+		case json.Delim('['):
+			for dec.More() {
+				value(path)
+			}
+			dec.Token()
+		case json.Delim('{'):
+			for dec.More() {
+				k, _ := dec.Token()
+				switch key := k.(string); key {
+				case "properties":
+					dec.Token()
+					props[path] = []string{}
+					for dec.More() {
+						name, _ := dec.Token()
+						props[path] = append(props[path], name.(string))
+						value(path + "." + name.(string))
+					}
+					dec.Token()
+				case "required":
+					var r []string
+					if err := dec.Decode(&r); err != nil {
+						t.Fatal(err)
+					}
+					required[path] = r
+				case "items":
+					value(path + "[]")
+				default:
+					value(path + "." + key)
+				}
+			}
+			dec.Token()
+		}
+	}
+	value("")
+	return props, required
+}

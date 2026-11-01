@@ -2,6 +2,7 @@ package llm
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -41,6 +42,26 @@ func TestCheckSchemaRefusesWhatTheAPIRefuses(t *testing.T) {
 	})
 	if err := CheckSchema(ok); err != nil {
 		t.Fatalf("supported schema refused: %v", err)
+	}
+}
+
+// Properties go in required's order, at every depth, with any property not required after them,
+// sorted; other keys stay sorted. The request body carries that order, not encoding/json's.
+func TestSchemaJSONSendsPropertiesInRequiredOrder(t *testing.T) {
+	schema := map[string]any{"type": "object", "additionalProperties": false, "required": []string{"z", "a"},
+		"properties": map[string]any{
+			"a": map[string]any{"type": "string"}, "m": map[string]any{"type": "string"},
+			"z": map[string]any{"type": "array", "items": map[string]any{"type": "object", "additionalProperties": false,
+				"required": []any{"y", "b"}, "properties": map[string]any{"b": map[string]any{"type": "string"}, "y": map[string]any{"type": "string"}}}},
+		}}
+	want := `{"additionalProperties":false,"properties":{"z":{"items":{"additionalProperties":false,"properties":{"y":{"type":"string"},"b":{"type":"string"}},"required":["y","b"],"type":"object"},"type":"array"},"a":{"type":"string"},"m":{"type":"string"}},"required":["z","a"],"type":"object"}`
+	got, err := SchemaJSON(schema)
+	if err != nil || string(got) != want {
+		t.Fatalf("SchemaJSON = %s, %v\nwant %s", got, err, want)
+	}
+	body, err := json.Marshal(structuredBody("m", "s", "u", 10, schema))
+	if err != nil || !strings.Contains(string(body), `"schema":`+want) {
+		t.Fatalf("request body %s, %v: schema not in declared order", body, err)
 	}
 }
 

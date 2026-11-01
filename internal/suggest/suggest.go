@@ -53,7 +53,9 @@ func valueProperties() map[string]any {
 	}
 }
 
-var candidateFields = []string{"stage", "text", "intent", "buyer", "learning", "decision", "repeat_value"}
+// candidateFields is the order the analyst writes a candidate's fields in (llm.SchemaJSON): the
+// question first, as the prompts list them.
+var candidateFields = []string{"text", "stage", "intent", "buyer", "learning", "decision", "repeat_value"}
 
 const DecisionGate = `First decide whether a question earns recurring tracking for the intended buyer and the product's market positioning. For every candidate identify the buyer, unresolved learning, a concrete positioning, onboarding, competitive or product decision/action, and why another observation is worth its cost, with a review or stopping condition. Category relevance, a possible mention, a funnel stage, a feature, or the analyst's ability to suggest a page is insufficient. Challenge informational, enterprise, free-operation or multi-model requirements against the actual audience, capabilities and stated boundaries; do not fill markets the business has chosen not to serve. A missing capability is not a copy fix. Preserve worthwhile competitive losses for the intended buyer, even if the brand is never named. Do not stack requirements to make the brand win. Include manual work, scripts, existing subscriptions or doing nothing when those are real alternatives. Mark unvalidated needs as hypotheses, not buyer-demand facts. If no candidate earns its cost, return no additions. These business judgments guide question selection only; they must not be passed to answerers or used to change grading.`
 

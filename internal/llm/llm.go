@@ -250,7 +250,8 @@ func Reply(resp map[string]any) string {
 		strings.Join(blocks, " "), len([]rune(ReplyText(resp))))
 }
 
-// structuredBody is a Messages request for JSON matching schema; ProbeSchema sends the same shape.
+// structuredBody is a Messages request for JSON matching schema, its properties in declared order
+// (SchemaJSON); ProbeSchema sends the same shape.
 func structuredBody(model, system, user string, maxTokens int, schema map[string]any) map[string]any {
 	return map[string]any{
 		"model":      model,
@@ -258,7 +259,7 @@ func structuredBody(model, system, user string, maxTokens int, schema map[string
 		"system":     system,
 		"messages":   []any{map[string]any{"role": "user", "content": user}},
 		"output_config": map[string]any{
-			"format": map[string]any{"type": "json_schema", "schema": schema},
+			"format": map[string]any{"type": "json_schema", "schema": sentSchema(schema)},
 		},
 	}
 }

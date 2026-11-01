@@ -3,7 +3,6 @@ package llm
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/json"
 	"fmt"
 	"sort"
 	"sync"
@@ -64,9 +63,9 @@ func Registered(schema map[string]any) error {
 	return nil
 }
 
-// digest is the SHA-256 of schema's JSON, which encoding/json writes with sorted map keys.
+// digest is the SHA-256 of schema's JSON as it is sent (SchemaJSON).
 func digest(schema map[string]any) ([sha256.Size]byte, error) {
-	b, err := json.Marshal(schema)
+	b, err := SchemaJSON(schema)
 	if err != nil {
 		return [sha256.Size]byte{}, err
 	}
