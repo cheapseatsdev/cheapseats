@@ -108,10 +108,14 @@ deploy/exe-dev.sh <vm> ../your-config
 The script builds a Linux binary, ships the committed config, runs `cheapseats check` on the VM
 and restarts. It records the config commit on every run and refuses committed symlinks, which
 could reach outside the config. If startup fails, it restores the previous binary and config,
-unless the new build migrated the database: the previous build can't open a migrated database, and
-putting the pre-migration copy back would discard what the new build wrote after it. Then it stops
-Cheap Seats and prints the steps to restore the copy with the previous build, or you fix the build
-and deploy again. Runs in progress resume after restart.
+unless the new build migrated the database. It compares the database's schema (`PRAGMA
+user_version`, read with `sqlite3`, which it installs if missing) before the swap and after the
+failure. A migration that failed and rolled back leaves the schema as it was, and the rollback goes
+ahead. A database at a later schema can't be opened by the previous build, and putting the
+pre-migration copy back would discard what the new build wrote after it. Then the script stops
+Cheap Seats and prints the steps to restore `cheapseats.db.bak-v<N>`, `N` being the schema before
+the deploy, with the previous build; or you fix the build and deploy again. A first deploy has no
+previous build, and the script says so. Runs in progress resume after restart.
 
 ## Running it
 
@@ -128,5 +132,7 @@ and deploy again. Runs in progress resume after restart.
 
 To roll back by hand: stop Cheap Seats, put `bin/cheapseats.prev` and `config.prev` back as `bin/cheapseats`
 and `config`, and start it. A database from a newer Cheap Seats won't open in an older one; restore the
-`cheapseats.db.bak-v<N>` from before the upgrade too, moving `cheapseats.db` and its `-wal` and `-shm`
-aside first (the failed deploy prints these commands).
+`cheapseats.db.bak-v<N>` from before the upgrade too, `N` being the schema the older build knows
+(`bin/cheapseats.prev version` prints it), moving `cheapseats.db` and its `-wal` and `-shm` aside first
+(the failed deploy prints these commands). An upgrade that failed partway can leave copies at later
+schemas too; the older build can't open those.
