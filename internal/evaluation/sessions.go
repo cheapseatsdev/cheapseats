@@ -206,9 +206,25 @@ func (w *Workbench) Session(ctx context.Context, id, actor string) (Session, err
 	return s, err
 }
 
+// Materialize eligible queues before comparing their progress. Otherwise an old
+// copy already superseded by completion could hide a later intentional review,
+// or an UPDATE could change which copy wins midway through the repair.
+const resumableSessionsSQL = `WITH eligible AS MATERIALIZED (
+ SELECT s.* FROM evaluation_sessions s WHERE s.import_id=? AND s.actor=? AND s.state!='done' AND NOT EXISTS (
+  SELECT 1 FROM evaluation_sessions k WHERE k.import_id=s.import_id AND k.actor=s.actor AND k.case_ids=s.case_ids
+  AND k.state='done' AND k.cursor>=json_array_length(k.case_ids) AND s.created_at<k.updated_at)
+), preferred AS (
+ SELECT s.* FROM eligible s WHERE NOT EXISTS (
+  SELECT 1 FROM eligible k WHERE k.case_ids=s.case_ids AND
+  (k.cursor>s.cursor OR (k.cursor=s.cursor AND (k.updated_at>s.updated_at OR (k.updated_at=s.updated_at AND k.id<s.id)))))
+) `
+
 func (w *Workbench) Resume(ctx context.Context, importID, actor string) (*Session, error) {
 	var id string
-	err := w.DB.QueryRowContext(ctx, `SELECT id FROM evaluation_sessions WHERE import_id=? AND actor=? AND state!='done' ORDER BY updated_at DESC,id LIMIT 1`, importID, actor).Scan(&id)
+	// Old double-clicks could create identical overlapping queues. Hide queues
+	// completed while this one existed, and prefer the furthest active copy.
+	// A later intentional review after completion is a separate session.
+	err := w.DB.QueryRowContext(ctx, resumableSessionsSQL+`SELECT id FROM preferred ORDER BY updated_at DESC,id LIMIT 1`, importID, actor).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -219,9 +235,28 @@ func (w *Workbench) Resume(ctx context.Context, importID, actor string) (*Sessio
 	return &s, err
 }
 
+// Repair only exact matching queues. Keep every row and original cursor/time;
+// mark redundant overlapping sessions done, without changing any case or review.
+// This runs on an explicit start, while Resume remains a read-only lookup.
+func (w *Workbench) repairSessions(ctx context.Context, importID, actor string) error {
+	tx, err := w.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	_, err = tx.ExecContext(ctx, resumableSessionsSQL+`UPDATE evaluation_sessions SET state='done' WHERE import_id=? AND actor=? AND state!='done' AND id NOT IN (SELECT id FROM preferred)`, importID, actor, importID, actor)
+	if err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 func (w *Workbench) Start(ctx context.Context, importID, actor, filter string) (Session, error) {
 	if actor == "" || filter != "first" && filter != "attention" {
 		return Session{}, errors.New("choose first review or cases needing a decision")
+	}
+	if err := w.repairSessions(ctx, importID, actor); err != nil {
+		return Session{}, err
 	}
 	if s, err := w.Resume(ctx, importID, actor); err != nil {
 		return Session{}, err
@@ -278,8 +313,26 @@ func (w *Workbench) Start(ctx context.Context, importID, actor, filter string) (
 	s := Session{ID: "es-" + rand.Text(), ImportID: importID, Actor: actor, CaseIDs: ids, State: "active"}
 	b, _ := json.Marshal(ids)
 	now := store.Now()
-	_, err = w.DB.ExecContext(ctx, `INSERT INTO evaluation_sessions VALUES (?,?,?,?,?,?,?,?)`, s.ID, importID, actor, string(b), 0, s.State, now, now)
-	return s, err
+	// Store transactions acquire the SQLite write lock before reading. Recheck
+	// here so simultaneous starts cannot leave a second active session behind.
+	tx, err := w.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return Session{}, err
+	}
+	defer tx.Rollback()
+	var existing string
+	err = tx.QueryRowContext(ctx, `SELECT id FROM evaluation_sessions WHERE import_id=? AND actor=? AND state!='done' ORDER BY updated_at DESC,id LIMIT 1`, importID, actor).Scan(&existing)
+	if err == nil {
+		tx.Rollback()
+		return w.Session(ctx, existing, actor)
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return Session{}, err
+	}
+	if _, err = tx.ExecContext(ctx, `INSERT INTO evaluation_sessions VALUES (?,?,?,?,?,?,?,?)`, s.ID, importID, actor, string(b), 0, s.State, now, now); err != nil {
+		return Session{}, err
+	}
+	return s, tx.Commit()
 }
 
 // Advance is a compare-and-swap on the stable queue. Judgment persistence is
@@ -289,7 +342,7 @@ func (w *Workbench) Advance(ctx context.Context, id, actor, caseID string, curso
 	if err != nil {
 		return err
 	}
-	if s.Cursor != cursor || cursor < 0 || cursor >= len(s.CaseIDs) || s.CaseIDs[cursor] != caseID {
+	if s.State == "done" || s.Cursor != cursor || cursor < 0 || cursor >= len(s.CaseIDs) || s.CaseIDs[cursor] != caseID {
 		return ErrConflict
 	}
 	next, state := cursor+1, "active"
@@ -298,12 +351,23 @@ func (w *Workbench) Advance(ctx context.Context, id, actor, caseID string, curso
 	} else if next == len(s.CaseIDs) {
 		state = "done"
 	}
-	r, err := w.DB.ExecContext(ctx, `UPDATE evaluation_sessions SET cursor=?,state=?,updated_at=? WHERE id=? AND actor=? AND cursor=?`, next, state, store.Now(), id, actor, cursor)
+	tx, err := w.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	r, err := tx.ExecContext(ctx, `UPDATE evaluation_sessions SET cursor=?,state=?,updated_at=? WHERE id=? AND actor=? AND cursor=? AND state!='done'`, next, state, store.Now(), id, actor, cursor)
 	if err != nil {
 		return err
 	}
 	if n, _ := r.RowsAffected(); n != 1 {
 		return ErrConflict
 	}
-	return nil
+	if state == "done" {
+		ids, _ := json.Marshal(s.CaseIDs)
+		if _, err := tx.ExecContext(ctx, `UPDATE evaluation_sessions SET state='done' WHERE import_id=? AND actor=? AND case_ids=? AND state!='done'`, s.ImportID, actor, string(ids)); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }

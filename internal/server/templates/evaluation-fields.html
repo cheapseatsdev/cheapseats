@@ -29,7 +29,7 @@
 <p>{{.SavedJudgment.Verdict}} · top pick {{.SavedJudgment.Expected.TopPick}} · namesake only {{.SavedJudgment.Expected.OtherProduct}} · tone {{with .SavedJudgment.Tone}}{{.}}{{else}}none{{end}}</p>
 {{with .SavedJudgment.Note}}<p>{{.}}</p>{{end}}{{range .SavedJudgment.Evidence}}<blockquote class="evidence">{{.}}</blockquote>{{end}}
 <h2>Independent assessments</h2><p class="muted small">These models did not receive your judgment. Agreement does not add another human review.</p>
-{{range .Checks}}<h3>{{.Plan.Model}} · {{.State}}</h3>{{if .Stale}}<p>Older evaluator or rules; this is not a current check.</p>{{end}}{{if .Resolved}}<p>Human resolution recorded for this judgment.</p>{{else}}{{with .Fields}}<p>Differences: {{range $i,$v:=.}}{{if $i}}, {{end}}{{$v}}{{end}}.</p>{{end}}{{end}}
+{{range .Checks}}<h3>{{.Plan.Model}} · {{.State}}</h3>{{if .Stale}}<p>Older evaluator or rules. Unresolved differences still need a human decision.</p>{{end}}{{if .Resolved}}<p>Human resolution recorded for this judgment.</p>{{else}}{{with .Fields}}<p>Differences: {{range $i,$v:=.}}{{if $i}}, {{end}}{{$v}}{{end}}.</p>{{end}}{{end}}
 {{with .Grade}}<p>Model: {{.Verdict}} · top pick {{with .TopPick}}{{.}}{{else}}none{{end}} · namesake only {{.OtherProduct}} · tone {{with .Tone}}{{.}}{{else}}none{{end}}</p><p>{{.Reasoning}}</p>{{with .Evidence}}<blockquote class="evidence">{{.}}</blockquote>{{end}}{{end}}{{with .Error}}<p class="err">{{.}}</p>{{end}}{{else}}<p>No independent assessment has been saved yet. Preview and run a check to obtain one.</p>{{end}}
 </section>
 {{end}}

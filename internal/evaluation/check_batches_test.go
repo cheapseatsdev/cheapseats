@@ -116,7 +116,7 @@ func TestCheckBatchPreservesPartialResultsAndRetriesOnlyWhenAsked(t *testing.T) 
 	}
 	ctx = context.Background()
 	report, err := w.CheckBatchReport(ctx, b.Plan.ID, "human", a)
-	if err != nil || report.Done != 1 || report.Failed != 1 || report.Waiting != 1 {
+	if err != nil || report.Done != 1 || report.Failed != 0 || report.Waiting != 2 {
 		t.Fatalf("partial work lost: %+v %v", report, err)
 	}
 	positive := func(_ context.Context, r grade.GoldenRecord, _, _ string, _ float64) (grade.Grade, float64, error) {
@@ -127,8 +127,8 @@ func TestCheckBatchPreservesPartialResultsAndRetriesOnlyWhenAsked(t *testing.T) 
 		t.Fatal(err)
 	}
 	report, _ = w.CheckBatchReport(ctx, b.Plan.ID, "human", a)
-	if report.Done != 2 || report.Failed != 1 || calls != 3 {
-		t.Fatalf("implicit failed retry: %+v %d", report, calls)
+	if report.Done != 3 || report.Failed != 0 || calls != 4 {
+		t.Fatalf("paused case did not resume without retry: %+v %d", report, calls)
 	}
 	if err := w.RunCheckBatch(ctx, b.Plan.ID, "human", a, true, positive); err != nil {
 		t.Fatal(err)

@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cheapseatsdev/cheapseats/internal/answer"
 	"github.com/cheapseatsdev/cheapseats/internal/evaluation"
 	"github.com/cheapseatsdev/cheapseats/internal/grade"
 )
@@ -269,7 +271,17 @@ func (s *Server) evaluationCaseData(r *http.Request, id string, session *evaluat
 	d.CheckBatchID = r.FormValue("batch")
 	d.SavedJudgment = c.Review.Judgment
 	if src := c.Record.Source; src != nil && src.Run != "" && src.Result > 0 {
-		d.SourceURL = fmt.Sprintf("/runs/%s#result-%d", url.PathEscape(src.Run), src.Result)
+		// Imported provenance may refer to a different deployment. Link only
+		// when the local result contains the exact saved answer and question.
+		var raw string
+		err := s.App.DB.QueryRowContext(r.Context(), `SELECT COALESCE(answer,'') FROM results WHERE id=? AND run_id=? AND prompt=?`, src.Result, src.Run, c.Record.Prompt).Scan(&raw)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return d, err
+		}
+		var original answer.Answer
+		if err == nil && json.Unmarshal([]byte(raw), &original) == nil && original.Text == c.Record.Answer {
+			d.SourceURL = fmt.Sprintf("/runs/%s#result-%d", url.PathEscape(src.Run), src.Result)
+		}
 	}
 	d.Confirmation = s.evaluationConfirmation(r)
 	if d.Intent == "" {
@@ -327,6 +339,12 @@ func (s *Server) evaluationSession(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), evaluationCode(err))
 		return
 	}
+	if session.State == "done" && session.Cursor < len(session.CaseIDs) {
+		// A repaired duplicate retains its original cursor for provenance.
+		// Its bookmark returns to the queue instead of reopening retired work.
+		http.Redirect(w, r, "/evaluation?import="+url.QueryEscape(session.ImportID), http.StatusSeeOther)
+		return
+	}
 	if session.Cursor >= len(session.CaseIDs) {
 		s.evaluationSessionFinished(w, r, session)
 		return
@@ -336,6 +354,9 @@ func (s *Server) evaluationSession(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), evaluationCode(err))
 		return
 	}
+	// A previous save may have committed before its advance/response was lost.
+	// Let the reviewer acknowledge it without creating another history event.
+	d.Saved = d.State == "reviewed" || d.State == "unresolved"
 	s.render(w, "evaluation-case", d)
 }
 
@@ -366,6 +387,13 @@ func evaluationForm(r *http.Request) (evaluation.Judgment, int, error) {
 func (s *Server) evaluationDraft(w http.ResponseWriter, r *http.Request) {
 	j, revision, err := evaluationForm(r)
 	if err == nil {
+		var c evaluation.Case
+		c, err = s.evaluationStore().Case(r.Context(), r.PathValue("id"))
+		if err == nil && (c.Review.State == "reviewed" || c.Review.State == "unresolved") {
+			err = errors.New("this decision is saved; edits stay in this tab until you explicitly save them")
+		}
+	}
+	if err == nil {
 		var saved evaluation.Review
 		saved, err = s.evaluationStore().Save(r.Context(), r.PathValue("id"), revision, "draft", j, s.evaluationActor(r), r.FormValue("rubric"))
 		if err == nil {
@@ -388,7 +416,7 @@ func (s *Server) evaluationSave(w http.ResponseWriter, r *http.Request) {
 	if sid := r.FormValue("session"); sid != "" {
 		loaded, err := wb.Session(r.Context(), sid, actor)
 		cursor, e := strconv.Atoi(r.FormValue("cursor"))
-		if err != nil || e != nil || cursor != loaded.Cursor || cursor < 0 || cursor >= len(loaded.CaseIDs) || loaded.CaseIDs[cursor] != id {
+		if err != nil || e != nil || loaded.State == "done" || cursor != loaded.Cursor || cursor < 0 || cursor >= len(loaded.CaseIDs) || loaded.CaseIDs[cursor] != id {
 			http.Error(w, evaluation.ErrConflict.Error(), http.StatusConflict)
 			return
 		}
@@ -416,6 +444,23 @@ func (s *Server) evaluationSave(w http.ResponseWriter, r *http.Request) {
 	if action == "end" {
 		kind = "draft"
 	}
+	if action == "draft" && err == nil {
+		c, e := wb.Case(r.Context(), id)
+		err = e
+		if err == nil && (c.Review.State == "reviewed" || c.Review.State == "unresolved") {
+			err = errors.New("this decision is already saved; revise it explicitly instead of saving a draft")
+		}
+	}
+	preserveSaved := false
+	if action == "end" && err == nil {
+		if session == nil {
+			err = errors.New("open the review session before pausing it")
+		} else {
+			c, e := wb.Case(r.Context(), id)
+			err = e
+			preserveSaved = e == nil && (c.Review.State == "reviewed" || c.Review.State == "unresolved")
+		}
+	}
 	batchID := r.FormValue("batch")
 	if err == nil && batchID != "" {
 		_, err = s.evaluationBatchCase(r, batchID, id)
@@ -425,7 +470,7 @@ func (s *Server) evaluationSave(w http.ResponseWriter, r *http.Request) {
 		checkImportID, err = s.evaluationCheckImport(r.Context(), r.FormValue("import"), id)
 	}
 	saved := false
-	if err == nil && (action == "next" || action == "continue-review") {
+	if err == nil && (action == "next" || action == "continue-review" || preserveSaved) {
 		c, e := wb.Case(r.Context(), id)
 		if e != nil {
 			err = e
@@ -487,9 +532,9 @@ func (s *Server) evaluationSave(w http.ResponseWriter, r *http.Request) {
 		if session == nil {
 			d.ImportID = r.FormValue("import")
 		}
-		d.Resolution = r.FormValue("resolving") == "1"
+		d.Resolution = len(d.Pending) > 0 || r.FormValue("resolving") == "1"
 		d.ResolutionNote = r.FormValue("resolution_note")
-		if d.Resolution {
+		if r.FormValue("resolving") == "1" {
 			d.Pending = append([]string(nil), r.Form["check"]...)
 		}
 		d.Rules = nil

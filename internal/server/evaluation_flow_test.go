@@ -135,11 +135,11 @@ func TestEvaluationFlowDoesNotRecommendApprovalWhileAnotherGraderIsRunning(t *te
 	if flow.Done != 1 || flow.NextAction != "View running assessment" || flow.NextURL == "" {
 		t.Fatalf("running assessment lost the next action: %+v", flow)
 	}
-	// The approval guard ignores stale evaluator/rubric checks, as does this flow.
+	// A build change must not silently discard an unfinished check.
 	views[1].Stale = true
 	flow = evaluationFlow{}
 	flow.add(c, views, "current", "import")
-	if flow.NextURL != "" {
-		t.Fatalf("stale running assessment blocked the handoff: %+v", flow)
+	if flow.NextAction != "View running assessment" || flow.NextURL == "" {
+		t.Fatalf("older running assessment was silently discarded: %+v", flow)
 	}
 }

@@ -10,10 +10,10 @@ from the 0.6.0 image. This branch includes the work through
 Use [the technical guide](evaluation.md#try-the-review-workflow-locally) for setup,
 `CHEAPSEATS_EVALUATION=1`, private data directories and exact commands.
 
-For the broader product workflow, start with
-[AI visibility, AEO and GEO](https://cheapseats.dev/docs/understanding-ai-visibility/),
-[choosing buyer questions](https://cheapseats.dev/docs/choosing-questions/), and
-[which check to run](https://cheapseats.dev/docs/checks-and-evaluations/).
+Until the website publishes these guides, use the repository previews for the broader product workflow:
+[AI visibility, AEO and GEO](https://github.com/cheapseatsdev/cheapseats-site/blob/6c74c37/content/docs/understanding-ai-visibility.md),
+[choosing buyer questions](https://github.com/cheapseatsdev/cheapseats-site/blob/6c74c37/content/docs/choosing-questions.md), and
+[which check to run](https://github.com/cheapseatsdev/cheapseats-site/blob/6c74c37/content/docs/checks-and-evaluations.md).
 
 ## Choose the question first
 

@@ -12,7 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cheapseatsdev/cheapseats/internal/budget"
 	"github.com/cheapseatsdev/cheapseats/internal/grade"
 	"github.com/cheapseatsdev/cheapseats/internal/llm"
 	"github.com/cheapseatsdev/cheapseats/internal/state"
@@ -327,6 +326,9 @@ func (w *Workbench) RunExperiment(ctx context.Context, id string, a Assessor, re
 				start := time.Now()
 				callCtx, cancel := context.WithTimeout(ctx, 3*time.Minute)
 				g, cost, callErr := assess(callCtx, evidenceRecord(members[caseID].Record), p.Variants[variant].Prompt, "evaluation/experiment/"+id, p.MaxUSD)
+				if callErr != nil && callCtx.Err() != nil {
+					callErr = errors.Join(callErr, callCtx.Err())
+				}
 				cancel()
 				if callErr == nil {
 					r := members[caseID].Record
@@ -334,9 +336,13 @@ func (w *Workbench) RunExperiment(ctx context.Context, id string, a Assessor, re
 					callErr = r.Validate()
 				}
 				next, raw, why := CheckDone, "", ""
+				refund := 0
 				if callErr != nil {
 					next = CheckFailed
 					why = llm.Truncate(callErr.Error(), 1500)
+					if assessmentPaused(ctx, callErr) {
+						next, refund = CheckReady, 1
+					}
 				} else {
 					b, _ := json.Marshal(g)
 					raw = string(b)
@@ -346,7 +352,7 @@ func (w *Workbench) RunExperiment(ctx context.Context, id string, a Assessor, re
 				}
 				CheckTransitions.Check("evaluation_predictions", CheckRunning, next)
 				saveCtx, stop := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
-				result, err = w.DB.ExecContext(saveCtx, `UPDATE evaluation_predictions SET state=?,result=?,error=?,cost_usd=cost_usd+?,latency_ms=latency_ms+?,lease='',lease_until='',updated_at=? WHERE experiment_id=? AND case_id=? AND variant=? AND repetition=? AND lease=?`, next, raw, why, cost, time.Since(start).Milliseconds(), store.Now(), id, caseID, variant, repetition, lease)
+				result, err = w.DB.ExecContext(saveCtx, `UPDATE evaluation_predictions SET state=?,attempt=attempt-?,result=?,error=?,cost_usd=cost_usd+?,latency_ms=latency_ms+?,lease='',lease_until='',updated_at=? WHERE experiment_id=? AND case_id=? AND variant=? AND repetition=? AND lease=? AND lease_until>=?`, next, refund, raw, why, cost, time.Since(start).Milliseconds(), store.Now(), id, caseID, variant, repetition, lease, store.Now())
 				stop()
 				if err != nil {
 					return err
@@ -355,7 +361,7 @@ func (w *Workbench) RunExperiment(ctx context.Context, id string, a Assessor, re
 				if n != 1 {
 					return ErrConflict
 				}
-				if errors.Is(callErr, budget.ErrExhausted) {
+				if assessmentPaused(ctx, callErr) {
 					return callErr
 				}
 				if ctx.Err() != nil {

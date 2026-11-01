@@ -339,10 +339,24 @@ func (w *Workbench) save(ctx context.Context, id string, revision int, kind stri
 	if current != revision {
 		return c.Review, ErrConflict
 	}
+	vs, err := checkViews(ctx, tx, c)
+	if err != nil {
+		return c.Review, err
+	}
+	if resolution == nil && len(pendingIDs(vs)) > 0 {
+		return c.Review, errors.New("resolve independent-check differences with an explanation before changing this judgment")
+	}
 	if resolution != nil {
-		vs, err := checkViews(ctx, tx, c)
-		if err != nil {
-			return c.Review, err
+		if resolution.scope != nil {
+			selected := []CheckView{}
+			for _, v := range vs {
+				for _, id := range resolution.scope {
+					if v.Plan.ID == id {
+						selected = append(selected, v)
+					}
+				}
+			}
+			vs = selected
 		}
 		ids := pendingIDs(vs)
 		submitted := append([]string(nil), resolution.Checks...)
@@ -374,6 +388,14 @@ func (w *Workbench) save(ctx context.Context, id string, revision int, kind stri
 	if resolution != nil {
 		for _, check := range resolution.Checks {
 			if _, err := tx.ExecContext(ctx, `INSERT INTO evaluation_resolutions VALUES (?,?,?,?,?,?,?)`, check, next.Revision, id, resolution.Action, resolution.Explanation, actor, next.UpdatedAt); err != nil {
+				return c.Review, err
+			}
+		}
+		if resolution.Action == "keep" {
+			// The judgment is unchanged. Carry prior resolved checks forward
+			// with their original actor, explanation and time, so keeping a
+			// second batch cannot reopen an already resolved first batch.
+			if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO evaluation_resolutions SELECT check_id,?,case_id,action,explanation,actor,created_at FROM evaluation_resolutions WHERE case_id=? AND revision=?`, next.Revision, id, current); err != nil {
 				return c.Review, err
 			}
 		}

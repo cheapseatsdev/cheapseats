@@ -108,6 +108,9 @@ are reused. A failed check can be retried explicitly once; a crashed running wor
 reclaimed after its lease expires. The lease fences late results, and the fixed admission
 budget covers both assessment attempts and their transport retries. Human judgments and
 resolution events are stored separately; none of these states is human approval.
+Cancelling the enclosing run, its deadline or exhausted admission budgets return work to **ready** without using
+a logical attempt. A request timeout consumes an attempt and the sweep continues. Recorded provider charges remain. Expired running checks are unknown
+failures for approval, even after a crash on the second attempt; late results are fenced.
 
 ```mermaid
 stateDiagram-v2
@@ -115,6 +118,7 @@ stateDiagram-v2
     ready --> running
     running --> done
     running --> failed
+    running --> ready
     failed --> running
 ```
 
@@ -124,7 +128,7 @@ each case, grader and repetition claimed and saved separately. Done predictions 
 ## Independent check batches (`evaluation_check_batches.state`)
 
 A confirmed set starts **ready**, runs under a renewable fenced lease, and becomes **done**
-after its sweep or **failed** when paused/interrupted. Done means the sweep finished, not that
+after its sweep, **ready** when paused or **failed** after another worker error. Done means the sweep finished, not that
 every individual assessment succeeded. Failed items remain unknown. An explicit resume can
 retry failed items while preserving completed checks, shared budgets and per-check limits.
 Batch items use the independent-check lifecycle. These states never approve human labels.
@@ -135,6 +139,7 @@ stateDiagram-v2
     ready --> running
     running --> done
     running --> failed
+    running --> ready
     done --> running
     failed --> running
 ```

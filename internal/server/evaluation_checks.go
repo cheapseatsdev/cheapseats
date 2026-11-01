@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"net/http"
@@ -92,7 +93,20 @@ func (s *Server) evaluationCheckRun(w http.ResponseWriter, r *http.Request) {
 		}
 		d.Plan.MaxUSD = amount
 	}
-	checked, err := s.evaluationStore().RunCheck(r.Context(), d.Plan, s.evaluationActor(r), r.FormValue("retry") == "1", s.evaluationAssessor().Assess)
+	ctx, cancel := context.WithCancel(r.Context())
+	jobID := "check:" + d.Plan.ID
+	job, claimed, err := s.claimEvaluationJob(jobID, cancel)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		return
+	}
+	if !claimed {
+		http.Error(w, "this independent check is already running", http.StatusConflict)
+		return
+	}
+	defer cancel()
+	defer s.finishEvaluationJob(jobID, job)
+	checked, err := s.evaluationStore().RunCheck(ctx, d.Plan, s.evaluationActor(r), r.FormValue("retry") == "1", s.evaluationAssessor().Assess)
 	if err != nil {
 		d.Error = err.Error()
 		if checked.Plan.ID != "" {

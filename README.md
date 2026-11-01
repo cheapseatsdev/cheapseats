@@ -13,11 +13,11 @@ scraping dependencies ([why](https://cheapseats.dev/docs/engines/#why-not-scrape
 Model access, hosting and optional services have their own costs. [Docs](https://cheapseats.dev/docs/) · [Live demo](https://demo.cheapseats.dev/)
 · [Compare tools](https://cheapseats.dev/compare/) · [Latest release](https://github.com/cheapseatsdev/cheapseats/releases/latest).
 
-New to AI visibility? Start with [AEO/GEO and the learning loop](https://cheapseats.dev/docs/understanding-ai-visibility/),
-[choosing buyer questions](https://cheapseats.dev/docs/choosing-questions/) and
-[your first run](https://cheapseats.dev/docs/first-run/).
-[Choose a check](https://cheapseats.dev/docs/checks-and-evaluations/) when you need
-to validate something; [measuring success](https://cheapseats.dev/docs/measuring-success/)
+New to AI visibility? These learning guides are available as repository previews until the website publishes them. Start with [AEO/GEO and the learning loop](https://github.com/cheapseatsdev/cheapseats-site/blob/6c74c37/content/docs/understanding-ai-visibility.md),
+[choosing buyer questions](https://github.com/cheapseatsdev/cheapseats-site/blob/6c74c37/content/docs/choosing-questions.md) and
+[your first run](https://github.com/cheapseatsdev/cheapseats-site/blob/6c74c37/content/docs/first-run.md).
+[Choose a check](https://github.com/cheapseatsdev/cheapseats-site/blob/6c74c37/content/docs/checks-and-evaluations.md) when you need
+to validate something; [measuring success](https://github.com/cheapseatsdev/cheapseats-site/blob/6c74c37/content/docs/measuring-success.md)
 explains what outcomes can mean.
 
 ## Quick start

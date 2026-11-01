@@ -323,6 +323,9 @@ func (w *Workbench) RunCheckBatch(ctx context.Context, id, actor string, a Asses
 		next, why := CheckDone, ""
 		if e != nil {
 			next, why = CheckFailed, e.Error()
+			if assessmentPaused(callCtx, e) {
+				next = CheckReady
+			}
 		}
 		CheckTransitions.Check("evaluation_check_batch_items", CheckRunning, next)
 		saveCtx, stop := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
@@ -337,7 +340,7 @@ func (w *Workbench) RunCheckBatch(ctx context.Context, id, actor string, a Asses
 			runErr = ErrConflict
 			break
 		}
-		if errors.Is(e, budget.ErrExhausted) {
+		if assessmentPaused(callCtx, e) {
 			runErr = e
 			break
 		}
@@ -349,6 +352,9 @@ func (w *Workbench) RunCheckBatch(ctx context.Context, id, actor string, a Asses
 	next, why := CheckDone, ""
 	if runErr != nil {
 		next, why = CheckFailed, runErr.Error()
+		if assessmentPaused(callCtx, runErr) {
+			next = CheckReady
+		}
 	}
 	CheckBatchTransitions.Check("evaluation_check_batches", CheckRunning, next)
 	saveCtx, stop := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
@@ -402,12 +408,12 @@ func (w *Workbench) CheckBatchReport(ctx context.Context, id, actor string, a As
 		if e != nil {
 			return out, e
 		}
-		row.Pending = pendingIDs(views)
 		for _, v := range views {
 			if v.Plan.ID == item.CheckID {
 				v := v
 				row.Check = &v
-			} else if !v.Stale {
+				row.Pending = pendingIDs([]CheckView{v})
+			} else {
 				row.OtherChecks = append(row.OtherChecks, v)
 			}
 		}
@@ -427,7 +433,7 @@ func (w *Workbench) CheckBatchReport(ctx context.Context, id, actor string, a As
 		default:
 			out.Waiting++
 		}
-		if row.State == CheckDone && row.Case.Review.State == "reviewed" && row.Check != nil && !row.Check.Stale && row.Check.Grade != nil {
+		if row.State == CheckDone && row.Case.Review.State == "reviewed" && row.Check != nil && row.Check.Grade != nil {
 			if len(row.Pending) > 0 {
 				out.Differences++
 			} else if row.Check.Resolved {
@@ -440,4 +446,24 @@ func (w *Workbench) CheckBatchReport(ctx context.Context, id, actor string, a As
 	}
 	out.SpentUSD, err = a.Budget.SpentKinds(ctx, b.Plan.kinds())
 	return out, err
+}
+
+// KeepBatchJudgment resolves only the assessment displayed in this batch. Other
+// graders' differences remain pending and still gate dataset approval.
+func (w *Workbench) KeepBatchJudgment(ctx context.Context, batchID, caseID string, revision int, actor, rubric string, checks []string, explanation string) (Review, error) {
+	b, err := w.CheckBatch(ctx, batchID, actor)
+	if err != nil {
+		return Review{}, err
+	}
+	for _, item := range b.Plan.Cases {
+		if item.CaseID != caseID {
+			continue
+		}
+		if len(checks) != 1 || checks[0] != item.CheckID {
+			return Review{}, ErrConflict
+		}
+		r := Resolution{Checks: checks, Action: "keep", Explanation: explanation, scope: []string{item.CheckID}}
+		return w.Resolve(ctx, caseID, revision, Judgment{}, actor, rubric, r)
+	}
+	return Review{}, ErrConflict
 }
