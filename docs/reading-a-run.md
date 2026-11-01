@@ -151,6 +151,15 @@ ranked by distinct competitors named × answers citing it: where to get the bran
 **Found but not cited** (`found_not_cited`) lists the brand's pages that searches returned and no
 answer linked.
 
+**Named when cited** is shown for each of the brand's own pages in Pages referenced: of the answers
+citing the page to prompts that don't name the brand (`cited_unbranded`), those that named it
+(`cited_named`). **Recommended when cited** follows it: of those answers asked for a choice
+(`cited_choice`), those that recommended the brand (`cited_recommended`); info answers count only
+toward named, as in the scores. Each answer counts once however often it links the page. Branded
+prompts are left out because an answer to a prompt that names the brand names it trivially. A page
+cited in nine answers and named in two of nine was read and not credited: a fix for the page's
+copy. Other sites' pages show –, and get_run's `top_pages` carries the same fields.
+
 **Cited pages that changed** (`cited_page_changes`) appears when this run and an earlier run of the
 set both had a [citation check](audit.md#cited-pages-that-changed): the pages that now name the
 brand or a competitor, or stopped, since that check.

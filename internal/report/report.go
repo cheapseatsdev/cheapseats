@@ -138,6 +138,13 @@ type Page struct {
 	Surfaced int    `json:"surfaced"` // answers whose searches returned it
 	// Answers whose searches returned it and that linked it.
 	SurfacedAndCited int `json:"surfaced_and_cited"`
+	// Of the answers citing it to prompts that don't name the brand (FirstParty only): how many
+	// there were, how many named the brand, how many were asked as a choice, and of those, how
+	// many recommended it. Same definitions as Tally.
+	CitedUnbranded   int `json:"cited_unbranded,omitempty"`
+	CitedNamed       int `json:"cited_named,omitempty"`
+	CitedChoice      int `json:"cited_choice,omitempty"`
+	CitedRecommended int `json:"cited_recommended,omitempty"`
 	SourceRates
 	Prompts []int `json:"prompts"`
 }
@@ -689,6 +696,19 @@ func BuildWith(brand config.Brand, results []run.Result, opt Options) Summary {
 				cited[p.URL] = true
 				p.Cited++
 				byCell.add(p, pageHost[p.URL], recIdx, r.PromptIdx)
+				// A prompt that names the brand gets it named trivially, so only unbranded ones count.
+				if p.FirstParty && !promptBranded[r.PromptIdx] {
+					p.CitedUnbranded++
+					if g.Verdict != grade.Absent {
+						p.CitedNamed++
+					}
+					if !r.Info {
+						p.CitedChoice++
+						if g.Verdict == grade.Recommended {
+							p.CitedRecommended++
+						}
+					}
+				}
 			}
 			if hk := pageHost[p.URL]; !citedHost[hk] {
 				citedHost[hk] = true
