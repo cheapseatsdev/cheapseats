@@ -5,10 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/cheapseatsdev/cheapseats/internal/answer"
+	"github.com/cheapseatsdev/cheapseats/internal/audit"
 	"github.com/cheapseatsdev/cheapseats/internal/config"
 	"github.com/cheapseatsdev/cheapseats/internal/grade"
 	"github.com/cheapseatsdev/cheapseats/internal/run"
@@ -97,11 +100,11 @@ func TestBuildVerifiesCurrentWorkAndSeparatesUnknowns(t *testing.T) {
 		return json.Unmarshal(b, out)
 	}
 	results := []run.Result{{ID: 7, PromptIdx: 0, Answerer: "fake", Track: answer.Search, Status: "done", Grade: &grade.Grade{Verdict: grade.Absent}, Answer: &answer.Answer{Text: "A spreadsheet is enough for an initial baseline; a tracker earns its setup for repeat checks.", Searches: []answer.Query{{Query: "starter tracker", Results: []answer.Link{{URL: f.Target, Title: "Existing installation"}}}}}}}
-	ctx := WithVerifier(context.Background(), func(_ context.Context, u string) (string, error) {
+	ctx := WithVerifier(context.Background(), func(_ context.Context, u string) (string, bool, error) {
 		if u == f.Target {
-			return pages[0].Text, nil
+			return pages[0].Text, false, nil
 		}
-		return "", errors.New("not read")
+		return "", false, errors.New("not read")
 	})
 	a, _, err := Build(ctx, cfg, set, results, nil, nil)
 	if err != nil || len(a.Fixes) != 1 || len(a.Investigations) != 0 {
@@ -120,7 +123,9 @@ func TestBuildVerifiesCurrentWorkAndSeparatesUnknowns(t *testing.T) {
 		}
 	}
 	prompts = nil
-	a, _, err = Build(WithVerifier(context.Background(), func(context.Context, string) (string, error) { return "", errors.New("temporary network failure") }), cfg, set, results, nil, nil)
+	a, _, err = Build(WithVerifier(context.Background(), func(context.Context, string) (string, bool, error) {
+		return "", false, errors.New("temporary network failure")
+	}), cfg, set, results, nil, nil)
 	var verr *VerificationError
 	if !errors.As(err, &verr) || !a.VerificationFailed || len(a.Fixes) != 0 || len(a.Investigations) != 1 || len(prompts) != 1 {
 		t.Fatalf("failed reads must stay unknown, as a failed verification, without a redundant review call: %+v %v", a, err)
@@ -142,9 +147,9 @@ func TestReadArtifactsHasBoundedRequests(t *testing.T) {
 		cfg.Brand.Sites = append(cfg.Brand.Sites, config.Site{URL: fmt.Sprintf("https://site%d.example", i)})
 	}
 	n := 0
-	ctx := WithVerifier(context.Background(), func(context.Context, string) (string, error) {
+	ctx := WithVerifier(context.Background(), func(context.Context, string) (string, bool, error) {
 		n++
-		return strings.Repeat("x", MaxVerificationTargetRunes+100), nil
+		return strings.Repeat("x", MaxVerificationTargetRunes+100), false, nil
 	})
 	ps := readArtifacts(ctx, cfg, fs)
 	if n != MaxVerificationPages || len(ps) != MaxVerificationPages {
@@ -174,7 +179,7 @@ func TestReadArtifactsMarksTruncatedOnlyWhenClipped(t *testing.T) {
 		"https://acme.example/brand-whole": strings.Repeat("é", MaxVerificationPageRunes),
 		"https://acme.example/brand-cut":   strings.Repeat("é", MaxVerificationPageRunes+1),
 	}
-	ctx := WithVerifier(context.Background(), func(_ context.Context, u string) (string, error) { return body[u], nil })
+	ctx := WithVerifier(context.Background(), func(_ context.Context, u string) (string, bool, error) { return body[u], false, nil })
 	got := map[string]artifact{}
 	for _, p := range readArtifacts(ctx, cfg, []Fix{whole, cut}) {
 		got[p.URL] = p
@@ -211,7 +216,17 @@ func omissionFixture() (*config.Config, sets.Set, Fix, string, decision) {
 	return cfg, set, f, page, d
 }
 
-func reviewWithFakeAnalyst(t *testing.T, cfg *config.Config, set sets.Set, f Fix, page string, d decision) (Analysis, string) {
+// reviewPageReader reads target as page and fails every other read.
+func reviewPageReader(target, page string) VerifyPage {
+	return func(_ context.Context, u string) (string, bool, error) {
+		if u == target {
+			return page, false, nil
+		}
+		return "", false, errors.New("not read")
+	}
+}
+
+func reviewWithFakeAnalyst(t *testing.T, cfg *config.Config, set sets.Set, f Fix, read VerifyPage, d decision) (Analysis, string) {
 	t.Helper()
 	old := structuredCLI
 	t.Cleanup(func() { structuredCLI = old })
@@ -223,13 +238,7 @@ func reviewWithFakeAnalyst(t *testing.T, cfg *config.Config, set sets.Set, f Fix
 		}{[]decision{d}})
 		return json.Unmarshal(b, out)
 	}
-	ctx := WithVerifier(context.Background(), func(_ context.Context, u string) (string, error) {
-		if u == f.Target {
-			return page, nil
-		}
-		return "", errors.New("not read")
-	})
-	a, _, err := verifyCandidates(ctx, cfg, set, Analysis{Fixes: []Fix{f}}, 0)
+	a, _, err := verifyCandidates(WithVerifier(context.Background(), read), cfg, set, Analysis{Fixes: []Fix{f}}, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -238,12 +247,28 @@ func reviewWithFakeAnalyst(t *testing.T, cfg *config.Config, set sets.Set, f Fix
 
 func TestCompletePageVerifiesPlainOmission(t *testing.T) {
 	cfg, set, f, page, d := omissionFixture()
-	a, prompt := reviewWithFakeAnalyst(t, cfg, set, f, page, d)
+	a, prompt := reviewWithFakeAnalyst(t, cfg, set, f, reviewPageReader(f.Target, page), d)
 	if len(a.Fixes) != 1 || len(a.Investigations) != 0 || a.Fixes[0].Verification.Status != "verified" {
 		t.Fatalf("a supported omission on a complete page did not verify: %+v", a)
 	}
-	if !strings.Contains(prompt, `"truncated":false`) || !strings.Contains(prompt, "A quote cannot show absence by itself") {
-		t.Fatal("the reviewer was not told the target is complete or how to support an omission")
+	if !strings.Contains(prompt, `"truncated":false`) {
+		t.Fatal("the reviewer was not told the target is complete")
+	}
+	// Each safeguard that keeps an omission claim honest: deleting any of them fails here.
+	for _, safeguard := range []string{
+		"A quote cannot show absence by itself",
+		"pass remaining_change only when the page you quote is not truncated",
+		"you have read all of its supplied text",
+		"nothing in it already makes the requested change in any wording",
+		"If that page is truncated, remaining_change is unknown (passed=false, status investigate)",
+		"For a product candidate, if any supplied page about that feature is truncated, nothing it omits counts as missing",
+		"If the target already makes the change, status is already-done",
+		"a truncated page, an unread page or a read error is not",
+		"truncated=true marks an excerpt, which can show what a page says but never what it lacks",
+	} {
+		if !strings.Contains(prompt, safeguard) {
+			t.Errorf("review prompt lost the safeguard %q", safeguard)
+		}
 	}
 }
 
@@ -252,18 +277,66 @@ func TestTruncatedTargetCannotVerifyRemainingChange(t *testing.T) {
 	// The same page with a long footer: every quote is still in the supplied excerpt, and the
 	// fake reviewer still claims remaining_change passed.
 	page += " " + strings.Repeat("Footer link. ", MaxVerificationTargetRunes/10)
-	a, prompt := reviewWithFakeAnalyst(t, cfg, set, f, page, d)
+	a, prompt := reviewWithFakeAnalyst(t, cfg, set, f, reviewPageReader(f.Target, page), d)
 	if len(a.Fixes) != 0 || len(a.Investigations) != 1 || !strings.Contains(a.Investigations[0].Why, "remaining_change") {
 		t.Fatalf("an excerpt verified a remaining change: %+v", a)
 	}
 	if !strings.Contains(prompt, `"truncated":true`) {
 		t.Fatal("the reviewer was not told the target is truncated")
 	}
-	// What the excerpt does say still counts: the same page can support already-done.
+}
+
+// What an excerpt does say still counts: a truncated target that already states the requested
+// version supports already-done, quoting that statement.
+func TestTruncatedTargetCanShowAlreadyDone(t *testing.T) {
+	cfg, set, f, _, d := omissionFixture()
+	page := "Setup. Install the CLI with go install acme.example/tracker@latest. Requires Go 1.27 or later. Run tracker init, then tracker serve, to start locally. " + strings.Repeat("Footer link. ", MaxVerificationTargetRunes/10)
 	d.Status = "already-done"
-	a, _ = reviewWithFakeAnalyst(t, cfg, set, f, page, d)
-	if len(a.Findings) != 1 {
+	d.Summary = "The setup page already states Go 1.27 or later beside the first-run commands."
+	d.Checks["existing_work"] = proof{Passed: true, Source: f.Target, Quote: "Requires Go 1.27 or later. Run tracker init, then tracker serve", Reason: "The target already states the requested runtime version beside the first-run commands."}
+	d.Checks["remaining_change"] = proof{Passed: false, Source: f.Target, Quote: "", Reason: "Nothing remains: the requested version is already stated."}
+	a, _ := reviewWithFakeAnalyst(t, cfg, set, f, reviewPageReader(f.Target, page), d)
+	if len(a.Findings) != 1 || len(a.Fixes) != 0 || len(a.Investigations) != 0 || !strings.Contains(a.Findings[0].Evidence, "Requires Go 1.27") {
 		t.Fatalf("a quote from an excerpt could not show existing work: %+v", a)
+	}
+}
+
+// A raw response cut at audit.MaxBody can extract to short, complete-looking text: a readable
+// paragraph, then inline script past the cut, then the rest of the page. The reader's cut must
+// reach the artifact so the omission it seems to show can't verify.
+func TestReadCutAtRawCapCannotVerifyRemainingChange(t *testing.T) {
+	restore := audit.AllowLoopbackForTests()
+	defer restore()
+	cfg, set, f, page, d := omissionFixture()
+	body := "<html><body><p>" + page + "</p><script>" + strings.Repeat("var x = 1;\n", audit.MaxBody/10) + "</script><p>Requires Go 1.27 or later.</p></body></html>"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/setup" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("content-type", "text/html; charset=utf-8")
+		w.Write([]byte(body))
+	}))
+	defer srv.Close()
+	old := f.Target
+	f.Target = srv.URL + "/setup"
+	f.Check = strings.Replace(f.Check, old, f.Target, 1)
+	for g, p := range d.Checks {
+		if p.Source == old {
+			p.Source = f.Target
+			d.Checks[g] = p
+		}
+	}
+	read := func(ctx context.Context, u string) (string, bool, error) {
+		return audit.ReadCurrent(ctx, u, audit.CiteOptions{})
+	}
+	pages := readArtifacts(WithVerifier(context.Background(), read), cfg, []Fix{f})
+	if len(pages) != 1 || pages[0].Text == "" || !pages[0].Truncated || len([]rune(pages[0].Text)) > MaxVerificationTargetRunes {
+		t.Fatalf("a read cut at the raw cap reached the reviewer as complete: %+v", pages)
+	}
+	a, prompt := reviewWithFakeAnalyst(t, cfg, set, f, read, d)
+	if len(a.Fixes) != 0 || len(a.Investigations) != 1 || !strings.Contains(a.Investigations[0].Why, "remaining_change") || !strings.Contains(prompt, `"truncated":true`) {
+		t.Fatalf("an omission from a cut read verified: %+v", a)
 	}
 }
 
@@ -271,9 +344,9 @@ func TestWeakCandidateDoesNotCreateResearchBacklog(t *testing.T) {
 	cfg, set, f, _, _ := verificationFixture()
 	f.Decision = ""
 	reads := 0
-	ctx := WithVerifier(context.Background(), func(context.Context, string) (string, error) {
+	ctx := WithVerifier(context.Background(), func(context.Context, string) (string, bool, error) {
 		reads++
-		return "", errors.New("not needed")
+		return "", false, errors.New("not needed")
 	})
 	a, _, err := verifyCandidates(ctx, cfg, set, Analysis{Fixes: []Fix{f}}, 0)
 	if err != nil || reads != 0 || len(a.Fixes) != 0 || len(a.Investigations) != 0 || len(a.Findings) != 0 || !strings.Contains(a.Insights, "Omitted candidate") {
@@ -315,7 +388,7 @@ func TestVerifiedBoundaryBecomesFindingRatherThanWork(t *testing.T) {
 		}{[]decision{d}})
 		return json.Unmarshal(b, out)
 	}
-	ctx := WithVerifier(context.Background(), func(context.Context, string) (string, error) { return pages[0].Text, nil })
+	ctx := WithVerifier(context.Background(), func(context.Context, string) (string, bool, error) { return pages[0].Text, false, nil })
 	a, _, err := verifyCandidates(ctx, cfg, set, Analysis{Fixes: []Fix{f}}, 0)
 	if err != nil || len(a.Fixes) != 0 || len(a.Investigations) != 0 || len(a.Findings) != 1 {
 		t.Fatalf("accepted boundary became work: %+v %v", a, err)
@@ -334,7 +407,7 @@ func TestReviewerCanDiscardCandidateWithoutResearchTask(t *testing.T) {
 		}{[]decision{d}})
 		return json.Unmarshal(b, out)
 	}
-	ctx := WithVerifier(context.Background(), func(context.Context, string) (string, error) { return pages[0].Text, nil })
+	ctx := WithVerifier(context.Background(), func(context.Context, string) (string, bool, error) { return pages[0].Text, false, nil })
 	a, _, err := verifyCandidates(ctx, cfg, set, Analysis{Fixes: []Fix{f}}, 0)
 	if err != nil || len(a.Fixes) != 0 || len(a.Investigations) != 0 || len(a.Findings) != 0 || !strings.Contains(a.Insights, d.Summary) {
 		t.Fatalf("discarded candidate created a backlog or market claim: %+v %v", a, err)

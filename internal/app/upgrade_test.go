@@ -614,3 +614,37 @@ func TestUpgradeKeepsAnAnalysisStoredBeforeVerificationFailedOnAFailedRebuild(t 
 		t.Fatalf("a failed rebuild replaced the older analysis: %q %v", after, err)
 	}
 }
+
+// The cut column keeps every cached page fetch. A row cached before it existed has no cut (NULL),
+// which reads as cut, so its text can't pass for a whole page.
+func TestPageFetchCutUpgradeKeepsCachedFetchesAsUnknown(t *testing.T) {
+	data := t.TempDir()
+	old, err := store.OpenAt(data, 19)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := old.Exec(`INSERT INTO page_fetches (url, day, status, error, text, fetched_at) VALUES ('https://acme.example/setup','2026-11-01',200,'','Cached page text.','now')`); err != nil {
+		t.Fatal(err)
+	}
+	old.Close()
+	db, err := store.Open(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	var text string
+	var cut any
+	if err := db.QueryRow(`SELECT text, cut FROM page_fetches WHERE url='https://acme.example/setup'`).Scan(&text, &cut); err != nil {
+		t.Fatal(err)
+	}
+	if text != "Cached page text." || cut != nil {
+		t.Fatalf("upgrade changed a cached fetch: %q cut=%v", text, cut)
+	}
+	if _, err := os.Stat(filepath.Join(data, "cheapseats.db.bak-v19")); err != nil {
+		t.Fatal(err)
+	}
+	if older, err := store.OpenAt(data, 19); err == nil {
+		older.Close()
+		t.Fatal("older writer opened the page_fetches cut schema")
+	}
+}

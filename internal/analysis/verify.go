@@ -30,7 +30,8 @@ const truncatedMarker = " [excerpt truncated]"
 
 // VerifyPage is supplied by the app, which owns public-address restrictions,
 // caching, timeouts and any provider accounting. Analysis never fetches by itself.
-type VerifyPage func(context.Context, string) (string, error)
+// cut says the text may stop short of the page, because a read limit was reached.
+type VerifyPage func(context.Context, string) (text string, cut bool, err error)
 type verifierKey struct{}
 
 func WithVerifier(ctx context.Context, read VerifyPage) context.Context {
@@ -258,7 +259,7 @@ func readArtifacts(ctx context.Context, cfg *config.Config, fs []Fix) []artifact
 		if ctx.Err() != nil {
 			break
 		}
-		t, err := read(ctx, u)
+		t, cut, err := read(ctx, u)
 		p := artifact{URL: u}
 		if err != nil {
 			p.Error = clip(err.Error(), 300)
@@ -269,8 +270,12 @@ func readArtifacts(ctx context.Context, cfg *config.Config, fs []Fix) []artifact
 			if targets[u] {
 				limit = MaxVerificationTargetRunes
 			}
+			// Truncated when this clip applies, or when the reader stopped short of the page.
 			p.Text = clip(t, limit)
-			p.Truncated = utf8.RuneCountInString(t) > limit
+			p.Truncated = cut || utf8.RuneCountInString(t) > limit
+			if p.Truncated && !strings.HasSuffix(p.Text, truncatedMarker) {
+				p.Text += truncatedMarker
+			}
 		}
 		out = append(out, p)
 	}
@@ -413,7 +418,7 @@ Source brand.facts (public claims, not proof that a new capability is intended):
 
 For each zero-based candidate index return verified, investigate, already-done, boundary, or reject, and a specific summary. No forced actions or investigations. Reject a weak, irrelevant or immaterial candidate when checking it would not change its stated business decision; do not convert every rejection into research. A current page already containing the requested change is already-done, not a wording improvement. An accepted intentional limit is boundary, not a product TODO. Missing content, metadata or eligibility remains unknown when not actually checked, and becomes an investigation only when its bounded check remains worth doing. A supplied page with truncated=false whose whole text you have read is checked for what that page itself says; a truncated page, an unread page or a read error is not. Do not treat absent search results as absence of a page. HTML lacking GitHub topics is not evidence topics are missing. No equivalent page sitewide requires a concrete content inventory, not a few sampled pages. Prefer investigation for new-page candidates without that inventory only when the decision is useful.
 
-Each gate requires passed, source, an exact contiguous quote from that source, and a specific reason connecting the quote to this candidate's remaining change and explicit business decision. Failed/unknown gates use passed=false. Source must be one supplied artifact URL or brand.advisory, brand.facts, candidate.done_when. Do not invent documents or use an unrelated quote as proof. existing_work and remaining_change must cite the current target for page/outreach changes. existing_work quotes what the current target already says about this topic. remaining_change quotes the target passage the change would amend or sit beside, or the text that is wrong; the reason states exactly what is missing or wrong. A quote cannot show absence by itself: pass remaining_change only when the target is not truncated, you have read all of its supplied text, and nothing in it already makes the requested change in any wording. If the target is truncated, remaining_change is unknown (passed=false, status investigate). If the target already makes the change, status is already-done. capability must support every claim and keep API/CLI versus consumer-app and software versus operating costs distinct. strategy must cite brand.advisory and show fit with intended goals and boundaries; product expansion requires quoting an explicit Goals entry authorizing it, not merely general positioning or a boundary. Reject generic research plans whose check cannot change the supplied business decision. eligibility must use current publisher submission/qualification rules for outreach, not assume a public list accepts PRs; for owned work explain why publisher eligibility is inapplicable. completion must quote the entire candidate.done_when and confirm a team-controlled completion check, not a future recommendation/rank/citation or another publisher merging a PR. Sources may support several gates only when each reason establishes that particular gate.
+Each gate requires passed, source, an exact contiguous quote from that source, and a specific reason connecting the quote to this candidate's remaining change and explicit business decision. Failed/unknown gates use passed=false. Source must be one supplied artifact URL or brand.advisory, brand.facts, candidate.done_when. Do not invent documents or use an unrelated quote as proof. existing_work and remaining_change must cite the current target for page/outreach changes. existing_work quotes what the current target already says about this topic. remaining_change quotes the target passage the change would amend or sit beside, or the text that is wrong; the reason states exactly what is missing or wrong. A quote cannot show absence by itself: pass remaining_change only when the page you quote is not truncated, you have read all of its supplied text, and nothing in it already makes the requested change in any wording. If that page is truncated, remaining_change is unknown (passed=false, status investigate). For a product candidate, if any supplied page about that feature is truncated, nothing it omits counts as missing. If the target already makes the change, status is already-done. capability must support every claim and keep API/CLI versus consumer-app and software versus operating costs distinct. strategy must cite brand.advisory and show fit with intended goals and boundaries; product expansion requires quoting an explicit Goals entry authorizing it, not merely general positioning or a boundary. Reject generic research plans whose check cannot change the supplied business decision. eligibility must use current publisher submission/qualification rules for outreach, not assume a public list accepts PRs; for owned work explain why publisher eligibility is inapplicable. completion must quote the entire candidate.done_when and confirm a team-controlled completion check, not a future recommendation/rank/citation or another publisher merging a PR. Sources may support several gates only when each reason establishes that particular gate.
 
 Do not mark verified unless all six gates pass with evidence. Current supplied artifacts (truncated=true marks an excerpt, which can show what a page says but never what it lacks; an error proves nothing):
 %s`, cfg.Brand.About, cfg.Brand.Audience, cfg.Brand.Category, set.Description, cfg.Brand.Advisory.Text(), strings.Join(cfg.Brand.Facts, "\n"), input)
