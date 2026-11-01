@@ -27,6 +27,28 @@ is a check of work under the team's control; later model answers and citations r
 omits action implementation prompts. Action status and priority filters do not filter findings
 or investigations. The JSON API also accepts the existing action `gap` and `site` filters.
 
+Both also return `analysis_errors`: for each set whose latest finished run's analysis failed, the
+`run_id`, a readable `error`, the provider's `request_id` when it gave one, `shown_run_id`, the
+run whose analysis the other lists hold for that set, and `shown`, which analysis that is. A
+failed build never replaces an analysis the run already has, so `shown` is one of:
+
+- `earlier`: the failed run's own earlier analysis, which the failed rebuild left in place.
+- `unverified`: the failed run had no analysis, and its verification failed, so its candidates
+  were stored with the error as investigations, unverified (marked `verification_failed`).
+- `older-run`: an older run's analysis; the failed run has none.
+- `none`: no analysis of the set is available, and `shown_run_id` is absent.
+
+`verification_failed` is true when the shown analysis is itself a failed verification's
+candidates, unverified: always with `unverified`, and with `older-run` when that run's
+verification failed too, which the message then says.
+
+`set` filters these too; `kind` does not hide them. The Next steps page and the dashboard show
+the same message above the advice. A run report, `GET /api/runs/{id}`,
+`/api/runs/{id}/fixes` and MCP `get_run` give the run's own error the same way, in
+`analysis_error`, and the report shows it with the request id instead of the provider's raw
+reply. MCP `get_quick_wins` keeps its list and, when a set it covers has an error, adds a second
+text block holding `analysis_errors`.
+
 `/quick-wins` remains a route alias. `/api/quick-wins` and MCP `get_quick_wins` remain
 compatibility views of verified actions only. They do not expose unverified historical suggestions
 as ready work. `get_run` and `GET /api/runs/{id}` include investigations and market findings alongside

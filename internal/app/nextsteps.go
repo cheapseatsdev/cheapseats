@@ -4,6 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"regexp"
+	"strconv"
+	"strings"
 
 	"github.com/cheapseatsdev/cheapseats/internal/analysis"
 	"github.com/cheapseatsdev/cheapseats/internal/sets"
@@ -14,6 +17,110 @@ type NextSteps struct {
 	Actions        []QuickWin          `json:"actions"`
 	Investigations []NextInvestigation `json:"investigations"`
 	Findings       []NextFinding       `json:"market_findings"`
+	// Sets whose latest finished run's analysis failed. The other lists may still hold an
+	// older run's analysis of the set, so a failure can't hide behind it.
+	Errors []AnalysisError `json:"analysis_errors"`
+}
+
+// AnalysisError is a set's latest finished run whose analysis failed. ShownRunID is the run whose
+// analysis the lists show for the set instead, "" when there's none, and Shown says which
+// analysis that is (ShownEarlier and the rest).
+type AnalysisError struct {
+	SetID      string `json:"set_id"`
+	SetName    string `json:"set_name"`
+	RunID      string `json:"run_id"`
+	ShownRunID string `json:"shown_run_id,omitempty"`
+	Shown      string `json:"shown"`
+	// The shown analysis is itself a failed verification's, its candidates unverified
+	// investigations: always for ShownUnverified, and for ShownOlderRun when that run's failed too.
+	VerificationFailed bool `json:"verification_failed,omitempty"`
+	AnalysisFailure
+}
+
+// What is shown beside a failed analysis. A failed build never replaces an analysis the run
+// already has, and only a failed verification on a run with none stores its result with the
+// error, marked VerificationFailed. So the failed run's own stored analysis is the degraded
+// result of a failed verification when it carries that mark, and otherwise an earlier, complete
+// analysis that the failed rebuild left in place. The mark is the signal rather than comparing
+// fixes_at with the time of the error, which the database doesn't keep.
+const (
+	ShownEarlier    = "earlier"    // the failed run's earlier analysis, kept
+	ShownUnverified = "unverified" // the failed run's candidates as investigations, unverified
+	ShownOlderRun   = "older-run"  // an older run's analysis; the failed run has none
+	ShownNone       = "none"       // no analysis of the set at all
+)
+
+func shownBeside(failedRun, shownRun string, shown analysis.Analysis) string {
+	switch {
+	case shownRun == "":
+		return ShownNone
+	case shownRun != failedRun:
+		return ShownOlderRun
+	case shown.VerificationFailed:
+		return ShownUnverified
+	default:
+		return ShownEarlier
+	}
+}
+
+// Showing says in a sentence which analysis is shown beside the error.
+func (e AnalysisError) Showing() string {
+	switch e.Shown {
+	case ShownEarlier:
+		return "Showing the run's earlier analysis, which the failed rebuild left in place."
+	case ShownUnverified:
+		return "Its candidates are shown as investigations, unverified: the run has no verified analysis to show instead."
+	case ShownOlderRun:
+		return "Showing the analysis from run " + e.ShownRunID + " instead." + e.olderUnverified()
+	default:
+		return "There is no earlier analysis to show."
+	}
+}
+
+// olderUnverified completes the older-run sentence when that run's verification failed too.
+func (e AnalysisError) olderUnverified() string {
+	if e.Shown != ShownOlderRun || !e.VerificationFailed {
+		return ""
+	}
+	return " That run's verification failed too, so its candidates are shown as investigations, unverified."
+}
+
+// OlderUnverified is olderUnverified for templates, which link the run themselves.
+func (e AnalysisError) OlderUnverified() string { return e.olderUnverified() }
+
+// AnalysisFailure is a stored analysis error made readable: a provider's JSON reply becomes its
+// message, with the request id kept for support.
+type AnalysisFailure struct {
+	Message   string `json:"error"`
+	RequestID string `json:"request_id,omitempty"`
+}
+
+var (
+	errorMessage   = regexp.MustCompile(`"message"\s*:\s*"((?:[^"\\]|\\.)*)`) // to its closing quote, or the cut
+	errorRequestID = regexp.MustCompile(`"request_id"\s*:\s*"([^"\\]+)"`)
+)
+
+// ReadAnalysisError reads a stored fixes_error. The provider's reply is cut to 400 characters
+// when stored (llm.APIError), so a long one is no longer valid JSON: the message and request id
+// are found by pattern, and an error with neither is returned as it is.
+func ReadAnalysisError(stored string) AnalysisFailure {
+	out := AnalysisFailure{Message: stored}
+	i := strings.Index(stored, "{")
+	if i < 0 {
+		return out
+	}
+	body := stored[i:]
+	if m := errorRequestID.FindStringSubmatch(body); m != nil {
+		out.RequestID = m[1]
+	}
+	if m := errorMessage.FindStringSubmatch(body); m != nil {
+		msg, err := strconv.Unquote(`"` + m[1] + `"`)
+		if err != nil {
+			msg = m[1]
+		}
+		out.Message = strings.TrimSpace(strings.TrimSpace(stored[:i]) + " " + msg)
+	}
+	return out
 }
 
 type NextInvestigation struct {
@@ -32,7 +139,7 @@ type NextFinding struct {
 }
 
 func emptyNextSteps() NextSteps {
-	return NextSteps{Actions: []QuickWin{}, Investigations: []NextInvestigation{}, Findings: []NextFinding{}}
+	return NextSteps{Actions: []QuickWin{}, Investigations: []NextInvestigation{}, Findings: []NextFinding{}, Errors: []AnalysisError{}}
 }
 
 // NextSteps reads the latest completed analysis of each active prompt set. It does
@@ -53,15 +160,22 @@ func (a *App) NextSteps(ctx context.Context) (NextSteps, error) {
 	for _, s := range a.Sets() {
 		var id, body string
 		err := a.DB.QueryRowContext(ctx, `SELECT id, fixes FROM runs WHERE set_id=? AND fixes IS NOT NULL AND status='done' ORDER BY created_at DESC LIMIT 1`, s.ID).Scan(&id, &body)
-		if err == sql.ErrNoRows {
-			continue
-		}
-		if err != nil {
+		if err != nil && err != sql.ErrNoRows {
 			return out, err
 		}
 		an, err := analysis.DecodeAnalysis(body)
 		if err != nil {
 			return out, fmt.Errorf("analysis %s: %w", id, err)
+		}
+		failed, err := a.latestAnalysisError(ctx, s, id, an)
+		if err != nil {
+			return out, err
+		}
+		if failed != nil {
+			out.Errors = append(out.Errors, *failed)
+		}
+		if id == "" {
+			continue
 		}
 		r, err := a.Runs.Get(ctx, id)
 		if err != nil {
@@ -84,6 +198,21 @@ func (a *App) NextSteps(ctx context.Context) (NextSteps, error) {
 	return out, nil
 }
 
+// latestAnalysisError is the set's latest finished run's analysis error, if it has one, beside
+// shown, the run whose analysis the lists use for the set, and that analysis.
+func (a *App) latestAnalysisError(ctx context.Context, s sets.Set, shownRun string, shown analysis.Analysis) (*AnalysisError, error) {
+	var id string
+	var stored sql.NullString
+	err := a.DB.QueryRowContext(ctx, `SELECT id, fixes_error FROM runs WHERE set_id=? AND status='done' ORDER BY created_at DESC LIMIT 1`, s.ID).Scan(&id, &stored)
+	if err == sql.ErrNoRows || err == nil && !stored.Valid {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &AnalysisError{SetID: s.ID, SetName: s.Name, RunID: id, ShownRunID: shownRun, Shown: shownBeside(id, shownRun, shown), VerificationFailed: shownRun != "" && shown.VerificationFailed, AnalysisFailure: ReadAnalysisError(stored.String)}, nil
+}
+
 // RunNextSteps preserves the historical run's prompt numbering and work history.
 func (a *App) RunNextSteps(ctx context.Context, id string) (NextSteps, error) {
 	out := emptyNextSteps()
@@ -91,17 +220,23 @@ func (a *App) RunNextSteps(ctx context.Context, id string) (NextSteps, error) {
 	if err != nil {
 		return out, err
 	}
-	var body sql.NullString
-	var at sql.NullString
-	if err := a.DB.QueryRowContext(ctx, `SELECT fixes, fixes_at FROM runs WHERE id=?`, id).Scan(&body, &at); err != nil {
+	var body, at, failed sql.NullString
+	if err := a.DB.QueryRowContext(ctx, `SELECT fixes, fixes_at, fixes_error FROM runs WHERE id=?`, id).Scan(&body, &at, &failed); err != nil {
 		return out, err
-	}
-	if !body.Valid {
-		return out, nil
 	}
 	an, err := analysis.DecodeAnalysis(body.String)
 	if err != nil {
 		return out, err
+	}
+	if failed.Valid {
+		shown := ""
+		if body.Valid {
+			shown = id
+		}
+		out.Errors = append(out.Errors, AnalysisError{SetID: r.SetID, SetName: r.Snapshot.Set.Name, RunID: id, ShownRunID: shown, Shown: shownBeside(id, shown, an), VerificationFailed: shown != "" && an.VerificationFailed, AnalysisFailure: ReadAnalysisError(failed.String)})
+	}
+	if !body.Valid {
+		return out, nil
 	}
 	tried := a.FixAttempts(ctx)
 	for _, f := range an.Fixes {

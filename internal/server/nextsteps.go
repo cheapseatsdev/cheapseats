@@ -24,7 +24,8 @@ func nextStepsView(requested string, steps app.NextSteps) string {
 }
 
 // selectNextSteps keeps the three categories separate. Action filters do not turn an
-// investigation into a task, and set filtering applies to every category.
+// investigation into a task, and set filtering applies to every category and to the analysis
+// errors, which every kind keeps.
 func (s *Server) selectNextSteps(steps app.NextSteps, f app.QuickWinFilter, kind string, limit int, brief bool) app.NextSteps {
 	steps.Actions = s.App.FilterQuickWins(steps.Actions, f)
 	investigations := make([]app.NextInvestigation, 0, len(steps.Investigations))
@@ -39,7 +40,13 @@ func (s *Server) selectNextSteps(steps app.NextSteps, f app.QuickWinFilter, kind
 			findings = append(findings, x)
 		}
 	}
-	steps.Investigations, steps.Findings = investigations, findings
+	failed := make([]app.AnalysisError, 0, len(steps.Errors))
+	for _, x := range steps.Errors {
+		if f.Set == "" || x.SetID == f.Set {
+			failed = append(failed, x)
+		}
+	}
+	steps.Investigations, steps.Findings, steps.Errors = investigations, findings, failed
 	if limit > 0 {
 		steps.Actions = head(steps.Actions, limit)
 		steps.Investigations = head(steps.Investigations, limit)

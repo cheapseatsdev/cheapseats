@@ -387,16 +387,21 @@ func dispatch(ctx context.Context, cmd string, args []string) error {
 		if err != nil {
 			return err
 		}
-		fx, fe, err := a.Fixes(ctx, r.ID)
+		fx, _, err := a.Fixes(ctx, r.ID)
 		if err != nil {
 			return err
-		}
-		if fe != nil {
-			fmt.Fprintln(os.Stderr, "next steps analysis error:", *fe)
 		}
 		next, err := a.RunNextSteps(ctx, r.ID)
 		if err != nil {
 			return err
+		}
+		for _, e := range next.Errors {
+			msg := e.Message
+			if e.RequestID != "" {
+				msg += " (request " + e.RequestID + ")"
+			}
+			fmt.Fprintln(os.Stderr, "next steps analysis error:", msg)
+			fmt.Fprintln(os.Stderr, e.Showing())
 		}
 		if fx == nil && len(next.Investigations) == 0 && len(next.Findings) == 0 {
 			fmt.Println("No completed Next steps analysis yet.")

@@ -758,7 +758,9 @@ type RunData struct {
 	Investigations []app.NextInvestigation `json:"investigations"`
 	MarketFindings []app.NextFinding       `json:"market_findings"`
 	FixError       *string
-	Answerers      []string
+	// FixError made readable, with which analysis the run shows beside it.
+	AnalysisError *app.AnalysisError `json:"analysis_error,omitempty"`
+	Answerers     []string
 	// The coverage check's pages per prompt (index), when [exa] has checked this run.
 	Coverage map[int]*app.CoverageRow `json:"coverage,omitempty"`
 	// The neutral retrieval baseline (pages per prompt and the host table), when [exa] has
@@ -854,6 +856,9 @@ func (s *Server) runData(ctx context.Context, id string) (*RunData, error) {
 		fx = append(fx, action.Fix)
 	}
 	d := &RunData{Actions: steps.Actions, Investigations: steps.Investigations, MarketFindings: steps.Findings, Run: r, Active: s.App.Runs.IsActive(id), Summary: s.App.Summary(r, res), Results: res, Fixes: fx, FixError: fe, Attempts: s.App.FixAttempts(ctx)}
+	if len(steps.Errors) > 0 {
+		d.AnalysisError = &steps.Errors[0]
+	}
 	var insights, fixesAt sql.NullString
 	s.App.DB.QueryRowContext(ctx, `SELECT insights, fixes_at FROM runs WHERE id=?`, id).Scan(&insights, &fixesAt)
 	d.Insights, d.FixesAt = insights.String, fixesAt.String
@@ -998,7 +1003,7 @@ func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 	for _, c := range s.cards(ctx, progress) {
 		rows = append(rows, HomeRow{SetCard: c, Search: latest[c.Set.ID+"/search"], Recall: latest[c.Set.ID+"/recall"]})
 	}
-	s.render(w, "home", map[string]any{"Progress": progress, "Rows": rows, "QuickWins": qw, "Investigations": head(steps.Investigations, 3), "MarketFindings": head(steps.Findings, 3), "Spend": s.spend(ctx)})
+	s.render(w, "home", map[string]any{"Progress": progress, "Rows": rows, "QuickWins": qw, "Investigations": head(steps.Investigations, 3), "MarketFindings": head(steps.Findings, 3), "AnalysisErrors": steps.Errors, "Spend": s.spend(ctx)})
 }
 
 // RunRow is one run in a set's runs table, with its search-track scores when it finished.
@@ -1319,7 +1324,7 @@ func (s *Server) quickWinsPage(w http.ResponseWriter, r *http.Request) {
 	selected := s.selectNextSteps(steps, f, "", 0, true)
 	view := nextStepsView(q.Get("view"), selected)
 	tabs := []filterOption{{"Actions", len(selected.Actions), view == "actions", href("view", "actions")}, {"Investigations", len(selected.Investigations), view == "investigations", href("view", "investigations")}, {"Market findings", len(selected.Findings), view == "market-findings", href("view", "market-findings")}}
-	s.render(w, "quickwins", map[string]any{"View": view, "Tabs": tabs, "Investigations": selected.Investigations, "MarketFindings": selected.Findings, "QuickWins": shown, "Landings": s.landings(r.Context(), submitted), "Rows": rows, "Total": len(all), "Back": r.URL.RequestURI()})
+	s.render(w, "quickwins", map[string]any{"AnalysisErrors": selected.Errors, "View": view, "Tabs": tabs, "Investigations": selected.Investigations, "MarketFindings": selected.Findings, "QuickWins": shown, "Landings": s.landings(r.Context(), submitted), "Rows": rows, "Total": len(all), "Back": r.URL.RequestURI()})
 }
 
 // --- API ---
@@ -1446,7 +1451,7 @@ func (s *Server) apiFixes(w http.ResponseWriter, r *http.Request) {
 		httpErr(w, err, 404)
 		return
 	}
-	writeJSON(w, map[string]any{"fixes": d.Fixes, "actions": d.Actions, "investigations": d.Investigations, "market_findings": d.MarketFindings, "error": d.FixError})
+	writeJSON(w, map[string]any{"fixes": d.Fixes, "actions": d.Actions, "investigations": d.Investigations, "market_findings": d.MarketFindings, "error": d.FixError, "analysis_error": d.AnalysisError})
 }
 
 func (s *Server) apiRebuildFixes(w http.ResponseWriter, r *http.Request) {

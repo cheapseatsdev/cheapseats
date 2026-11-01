@@ -39,6 +39,7 @@
 
 <section aria-labelledby="first-fixes">
 <div class="section-heading"><div><h2 id="first-fixes">Next steps</h2><p class="section-note">Verified actions, open investigations and market findings from the latest analyses.</p></div><a href="/next-steps">All next steps →</a></div>
+{{template "analysis-errors" .AnalysisErrors}}
 {{if .QuickWins}}<div class="fix-list">{{range .QuickWins}}
 <article class="fix-item">
   <div class="fix-title"><a href="/runs/{{.RunID}}#fix-{{.Rank}}">{{.Title}}</a><div class="fix-meta"><span class="mono">{{.Target}}</span><span>{{.Gap}} · {{.SetName}}</span></div></div>
