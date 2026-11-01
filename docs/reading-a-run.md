@@ -68,6 +68,14 @@ and allows a no-action conclusion.
   good?"). Being named in their answers proves little, so the track cards lead with the rates
   without them (`unbranded` in JSON) and show the rates with them underneath. The prompt list marks
   each branded prompt. Rankings and trends still use the overall rates.
+- **Errors** counts each answerer's failed answers on a track, and says why when Cheap Seats
+  worded the failure itself: "11 errors (9 answered without searching, 2 other)". The reasons are
+  answered without searching, empty answer, grading failed, and other for anything a provider or
+  CLI reported (timeouts, sign-in, rate limits; each answer shows its own message). `cheapseats
+  report` prints the same; its JSON and MCP `get_run` give it per slice as `error_kinds`.
+  **Answered without searching** means a search-track answer came back with no recorded searches
+  twice, the second time after being told to search. It usually means the answerer's CLI or
+  provider stopped exposing its searches: check its version.
 
 **Evidence** is the answer span supporting a grade, highlighted in the answer and exported as
 `evidence` (JSON, CSV, MCP `get_result`). Cheap Seats checks the grader's copied quote against the

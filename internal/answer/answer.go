@@ -9,7 +9,7 @@ package answer
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"strings"
 
 	"github.com/cheapseatsdev/cheapseats/internal/config"
@@ -55,6 +55,15 @@ func System(audience string) string {
 	return "You are a helpful assistant answering " + who + ". Give a direct, practical answer. When you recommend tools or products, name them and say why."
 }
 
+// Errors Ask returns itself, rather than passing on a provider's. Their text is stored with the
+// failed result and the run report groups failures by it, so it must not change.
+var (
+	// ErrNoSearch: a search-track answer recorded no searches, even after a retry that insisted.
+	ErrNoSearch = errors.New("answered without searching, twice")
+	// ErrEmpty: the provider answered with no text.
+	ErrEmpty = errors.New("empty provider answer")
+)
+
 const SearchPolicy = "Search the web before answering so your answer reflects what is current."
 
 // Ask runs one prompt on one answerer and track, under the system prompt sys (from System).
@@ -81,11 +90,11 @@ func Ask(ctx context.Context, a config.Answerer, track Track, sys, prompt string
 			return ans, err
 		}
 		if !ans.Searched() {
-			return ans, fmt.Errorf("answered without searching, twice")
+			return ans, ErrNoSearch
 		}
 	}
 	if strings.TrimSpace(ans.Text) == "" {
-		return ans, fmt.Errorf("empty provider answer")
+		return ans, ErrEmpty
 	}
 	return ans, nil
 }

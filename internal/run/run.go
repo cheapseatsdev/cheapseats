@@ -452,6 +452,9 @@ func (e *Engine) execute(ctx context.Context, id string) error {
 	return err
 }
 
+// GradingErrorPrefix starts a result's stored error when its answer arrived but grading failed.
+const GradingErrorPrefix = "grading: "
+
 // StorageError is a failed read or write of the run's own records, as opposed to a provider
 // failing to answer or grade. It stops the run: carrying on could lose a paid answer, or mark
 // the run done when it isn't.
@@ -507,7 +510,7 @@ func (e *Engine) one(ctx context.Context, cfg *config.Config, set sets.Set, a co
 	}
 	g, cost, err := grade.Answer(ctx, cfg, set, prompt, ans.Text)
 	if err != nil {
-		if werr := e.moveResult(bg, rid, ResultError, `,error=?,grade_cost_usd=grade_cost_usd+?,finished_at=?`, "grading: "+err.Error(), cost, store.Now()); werr != nil {
+		if werr := e.moveResult(bg, rid, ResultError, `,error=?,grade_cost_usd=grade_cost_usd+?,finished_at=?`, GradingErrorPrefix+err.Error(), cost, store.Now()); werr != nil {
 			return stored(werr)
 		}
 		return err
