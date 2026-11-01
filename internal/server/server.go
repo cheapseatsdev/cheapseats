@@ -757,8 +757,9 @@ type RunData struct {
 	Investigations []app.NextInvestigation `json:"investigations"`
 	MarketFindings []app.NextFinding       `json:"market_findings"`
 	FixError       *string
-	FixFailure     *app.AnalysisFailure `json:"-"` // FixError made readable for the page
-	Answerers      []string
+	// FixError made readable, with which analysis the run shows beside it.
+	AnalysisError *app.AnalysisError `json:"analysis_error,omitempty"`
+	Answerers     []string
 	// The coverage check's pages per prompt (index), when [exa] has checked this run.
 	Coverage map[int]*app.CoverageRow `json:"coverage,omitempty"`
 	// The neutral retrieval baseline (pages per prompt and the host table), when [exa] has
@@ -854,9 +855,8 @@ func (s *Server) runData(ctx context.Context, id string) (*RunData, error) {
 		fx = append(fx, action.Fix)
 	}
 	d := &RunData{Actions: steps.Actions, Investigations: steps.Investigations, MarketFindings: steps.Findings, Run: r, Active: s.App.Runs.IsActive(id), Summary: s.App.Summary(r, res), Results: res, Fixes: fx, FixError: fe, Attempts: s.App.FixAttempts(ctx)}
-	if fe != nil {
-		failure := app.ReadAnalysisError(*fe)
-		d.FixFailure = &failure
+	if len(steps.Errors) > 0 {
+		d.AnalysisError = &steps.Errors[0]
 	}
 	var insights, fixesAt sql.NullString
 	s.App.DB.QueryRowContext(ctx, `SELECT insights, fixes_at FROM runs WHERE id=?`, id).Scan(&insights, &fixesAt)
@@ -1450,7 +1450,7 @@ func (s *Server) apiFixes(w http.ResponseWriter, r *http.Request) {
 		httpErr(w, err, 404)
 		return
 	}
-	writeJSON(w, map[string]any{"fixes": d.Fixes, "actions": d.Actions, "investigations": d.Investigations, "market_findings": d.MarketFindings, "error": d.FixError})
+	writeJSON(w, map[string]any{"fixes": d.Fixes, "actions": d.Actions, "investigations": d.Investigations, "market_findings": d.MarketFindings, "error": d.FixError, "analysis_error": d.AnalysisError})
 }
 
 func (s *Server) apiRebuildFixes(w http.ResponseWriter, r *http.Request) {

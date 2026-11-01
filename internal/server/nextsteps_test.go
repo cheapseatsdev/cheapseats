@@ -254,12 +254,46 @@ func TestFailedAnalysisShowsWhereTheAdviceIs(t *testing.T) {
 		t.Errorf("a set filter keeps other sets' errors: %s", text)
 	}
 
-	// A failed verification keeps its investigations on the failed run itself.
-	if _, err := db.Exec(`UPDATE runs SET fixes=(SELECT fixes FROM runs WHERE id=?) WHERE id=?`, older, latest); err != nil {
+	if steps.Errors[0].Shown != app.ShownOlderRun {
+		t.Errorf("shown = %q, want %q", steps.Errors[0].Shown, app.ShownOlderRun)
+	}
+
+	// A failed rebuild of a run that already had an analysis keeps it. The surfaces said its
+	// candidates were unverified investigations while they showed its earlier verified analysis.
+	if _, err := db.Exec(`UPDATE runs SET fixes=(SELECT fixes FROM runs WHERE id=?), fixes_at='2026-10-02T01:00:00Z' WHERE id=?`, older, latest); err != nil {
 		t.Fatal(err)
 	}
-	if page := get("/next-steps"); !strings.Contains(page, "Its candidates are shown as investigations, unverified.") {
-		t.Error("hub hides that the shown analysis is the failed one")
+	kept := "Showing the run&#39;s earlier analysis, which the failed rebuild left in place."
+	for _, path := range []string{"/next-steps", "/"} {
+		if page := get(path); !strings.Contains(page, kept) || strings.Contains(page, "unverified") {
+			t.Errorf("%s doesn't say it shows the run's earlier analysis", path)
+		}
+	}
+	if page := get("/runs/" + latest); !strings.Contains(page, "Showing this run's earlier analysis, from 2026-10-02 01:00:00 UTC, which the failed rebuild left in place.") {
+		t.Error("run page doesn't say it shows its earlier analysis")
+	}
+	var fixes struct {
+		Failed app.AnalysisError `json:"analysis_error"`
+	}
+	if err := json.Unmarshal([]byte(get("/api/runs/"+latest+"/fixes")), &fixes); err != nil || fixes.Failed.Shown != app.ShownEarlier || fixes.Failed.ShownRunID != latest {
+		t.Errorf("/api/runs/{id}/fixes analysis_error: %+v %v", fixes.Failed, err)
+	}
+
+	// A first build whose verification failed stores its candidates, marked, with the error.
+	unverified := analysis.Encode(analysis.Analysis{Insights: "One candidate.", VerificationFailed: true, Investigations: []analysis.Investigation{{
+		Title: "Check: the gateway guide", Why: "w", Check: "Read the gateway guide.", Decision: "d", Evidence: "e", Prompts: []int{1},
+	}}})
+	if _, err := db.Exec(`UPDATE runs SET fixes=? WHERE id=?`, unverified, latest); err != nil {
+		t.Fatal(err)
+	}
+	degraded := "Its candidates are shown as investigations, unverified: the run has no verified analysis to show instead."
+	for _, path := range []string{"/next-steps", "/", "/runs/" + latest} {
+		if page := get(path); !strings.Contains(page, degraded) || strings.Contains(page, "earlier analysis") {
+			t.Errorf("%s doesn't say its investigations are the failed verification's", path)
+		}
+	}
+	if err := json.Unmarshal([]byte(get("/api/next-steps")), &steps); err != nil || len(steps.Errors) != 1 || steps.Errors[0].Shown != app.ShownUnverified {
+		t.Errorf("analysis_errors: %+v %v", steps.Errors, err)
 	}
 }
 

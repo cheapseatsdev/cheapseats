@@ -150,6 +150,10 @@ type Analysis struct {
 	Fixes          []Fix           `json:"fixes"`
 	Investigations []Investigation `json:"investigations"`
 	Findings       []Finding       `json:"market_findings"`
+	// VerificationFailed marks an analysis whose verification call failed: its candidates are
+	// investigations, unverified. It is stored only for a run with no earlier analysis, together
+	// with the error, so the error's surfaces can say that is what they show.
+	VerificationFailed bool `json:"verification_failed,omitempty"`
 }
 
 // Encode retains the complete advisory result in the existing fixes JSON column.
