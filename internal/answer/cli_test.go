@@ -183,7 +183,10 @@ func TestCLIRunsAsAnotherUser(t *testing.T) {
 	}
 }
 
-var cliTestSchema = llm.RegisterSchema("test.cli", "grader", map[string]any{"type": "object", "additionalProperties": false})
+// cliTestSchema is ordered, verdict before reasoning, so the CLI must send it as SchemaJSON does,
+// not as encoding/json sorts it.
+var cliTestSchema = llm.RegisterOrderedSchema("test.cli", "grader", map[string]any{"type": "object", "additionalProperties": false,
+	"required": []string{"verdict", "reasoning"}, "properties": map[string]any{"verdict": map[string]any{"type": "string"}, "reasoning": map[string]any{"type": "string"}}})
 
 // The grader and analyst on the subscription: the prompt on stdin, a JSON schema, no tools, no
 // API key, and the structured output decoded.
@@ -204,7 +207,11 @@ func TestClaudeStructuredRunsOnTheSubscription(t *testing.T) {
 	}
 	got, _ := os.ReadFile(log)
 	args := string(got)
-	for _, want := range []string{"-p\n", "\n--json-schema\n{\"additionalProperties\":false,\"type\":\"object\"}\n", "\n--tools\n\n", "\n--max-turns\n3\n", "\n--safe-mode\n", "\n--model\nclaude-haiku-5-5\n", "KEY=unset"} {
+	js, _ := llm.SchemaJSON(cliTestSchema)
+	if !strings.Contains(string(js), `"properties":{"verdict"`) {
+		t.Fatalf("SchemaJSON did not order the test schema: %s", js)
+	}
+	for _, want := range []string{"-p\n", "\n--json-schema\n" + string(js) + "\n", "\n--tools\n\n", "\n--max-turns\n3\n", "\n--safe-mode\n", "\n--model\nclaude-haiku-5-5\n", "KEY=unset"} {
 		if !strings.Contains(args, want) {
 			t.Errorf("claude call lacks %q:\n%s", want, args)
 		}

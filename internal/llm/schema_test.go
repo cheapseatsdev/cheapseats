@@ -45,23 +45,39 @@ func TestCheckSchemaRefusesWhatTheAPIRefuses(t *testing.T) {
 	}
 }
 
-// Properties go in required's order, at every depth, with any property not required after them,
-// sorted; other keys stay sorted. The request body carries that order, not encoding/json's.
-func TestSchemaJSONSendsPropertiesInRequiredOrder(t *testing.T) {
-	schema := map[string]any{"type": "object", "additionalProperties": false, "required": []string{"z", "a"},
+// schemaTestOrderedShape is written with typed lists and maps, which an ordered schema must order
+// all the same.
+func schemaTestOrderedShape() map[string]any {
+	str := map[string]any{"type": "string"}
+	return map[string]any{"type": "object", "additionalProperties": false, "required": []string{"z", "a"},
 		"properties": map[string]any{
-			"a": map[string]any{"type": "string"}, "m": map[string]any{"type": "string"},
-			"z": map[string]any{"type": "array", "items": map[string]any{"type": "object", "additionalProperties": false,
-				"required": []any{"y", "b"}, "properties": map[string]any{"b": map[string]any{"type": "string"}, "y": map[string]any{"type": "string"}}}},
+			"a": str, "m": str,
+			"z": map[string]any{"anyOf": []map[string]any{{"type": "null"}, {"type": "object", "additionalProperties": false,
+				"required": []string{"y", "b"}, "properties": map[string]map[string]any{"b": str, "y": str}}}},
 		}}
-	want := `{"additionalProperties":false,"properties":{"z":{"items":{"additionalProperties":false,"properties":{"y":{"type":"string"},"b":{"type":"string"}},"required":["y","b"],"type":"object"},"type":"array"},"a":{"type":"string"},"m":{"type":"string"}},"required":["z","a"],"type":"object"}`
-	got, err := SchemaJSON(schema)
+}
+
+var schemaTestOrdered = RegisterOrderedSchema("test.ordered", "grader", schemaTestOrderedShape())
+
+// An ordered schema's properties go in required's order, at every depth, with any property not
+// required after them, sorted; other keys stay sorted. The request body carries that order. A
+// schema not registered as ordered is sent exactly as encoding/json writes it.
+func TestSchemaJSONSendsPropertiesInRequiredOrder(t *testing.T) {
+	want := `{"additionalProperties":false,"properties":{"z":{"anyOf":[{"type":"null"},{"additionalProperties":false,"properties":{"y":{"type":"string"},"b":{"type":"string"}},"required":["y","b"],"type":"object"}]},"a":{"type":"string"},"m":{"type":"string"}},"required":["z","a"],"type":"object"}`
+	got, err := SchemaJSON(schemaTestOrdered)
 	if err != nil || string(got) != want {
 		t.Fatalf("SchemaJSON = %s, %v\nwant %s", got, err, want)
 	}
-	body, err := json.Marshal(structuredBody("m", "s", "u", 10, schema))
+	body, err := json.Marshal(structuredBody("m", "s", "u", 10, schemaTestOrdered))
 	if err != nil || !strings.Contains(string(body), `"schema":`+want) {
 		t.Fatalf("request body %s, %v: schema not in declared order", body, err)
+	}
+
+	plain := schemaTestOrderedShape()
+	plain["description"] = "not registered as ordered"
+	got, err = SchemaJSON(plain)
+	if js, _ := json.Marshal(plain); err != nil || string(got) != string(js) {
+		t.Fatalf("unordered schema sent as %s, %v; want %s", got, err, js)
 	}
 }
 

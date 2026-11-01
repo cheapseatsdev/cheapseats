@@ -175,10 +175,10 @@ func Triage(cfg *config.Config, set sets.Set, f Fix) Fix {
 
 func str() map[string]any { return map[string]any{"type": "string"} }
 
-// The model writes the fields in required's order (llm.SchemaJSON): the report and each item's
-// title first, as the prompt describes them, and fields often blank or defaulted last. With
-// check first (alphabetical), the analyst sometimes wrote every field blank.
-var schema = llm.RegisterSchema("analysis.fixes", "analyst", map[string]any{
+// The model writes the fields in required's order (llm.RegisterOrderedSchema): the report and
+// each item's title first, as the prompt describes them, and fields often blank or defaulted
+// last. Sent sorted, with check first, the analyst sometimes wrote every field blank.
+var schema = llm.RegisterOrderedSchema("analysis.fixes", "analyst", map[string]any{
 	"type": "object",
 	"properties": map[string]any{
 		"insights": str(),

@@ -82,10 +82,7 @@ var schema = llm.RegisterSchema("grade", "grader", map[string]any{
 		"praise":        map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
 		"evidence":      map[string]any{"type": "string"},
 	},
-	// The grader writes the fields in this order (llm.SchemaJSON). It is the alphabetical order
-	// every grade so far was written in, evidence and reasoning before verdict; changing it
-	// changes grades without changing run.Method, so it waits for a golden-set comparison.
-	"required":             []string{"evidence", "named", "objections", "other_product", "position", "praise", "reasoning", "tone", "top_pick", "verdict", "why_not_top"},
+	"required":             []string{"verdict", "position", "top_pick", "named", "reasoning", "why_not_top", "objections", "other_product", "tone", "praise", "evidence"},
 	"additionalProperties": false,
 })
 

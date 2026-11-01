@@ -2,6 +2,7 @@ package llm
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -139,14 +140,31 @@ func (c *schemaCheck) node(path string, v any) {
 	}
 }
 
-// SchemaJSON is schema as it is sent. Structured outputs write an object's fields in the order
-// its schema lists them, and encoding/json sorts a map's keys, which put a fix's check (often
-// blank) before its title: the analyst then sometimes wrote every field blank. So each object's
-// properties follow its required list, the order the schema declares, with any property left out
-// of required after them, sorted. Every other key stays sorted.
+// SchemaJSON is schema as it is sent: what encoding/json writes, properties sorted, unless it
+// was registered with RegisterOrderedSchema. Structured outputs write an object's fields in the
+// order its schema lists them, and sorted, the analyst's fixes item began with check (often
+// blank) and the analyst sometimes wrote every field blank. An ordered schema's objects send
+// their properties in the order of their required lists, with any property left out of required
+// after them, sorted. Every other key stays sorted.
 func SchemaJSON(schema map[string]any) ([]byte, error) {
+	plain, err := json.Marshal(schema)
+	if err != nil {
+		return nil, err
+	}
+	schemasMu.Lock()
+	ord := ordered[sha256.Sum256(plain)]
+	schemasMu.Unlock()
+	if !ord {
+		return plain, nil
+	}
+	// Decoded, every object is a map[string]any and every list a []any, whatever types the
+	// schema was written with.
+	var root any
+	if err := json.Unmarshal(plain, &root); err != nil {
+		return nil, err
+	}
 	var b bytes.Buffer
-	if err := writeSchema(&b, schema); err != nil {
+	if err := writeSchema(&b, root); err != nil {
 		return nil, err
 	}
 	return b.Bytes(), nil
@@ -218,21 +236,12 @@ func writeKey(b *bytes.Buffer, k string) {
 	b.WriteByte(':')
 }
 
-// propertyOrder is props' names in the order of required ([]string as written, []any once
-// decoded), then the rest sorted.
+// propertyOrder is props' names in the order of required, then the rest sorted.
 func propertyOrder(props map[string]any, required any) []string {
-	var names []string
-	switch r := required.(type) {
-	case []string:
-		names = r
-	case []any:
-		for _, x := range r {
-			names = append(names, Str(x))
-		}
-	}
 	out := make([]string, 0, len(props))
 	seen := map[string]bool{}
-	for _, n := range names {
+	for _, r := range List(required) {
+		n := Str(r)
 		if _, ok := props[n]; ok && !seen[n] {
 			out = append(out, n)
 			seen[n] = true

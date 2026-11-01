@@ -3,6 +3,7 @@ package llm
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"sync"
@@ -12,16 +13,33 @@ import (
 
 // A Schema this Cheap Seats sends as a structured output, and which model sends it: Role is
 // "grader" or "analyst", the config table whose model it goes to.
+// Ordered is set by RegisterOrderedSchema.
 type NamedSchema struct {
 	Name, Role string
 	Schema     map[string]any
+	Ordered    bool
 }
 
 var (
 	schemasMu sync.Mutex
 	schemas   = map[string]NamedSchema{}
-	digests   = map[[sha256.Size]byte]bool{} // of each registered schema, as sent
+	digests   = map[[sha256.Size]byte]bool{} // of each registered schema's content
+	ordered   = map[[sha256.Size]byte]bool{} // of each one sent in declared order (SchemaJSON)
 )
+
+// RegisterOrderedSchema is RegisterSchema for a schema whose objects send their properties in
+// the order of their required lists rather than sorted (see SchemaJSON).
+func RegisterOrderedSchema(name, role string, schema map[string]any) map[string]any {
+	RegisterSchema(name, role, schema)
+	d, _ := digest(schema)
+	schemasMu.Lock()
+	defer schemasMu.Unlock()
+	ordered[d] = true
+	s := schemas[name]
+	s.Ordered = true
+	schemas[name] = s
+	return schema
+}
 
 // RegisterSchema records a structured output schema under a name, for the live check
 // (cheapseats check -live), and returns it. Structured and answer.ClaudeStructured refuse a
@@ -63,9 +81,9 @@ func Registered(schema map[string]any) error {
 	return nil
 }
 
-// digest is the SHA-256 of schema's JSON as it is sent (SchemaJSON).
+// digest is the SHA-256 of schema's JSON, which encoding/json writes with sorted map keys.
 func digest(schema map[string]any) ([sha256.Size]byte, error) {
-	b, err := SchemaJSON(schema)
+	b, err := json.Marshal(schema)
 	if err != nil {
 		return [sha256.Size]byte{}, err
 	}

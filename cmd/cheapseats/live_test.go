@@ -170,36 +170,42 @@ func TestLiveCheckSkipsCLIRoles(t *testing.T) {
 // Structured outputs write fields in the order the schema sends them. Sent alphabetically, the
 // analyst's fixes item opened with check, often blank, and some replies were every field blank
 // (run r-20261101-050336-9f0f23: 9 of 35 replays; 0 of 20 with insights and title first). So
-// every schema sends each object's properties in its declared (required) order, and the fixes
-// schema's order is pinned. grade is the one schema whose declared order is alphabetical: see
-// the comment on it.
+// the fixes schema is registered ordered and sends each object's properties in its required
+// order, which is pinned here. Only that order was measured: every other schema is sent exactly
+// as encoding/json writes it, as before.
 func TestLiveSchemasSendPropertiesInDeclaredOrder(t *testing.T) {
 	sent := map[string]map[string][]string{}
+	var orderedNames []string
 	for _, s := range llm.Schemas() {
 		js, err := llm.SchemaJSON(s.Schema)
 		if err != nil {
 			t.Fatalf("%s: %v", s.Name, err)
 		}
+		plain, _ := json.Marshal(s.Schema)
+		if !s.Ordered {
+			if string(js) != string(plain) {
+				t.Errorf("%s is not ordered but is sent as %s, not %s", s.Name, js, plain)
+			}
+			continue
+		}
+		orderedNames = append(orderedNames, s.Name)
 		props, required := liveSchemaOrders(t, js)
 		sent[s.Name] = props
-		alphabetical := true
 		for path, names := range props {
 			if !reflect.DeepEqual(names, required[path]) {
 				t.Errorf("%s%s: properties sent as %v, required %v", s.Name, path, names, required[path])
 			}
-			alphabetical = alphabetical && sort.StringsAreSorted(names)
-		}
-		if alphabetical && s.Name != "grade" {
-			t.Errorf("%s: every object's properties are alphabetical, as encoding/json would send them", s.Name)
 		}
 		// The content is the schema as written; only the order changes.
 		var a, b any
-		plain, _ := json.Marshal(s.Schema)
 		json.Unmarshal(plain, &a)
 		json.Unmarshal(js, &b)
 		if !reflect.DeepEqual(a, b) {
 			t.Errorf("%s: sent %s, want the content of %s", s.Name, js, plain)
 		}
+	}
+	if !reflect.DeepEqual(orderedNames, []string{"analysis.fixes"}) {
+		t.Errorf("ordered schemas %v, want only analysis.fixes", orderedNames)
 	}
 	fixes := sent["analysis.fixes"]
 	for path, want := range map[string][]string{
