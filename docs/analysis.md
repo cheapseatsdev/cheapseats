@@ -16,7 +16,7 @@ The analyst also receives the audience, category and prompt-set description. A v
 
 ## Generate candidates, then verify
 
-The first analyst call reads graded results with raw answer excerpts and result IDs. It keeps search queries, returned results, fetched URLs and citations distinct. It suggests at most eight candidates and can instead return investigations or findings. Each candidate must earn its place with evidence, a bounded read-only check naming the artifact and specific unknown, and a concrete business decision that the answer could change. Weak ideas are omitted with a short explanation; they do not become research work by default.
+The first analyst call reads graded results with raw answer excerpts and result IDs. It keeps search queries, returned results, fetched URLs and citations distinct. It suggests at most eight candidates and can instead return investigations or findings. The limit is in the prompt rather than the output schema, which the Claude API can't constrain by list length; if the analyst returns more, the eight best ranked are kept. Each candidate must earn its place with evidence, a bounded read-only check naming the artifact and specific unknown, and a concrete business decision that the answer could change. Weak ideas are omitted with a short explanation; they do not become research work by default.
 
 Before a candidate becomes work, the app's reader checks a bounded shortlist of current targets and brand pages. Analysis requests at most 12 pages and supplies at most 12,000 characters of each page to a separate verification call. Page text goes to the configured analyst provider as evidence. A failed, blocked or empty read remains unknown.
 

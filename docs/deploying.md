@@ -133,3 +133,32 @@ release with the chart attached; edit the notes (call out anything that changes 
 graded, since that restarts trends) and publish. Run the workflow by hand to build without
 publishing. `deploy/kind-smoke.sh` runs the chart on a local kind cluster; CI runs it on every
 push.
+
+CI uses fake providers, so it can't see the API refuse a request. The **golden** workflow
+(`.github/workflows/golden.yml`) does, with the real API, on each release tag and by hand:
+
+- **schemas** runs `cheapseats check -live` with the example config. It sends every structured
+  output schema once to its grader or analyst model, with a one-line prompt and 16 output tokens.
+  The API refuses a schema it can't take with an HTTP 400 before generating anything, so a run
+  costs a few cents. It is capped at $0.25.
+- **golden** grades the [golden set](grading.md#the-golden-set) with the real grader.
+
+Run it on `main` before tagging, and publish the draft release only when the tag's run passes.
+It needs `ANTHROPIC_API_KEY` as a secret of the `golden` environment (or of the repository), and
+fails without it. The environment's required reviewers approve each run. Its deployment rules
+must allow `main` and the tag pattern `v*.*.*`, or GitHub refuses the tag's run.
+
+### The live schema check
+
+`cheapseats check -live` sends each structured output schema the app uses (the grade, the fix
+list and its review, misstatements, themes, prompt suggestions and edits) once to the model that
+sends it in production, through the API with the configured key or proxy. It prints each as
+accepted, `REFUSED` (the API's 400, which the check fails on) or not checked (another error,
+also a failure). A role on `claude-code` sends nothing through the API and is skipped with a
+note; if every role is, the check fails rather than pass having checked nothing.
+
+It is opt-in because it costs money. The budget is checked before each request, `-live-budget`
+dollars (default 0.25), so it can go over by at most one request. A model without a `[pricing]`
+entry can't be budgeted and fails the check. A new schema joins the check by being declared with
+`llm.RegisterSchema`. On exe.dev, `LIVE_CHECK=1 deploy/exe-dev.sh …` runs it on the VM with the
+service's own environment before the new build is swapped in ([exe-dev.md](exe-dev.md#every-deploy)).

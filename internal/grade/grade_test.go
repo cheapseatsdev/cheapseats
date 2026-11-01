@@ -103,6 +103,47 @@ func TestAnAnswerThatNeverNamesTheBrandIsAbsent(t *testing.T) {
 	}
 }
 
+// A name split by formatting is still the name (grader challenges grader-013 to grader-015): the
+// substring check missed "**Example** **Tracker**", "Example\nTracker" and "Example  Tracker" and
+// forced the grader's correct "recommended" to absent.
+func TestFormattingDoesNotHideTheBrand(t *testing.T) {
+	brand := config.Brand{Name: "Example Tracker", Aliases: []string{"ExampleTracker", "exampletracker.test"}}
+	pos, top := 1, "Example Tracker"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		text, _ := json.Marshal(Grade{Verdict: Recommended, Position: &pos, TopPick: &top, Tone: Positive, Evidence: "Choose Example Tracker"})
+		json.NewEncoder(w).Encode(map[string]any{"content": []any{map[string]any{"type": "text", "text": string(text)}}})
+	}))
+	defer srv.Close()
+	old := llm.AnthropicURL
+	llm.AnthropicURL = srv.URL
+	defer func() { llm.AnthropicURL = old }()
+	t.Setenv("ANTHROPIC_API_KEY", "fake-key")
+	for _, answer := range []string{
+		"Choose **Example** **Tracker**: it is my strongest recommendation because setup is simple.",
+		"Choose Example\nTracker: it is my strongest recommendation because setup is simple.",
+		"Choose Example  Tracker: it is my strongest recommendation because setup is simple.",
+		"Choose “Example Tracker”, or `exampletracker.test`.",
+	} {
+		g, _, err := Answer(context.Background(), &config.Config{Brand: brand}, sets.Set{}, "Which self-hosted platform?", answer)
+		if err != nil || g.Verdict != Recommended || !g.IsTopPick(brand.Name) {
+			t.Errorf("%q: %+v %v", answer, g, err)
+		}
+	}
+	// Folding only forgives formatting. Punctuation between the words, or the words run into a
+	// longer one with no alias to match, still doesn't name the brand, and the grade goes absent.
+	name := config.Brand{Name: "Example Tracker"}
+	for _, answer := range []string{"Choose Example, Tracker or Lantern Signal.", "ExampleTrackerology is a different field.", "Choose Northstar Metrics."} {
+		if namesBrand(answer, name) {
+			t.Errorf("named the brand in %q", answer)
+		}
+	}
+	// With "ExampleTracker" as an alias the substring matches, so whether that word is the brand is
+	// the model's call (other_product), not this check's.
+	if !namesBrand("ExampleTrackerology is a different field.", brand) {
+		t.Error("an alias in the answer must leave the verdict to the model")
+	}
+}
+
 // Another product can share the brand's name: answers about unrelated products with a name like
 // the brand's were graded "mentioned" for it (run r-20261022-043102-ebd82f, results 671, 695,
 // 699). The grader says so in other_product, and that makes the grade absent;

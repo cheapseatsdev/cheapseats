@@ -247,6 +247,11 @@ func claudeCodeArgs(model string, track Track, sys, prompt string, insist bool) 
 // matches schema, and decodes it into out: the grader and analyst through claude-code. The prompt
 // goes on stdin, since the analyst's holds a whole run. It has no cost to record.
 func ClaudeStructured(ctx context.Context, model, system, prompt string, schema map[string]any, out any) error {
+	// The CLI accepts schemas the API refuses; check here too so the subscription path fails the
+	// way the API would.
+	if err := llm.CheckSchema(schema); err != nil {
+		return err
+	}
 	js, err := json.Marshal(schema)
 	if err != nil {
 		return err
