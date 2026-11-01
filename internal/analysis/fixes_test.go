@@ -81,7 +81,7 @@ func TestBuildKeepsUnverifiedCandidatesOutOfActions(t *testing.T) {
 	if len(a.Fixes) != 0 || len(a.Investigations) != 2 {
 		t.Fatalf("unverified candidates must be checks, not actions: %+v", a)
 	}
-	if a.Investigations[0].Target != "https://cheapseats.example/docs/devcontainers" || len(a.Investigations[1].Prompts) != 1 {
+	if a.Investigations[0].Target != "cheapseats.example/docs/devcontainers" || len(a.Investigations[1].Prompts) != 1 {
 		t.Errorf("candidate sorting and prompt cleanup: %+v", a.Investigations)
 	}
 }

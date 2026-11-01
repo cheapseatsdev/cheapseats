@@ -188,6 +188,8 @@ func TestGeneratedInvestigationsNeedRationaleDecisionAndEvidence(t *testing.T) {
 
 func TestVerifiedBoundaryBecomesFindingRatherThanWork(t *testing.T) {
 	cfg, set, f, pages, d := verificationFixture()
+	// A product target is never read as a page, so the reader has only the brand's site.
+	cfg.Brand.Domains = []string{"acme.example"}
 	f.Type = Product
 	f.Title = "Add enterprise compliance features"
 	f.Check = "Inspect https://acme.example/docs for the current intended audience and enterprise procurement claims."

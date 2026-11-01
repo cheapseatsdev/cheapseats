@@ -18,39 +18,6 @@ func targetBrand() config.Brand {
 	return config.Brand{Name: "Acme", Sites: []config.Site{{URL: "https://acme.example", Kind: "marketing"}, {URL: "docs.acme.example", Kind: "docs"}}}
 }
 
-func TestResolveTargetFindsTheOnePageProseNames(t *testing.T) {
-	b := targetBrand()
-	for _, c := range []struct {
-		typ          Type
-		target, want string
-	}{
-		{FixPage, "https://docs.acme.example/install", "https://docs.acme.example/install"},
-		{FixPage, "The install guide at https://docs.acme.example/install, which omits the CLI.", "https://docs.acme.example/install"},
-		{FixPage, "Install guide (see https://docs.acme.example/install).", "https://docs.acme.example/install"},
-		{FixPage, "The docs.acme.example/install page's prerequisites section", "https://docs.acme.example/install"},
-		{FixPage, "Pricing on WWW.acme.example/pricing", "https://WWW.acme.example/pricing"},
-		{Outreach, "The roundup at https://lists.example.org/best-trackers", "https://lists.example.org/best-trackers"},
-		{Positioning, "https://acme.example/pricing, https://docs.acme.example/start and https://acme.example/about", "https://acme.example/pricing"},
-		{Positioning, "https://reviews.example.org/acme and https://acme.example/about", "https://acme.example/about"},
-		{Positioning, "Homepage acme.example and docs.acme.example/start", "https://acme.example"},
-		// Never a domain-like token that isn't on a brand site.
-		{FixPage, "Update README.md and internal/analysis/fixes.go", "Update README.md and internal/analysis/fixes.go"},
-		{FixPage, "README.md, then docs.acme.example/install", "https://docs.acme.example/install"},
-		{Outreach, "The awesome list at github.com/someone/awesome-trackers", "The awesome list at github.com/someone/awesome-trackers"},
-		{FixPage, "Write to support@acme.example about the docs", "Write to support@acme.example about the docs"},
-		// Ambiguous: several pages for one change, or a third-party page beside a brand one.
-		{FixPage, "https://acme.example/pricing and https://acme.example/about", "https://acme.example/pricing and https://acme.example/about"},
-		{Outreach, "lists.example.org/best or acme.example/compare, https://x.example.org/a https://y.example.org/b", "lists.example.org/best or acme.example/compare, https://x.example.org/a https://y.example.org/b"},
-		{FixPage, "The installation section of the docs", "The installation section of the docs"},
-		// A product target is a capability name, even when it mentions a page.
-		{Product, "Self-hosted install, as asked on https://docs.acme.example/install", "Self-hosted install, as asked on https://docs.acme.example/install"},
-	} {
-		if got := resolveTarget(b, Fix{Type: c.typ, Target: c.target}); got != c.want {
-			t.Errorf("resolveTarget(%s, %q) = %q, want %q", c.typ, c.target, got, c.want)
-		}
-	}
-}
-
 func TestPlanProblemSaysWhichTestFailed(t *testing.T) {
 	_, _, f, _, _ := verificationFixture()
 	ok := func(check, target string) string { return planProblem(check, f.Decision, f.Evidence, target) }
@@ -60,8 +27,11 @@ func TestPlanProblemSaysWhichTestFailed(t *testing.T) {
 	for _, c := range []struct{ check, target string }{
 		{"Read https://www.acme.example/docs/ and confirm whether the install links work.", "https://acme.example/docs"},
 		{"Read http://acme.example/docs and confirm whether the install links work.", "https://www.acme.example/docs/"},
-		{"Read HTTPS://ACME.example/Docs and confirm whether the install links work.", "acme.example/docs"},
+		{"Read HTTPS://WWW.ACME.example/Docs and confirm whether the install links work.", "https://acme.example/Docs"},
+		{"Read https://acme.example/Guide_(CLI) and confirm whether the install links work.", "https://acme.example/Guide_(CLI)"},
+		{"Compare https://acme.example/pricing with https://acme.example/docs?tab=Install to confirm the links.", "https://acme.example/docs?tab=Install"},
 		{"Read the installation section and confirm whether the install links work.", "The installation section of the docs"},
+		{"Read acme.example/docs/devcontainers and confirm whether the install links work.", "acme.example/docs"},
 		{"Read the installation section and confirm whether the install links work.", ""},
 	} {
 		if why := ok(c.check, c.target); why != "" {
@@ -70,6 +40,13 @@ func TestPlanProblemSaysWhichTestFailed(t *testing.T) {
 	}
 	for _, c := range []struct{ check, decision, evidence, target, want string }{
 		{"Read https://acme.example/other and confirm whether the install links work.", f.Decision, f.Evidence, f.Target, "its check does not name its target URL"},
+		// Paths, queries and fragments are case-sensitive: /Docs is not /docs.
+		{"Read https://acme.example/Docs and confirm whether the install links work.", f.Decision, f.Evidence, "https://acme.example/docs", "its check does not name its target URL"},
+		{"Read https://acme.example/docs?tab=install and confirm whether the links work.", f.Decision, f.Evidence, "https://acme.example/docs?tab=Install", "its check does not name its target URL"},
+		// No punctuation is trimmed, and a longer URL that starts with the target is another page.
+		{"Read https://acme.example/Guide_ and confirm whether the install links work.", f.Decision, f.Evidence, "https://acme.example/Guide_(CLI)", "its check does not name its target URL"},
+		{"Read https://acme.example/Guide_(CLI and confirm whether the install links work.", f.Decision, f.Evidence, "https://acme.example/Guide_(CLI)", "its check does not name its target URL"},
+		{"Read https://acme.example/docs/old and confirm whether the install links work.", f.Decision, f.Evidence, "https://acme.example/docs", "its check does not name its target URL"},
 		{"Read the page.", f.Decision, f.Evidence, "", "its check is too short"},
 		{f.Check, "Decide.", f.Evidence, f.Target, "its decision is too short"},
 		{f.Check, f.Decision, " ", f.Target, "it cites no evidence"},
@@ -115,40 +92,20 @@ func reviewWith(t *testing.T, fs []Fix, ds []decision, page string) (Analysis, [
 	return a, prompts, reads
 }
 
-func TestProseTargetWithOneBrandURLIsResolvedAndVerified(t *testing.T) {
+func TestNonURLTargetIsReviewedAsAnInvestigationWithoutARead(t *testing.T) {
 	_, _, f, pages, d := verificationFixture()
-	f.Target = "The setup section of https://acme.example/docs, where install links live"
-	a, prompts, reads := reviewWith(t, []Fix{f}, []decision{d}, pages[0].Text)
-	if len(prompts) != 1 || strings.Contains(a.Insights, "Omitted") {
-		t.Fatalf("resolved candidate did not reach review: %+v", a)
-	}
-	if len(reads) == 0 || reads[0] != "https://acme.example/docs" || !strings.Contains(prompts[0], `"target":"https://acme.example/docs"`) {
-		t.Fatalf("pages read and reviewer input must use the resolved URL: reads %v", reads)
-	}
-	if len(a.Fixes) != 1 || a.Fixes[0].Target != "https://acme.example/docs" || a.Fixes[0].Verification.Status != "verified" || !strings.Contains(a.Fixes[0].ClaudePrompt, "https://acme.example/docs") {
-		t.Fatalf("resolved candidate not verified at its URL: %+v", a)
-	}
-}
-
-func TestPositioningTargetResolvesToFirstBrandPage(t *testing.T) {
-	_, _, f, pages, d := verificationFixture()
-	f.Type = Positioning
-	f.Target = "https://reviews.example.org/acme, https://acme.example/docs and https://docs.acme.example/start"
-	a, prompts, _ := reviewWith(t, []Fix{f}, []decision{d}, pages[0].Text)
-	if len(prompts) != 1 || len(a.Fixes) != 1 || a.Fixes[0].Target != "https://acme.example/docs" {
-		t.Fatalf("positioning target not resolved to its first brand page: %+v", a)
-	}
-}
-
-func TestUnresolvableProseTargetIsReviewedAsAnInvestigation(t *testing.T) {
-	_, _, f, pages, d := verificationFixture()
-	for _, target := range []string{"Docs", "The installation section of the docs"} {
+	// Prose, a one-word name, prose holding a URL, and a bare host: none is one absolute URL,
+	// none is rewritten or read, and each is reviewed rather than dropped.
+	for _, target := range []string{"Docs", "acme.example/docs", "The setup section of https://acme.example/docs", "The installation section of the docs"} {
 		f.Target = target
-		_, _, reads := reviewWith(t, []Fix{f}, []decision{d}, pages[0].Text)
+		a, prompts, reads := reviewWith(t, []Fix{f}, []decision{d}, pages[0].Text)
 		for _, u := range reads {
-			if !strings.Contains(u, "acme.example") {
-				t.Fatalf("prose target %q read as a page: %v", target, reads)
+			if u != "https://acme.example" && u != "https://docs.acme.example" {
+				t.Fatalf("non-URL target %q read as a page: %v", target, reads)
 			}
+		}
+		if len(prompts) != 1 || len(a.Investigations) != 1 || a.Investigations[0].Target != target {
+			t.Fatalf("non-URL target %q not reviewed as written: %+v", target, a)
 		}
 	}
 	a, prompts, _ := reviewWith(t, []Fix{f}, []decision{d}, pages[0].Text)
@@ -164,12 +121,21 @@ func TestProductTargetSkipsTheLocatorTest(t *testing.T) {
 	_, _, f, pages, d := verificationFixture()
 	f.Type = Product
 	d.Status = "investigate"
-	// Prose, and a name shaped like a host: neither is a page the check must name.
-	for _, target := range []string{"Self-hosted install", "acme.example/self-hosted"} {
+	// Prose, and names shaped like addresses: none is a page the check must name or the reader
+	// fetches, even an absolute URL the check never mentions.
+	for _, target := range []string{"Self-hosted install", "acme.example/self-hosted", "https://acme.example/self-hosted"} {
 		f.Target = target
-		a, prompts, _ := reviewWith(t, []Fix{f}, []decision{d}, pages[0].Text)
+		a, prompts, reads := reviewWith(t, []Fix{f}, []decision{d}, pages[0].Text)
 		if len(prompts) != 1 || strings.Contains(a.Insights, "Omitted") || len(a.Investigations) != 1 || a.Investigations[0].Target != target {
 			t.Fatalf("product candidate %q dropped by the locator test or rewritten: %+v", target, a)
+		}
+		for _, u := range reads {
+			if strings.Contains(u, "self-hosted") {
+				t.Fatalf("product target %q fetched as a page: %v", target, reads)
+			}
+		}
+		if len(reads) != 2 {
+			t.Fatalf("product candidate reads: %v", reads)
 		}
 	}
 }

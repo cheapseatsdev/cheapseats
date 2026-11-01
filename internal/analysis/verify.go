@@ -167,10 +167,9 @@ func omit(a *Analysis, what, title, why string) {
 // promotion boilerplate do not earn a research task. It says why the plan falls short, or ""
 // when it doesn't; each sub-test has its own reason, so an omission says which one failed.
 //
-// When the target is a locator (one token naming a host), the check must contain it, compared
-// without scheme, a leading www. or a trailing slash. A target that is not a locator, such as a
-// product capability or prose verifyCandidates could not resolve, is not tested here: the
-// reviewer reads no target page for it, so verifyDecision leaves it an investigation.
+// When the target is one absolute URL, the check must contain that URL (checkNames). A
+// target that isn't, such as a product capability or a target written as prose, is not
+// tested here: no target page is read for it, so verifyDecision leaves it an investigation.
 func planProblem(check, decision, evidence, target string) string {
 	check, decision = strings.TrimSpace(check), strings.TrimSpace(decision)
 	switch {
@@ -197,137 +196,54 @@ func planProblem(check, decision, evidence, target string) string {
 	if check == decision {
 		return "its check only repeats its decision."
 	}
-	if isLocator(target) && !strings.Contains(cleanLocators(check), cleanLocator(target)) {
+	if absoluteURL(target) && !checkNames(check, target) {
 		return "its check does not name its target URL."
 	}
 	return ""
 }
 
-// cleanLocator is a URL lower-cased, without its scheme, a leading www. or a trailing slash.
-func cleanLocator(u string) string {
-	u = strings.ToLower(strings.TrimSpace(u))
-	u = strings.TrimPrefix(strings.TrimPrefix(u, "https://"), "http://")
-	return strings.TrimSuffix(strings.TrimPrefix(u, "www."), "/")
-}
-
-// cleanLocators is cleanLocator for every URL in free text: schemes and a www. that starts a
-// host are removed wherever they appear. A trailing slash needs no removal, since the cleaned
-// target is looked for as a substring.
-func cleanLocators(text string) string {
-	text = strings.ToLower(text)
-	text = strings.NewReplacer("https://", "", "http://", "").Replace(text)
-	var b strings.Builder
-	for i := 0; i < len(text); i++ {
-		if strings.HasPrefix(text[i:], "www.") && (i == 0 || !isHostByte(text[i-1])) {
-			i += len("www.") - 1
-			continue
-		}
-		b.WriteByte(text[i])
+// locator is a URL as the locator test compares it: without its scheme, the scheme and host
+// lower-cased, a leading www. dropped from the host, and one trailing slash removed. The path,
+// query and fragment keep their case (/Docs and /docs are different pages), and nothing else is
+// trimmed, so a URL ending in punctuation keeps it.
+func locator(u string) string {
+	u = strings.TrimSpace(u)
+	if i := strings.Index(u, "://"); i >= 0 {
+		u = u[i+len("://"):]
 	}
-	return b.String()
+	host, rest := u, ""
+	if i := strings.IndexAny(u, "/?#"); i >= 0 {
+		host, rest = u[:i], u[i:]
+	}
+	host = strings.TrimPrefix(strings.ToLower(host), "www.")
+	return strings.TrimSuffix(host+rest, "/")
 }
 
-func isHostByte(c byte) bool {
-	return c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '-' || c == '.'
+// urlInCheck finds the absolute URLs written in a check. A URL ends at whitespace, or at a quote
+// or angle bracket, which a URL can't contain unescaped.
+var urlInCheck = regexp.MustCompile("(?i)https?://[^\\s<>\"'`]+")
+
+// checkNames reports whether a check contains its target: some URL in the check is the target,
+// compared as locators.
+func checkNames(check, target string) bool {
+	want := locator(target)
+	for _, u := range urlInCheck.FindAllString(check, -1) {
+		if locator(u) == want {
+			return true
+		}
+	}
+	return false
 }
 
-// isLocator reports whether a target is written as one locator, an absolute URL or a bare
-// host/path, whose host has a dot, rather than prose or a capability name.
-func isLocator(target string) bool {
-	target = strings.TrimSpace(target)
-	if target == "" || len(strings.Fields(target)) != 1 || strings.Count(target, "://") > 1 {
+// absoluteURL reports whether a target is one absolute http(s) URL with a dotted host.
+func absoluteURL(target string) bool {
+	t := strings.TrimSpace(target)
+	lower := strings.ToLower(t)
+	if t == "" || len(strings.Fields(t)) != 1 || strings.Count(t, "://") != 1 || !strings.HasPrefix(lower, "https://") && !strings.HasPrefix(lower, "http://") {
 		return false
 	}
-	u, err := url.Parse(webURL(target))
-	return err == nil && strings.Contains(strings.Trim(u.Hostname(), "."), ".")
-}
-
-// absoluteURL reports whether a target is already one absolute http(s) URL with a dotted host.
-func absoluteURL(target string) bool {
-	t := strings.ToLower(strings.TrimSpace(target))
-	return (strings.HasPrefix(t, "https://") || strings.HasPrefix(t, "http://")) && isLocator(target)
-}
-
-var urlInText = regexp.MustCompile("(?i)https?://[^\\s<>\"'`,]+")
-
-// trimToken strips the punctuation prose puts around a URL or host: quotes, brackets, and a
-// sentence's closing mark.
-func trimToken(s string) string {
-	return strings.TrimRight(strings.TrimLeft(s, "\"'`([{<*"), "\"'`)]}>*.,;:!?")
-}
-
-// resolveTarget rewrites a target the analyst wrote as prose to the one page it names, so the
-// locator test, the page reads, the reviewer and the handoff all see the same URL. A product
-// target is a capability name and stays as written, as does one already an absolute URL. Only
-// absolute URLs, and hosts or host/paths on the brand's own sites, are taken from the text,
-// never another domain-like token (README.md, fixes.go). In order:
-//   - exactly one absolute URL: that URL;
-//   - otherwise, with no absolute URL off the brand's sites, exactly one page on them: that page,
-//     with https when written without a scheme;
-//   - a positioning target naming several pages: the first on the brand's sites;
-//   - otherwise the target as written.
-func resolveTarget(brand config.Brand, f Fix) string {
-	target := strings.TrimSpace(f.Target)
-	if f.Type == Product || target == "" || absoluteURL(target) {
-		return f.Target
-	}
-	type found struct {
-		url             string
-		absolute, brand bool
-	}
-	var all []found
-	absolute, offSite := 0, 0
-	seen := map[string]bool{}
-	add := func(u string, abs, own bool) {
-		if key := cleanLocator(u); !seen[key] {
-			seen[key] = true
-			all = append(all, found{u, abs, own})
-			if abs {
-				absolute++
-			}
-			if abs && !own {
-				offSite++
-			}
-		}
-	}
-	for _, field := range strings.Fields(target) {
-		if strings.Contains(field, "://") {
-			for _, tok := range urlInText.FindAllString(field, -1) {
-				if tok = trimToken(tok); absoluteURL(tok) {
-					_, own := brand.SiteOf(tok)
-					add(tok, true, own)
-				}
-			}
-			continue
-		}
-		for _, tok := range strings.Split(field, ",") {
-			tok = trimToken(tok)
-			if strings.ContainsAny(tok, "@\\") || !isLocator(tok) {
-				continue
-			}
-			if _, own := brand.SiteOf(tok); own {
-				add("https://"+tok, false, true)
-			}
-		}
-	}
-	if absolute == 1 {
-		for _, u := range all {
-			if u.absolute {
-				return u.url
-			}
-		}
-	}
-	if offSite == 0 && len(all) == 1 {
-		return all[0].url
-	}
-	if f.Type == Positioning {
-		for _, u := range all {
-			if u.brand {
-				return u.url
-			}
-		}
-	}
-	return f.Target
+	u, err := url.Parse(t)
+	return err == nil && u.User == nil && strings.Contains(strings.Trim(u.Hostname(), "."), ".")
 }
 
 func rejectCandidate(a *Analysis, f Fix, why string) {
@@ -367,10 +283,11 @@ func readArtifacts(ctx context.Context, cfg *config.Config, fs []Fix) []artifact
 			urls = append(urls, u)
 		}
 	}
-	// Proposed targets first. A home page cannot verify an unrelated target. A target that is
-	// not a locator (prose, or a one-word name) names no page to read.
+	// Proposed targets first. A home page cannot verify an unrelated target. A product target
+	// is a capability name, and a target that isn't one absolute URL names no page: neither is
+	// read, even when it looks like an address.
 	for _, f := range fs {
-		if isLocator(f.Target) {
+		if f.Type != Product && absoluteURL(f.Target) {
 			add(f.Target)
 		}
 	}
@@ -468,7 +385,6 @@ func verifyCandidates(ctx context.Context, cfg *config.Config, set sets.Set, a A
 			rejectCandidate(&a, f, why+" It claimed: "+clip(f.Claim, 300))
 			continue
 		}
-		f.Target = resolveTarget(cfg.Brand, f)
 		target := f.Target
 		if f.Type == Product {
 			target = "" // a capability name, never read as a page
