@@ -5,10 +5,11 @@ package grade
 import (
 	"context"
 	"crypto/sha256"
-	_ "embed"
+	"embed"
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 	"unicode"
 
 	"github.com/cheapseatsdev/cheapseats/internal/answer"
@@ -145,16 +146,52 @@ func Answer(ctx context.Context, cfg *config.Config, set sets.Set, prompt, answe
 	return AnswerWithSystem(ctx, cfg, set, prompt, answer, System)
 }
 
-// Exact evaluator sources pin experiment/cache behavior as well as the prompt.
+// maxTokens bounds the grader's reply on the API: room for thinking as well as the grade.
+const maxTokens = 16000
+
+// source is this package's Go files, for the digest of its code; _test.go files are left out.
 //
-//go:embed grade.go
-var evaluatorSource string
+//go:embed *.go
+var source embed.FS
 
-//go:embed evidence.go
-var evidenceSource string
+// code is the digest of the code the grader runs: every non-test file in this package (its types
+// and their JSON tags, constants, functions), and the shared code that builds a structured output
+// request and reads its reply on either transport. Comments and layout don't count.
+var code = sync.OnceValue(func() string {
+	d, err := llm.CodeDigest(llm.GoFiles(source))
+	if err != nil {
+		panic("grade: " + err.Error())
+	}
+	return "grade " + d + "\nllm " + llm.StructuredCode() + "\nanswer " + answer.StructuredCode()
+})
 
+// EvaluatorDigest identifies the grader by what it sends and how it reads the reply, not by its
+// source text: stored checks, batches and experiments made with another digest are stale. The
+// model and transport are recorded beside it, from the config.
 func EvaluatorDigest() string {
-	return fmt.Sprintf("%x", sha256.Sum256([]byte(evaluatorSource+"\x00"+evidenceSource)))
+	js, err := llm.SchemaJSON(schema)
+	if err != nil {
+		panic("grade: the grader's schema does not encode: " + err.Error())
+	}
+	h := sha256.New()
+	for _, part := range evaluatorInputs(js) {
+		fmt.Fprintf(h, "%d:%s\x00", len(part), part)
+	}
+	return fmt.Sprintf("%x", h.Sum(nil))
+}
+
+// evaluatorInputs are what EvaluatorDigest hashes, in order: the code, the prompt, the schema as
+// sent, and the user message as built for a fixed brand and set, so its framing counts as well
+// as its fields.
+func evaluatorInputs(schemaJSON []byte) []string {
+	cfg := &config.Config{Brand: config.Brand{Name: "<brand>", Aliases: []string{"<alias>"}, About: "<about>"}}
+	set := sets.Set{Competitors: []sets.Competitor{{Name: "<competitor>", Aliases: []string{"<competitor alias>"}}, {Name: "<other>"}}}
+	return []string{
+		code(),
+		System,
+		string(schemaJSON),
+		Input(cfg, set, "<question>", "<answer>"),
+	}
 }
 
 // AnswerWithSystem uses the production transport and normalization with an
@@ -173,7 +210,7 @@ func AnswerWithSystem(ctx context.Context, cfg *config.Config, set sets.Set, pro
 		// Room for thinking as well as the grade: current Claude models think by default, thinking
 		// counts against max_tokens, and at 2048 a long think cut the grade off. Only use is billed.
 		var resp map[string]any
-		resp, err = llm.Structured(ctx, cfg.Grader.Model, system, in, 16000, schema, &g)
+		resp, err = llm.Structured(ctx, cfg.Grader.Model, system, in, maxTokens, schema, &g)
 		if resp != nil {
 			cost = cfg.Cost(cfg.Grader.Model, llm.Usage(resp, false))
 		}
