@@ -31,6 +31,15 @@ retain source quotes and reasons. Reads are evidence, not proof of future recomm
 New-page proposals remain investigations until equivalent existing content can be checked;
 bounded page reads do not establish a complete inventory.
 
+Evidence is stored as the analyst wrote it. When it is a list of quotes, such as
+`3756: "…". 3762: "…"`, the page shows each quote on its own line, linked to its answer on the
+run page. A list whose quotes contain an unescaped straight `"`, or a zero-padded ID, can't be
+split safely, so it is shown whole, like evidence in any other form. Quotes, evidence, claims and
+reasons are read as inline CommonMark, with the parser the insights use: `\"` shows as `"`,
+`**bold**` as bold, and code spans and link destinations exactly as the spec reads them. Raw
+HTML shows as text. `cheapseats fixes` prints the same text without the Markdown, a link as
+"text (url)". The JSON API and MCP return the stored text unchanged.
+
 ## Brand brief
 
 Keep identity and public claims in `brand.about` and `brand.facts`. Record advisory priorities

@@ -23,6 +23,7 @@ import (
 	"github.com/cheapseatsdev/cheapseats/internal/app"
 	"github.com/cheapseatsdev/cheapseats/internal/config"
 	"github.com/cheapseatsdev/cheapseats/internal/env"
+	"github.com/cheapseatsdev/cheapseats/internal/excerpt"
 	"github.com/cheapseatsdev/cheapseats/internal/grade"
 	"github.com/cheapseatsdev/cheapseats/internal/llm"
 	"github.com/cheapseatsdev/cheapseats/internal/opinion"
@@ -534,7 +535,7 @@ func printThemes(a *app.App, id string, t opinion.Themes) error {
 		if th.Beneficiary != "" {
 			who = ", helps " + th.Beneficiary
 		}
-		fmt.Printf("\n%-11s %s (%d answers%s)\n            “%s”\n", th.Kind, th.Name, th.Answers, who, th.Quote)
+		fmt.Printf("\n%-11s %s (%d answers%s)\n            “%s”\n", th.Kind, th.Name, th.Answers, who, excerpt.Text(th.Quote))
 	}
 	return nil
 }

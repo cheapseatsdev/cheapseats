@@ -5,6 +5,7 @@ import (
 	"io"
 
 	"github.com/cheapseatsdev/cheapseats/internal/app"
+	"github.com/cheapseatsdev/cheapseats/internal/excerpt"
 )
 
 // printNextSteps prints a run's next steps for `cheapseats fixes`: analysis errors to stderr,
@@ -29,15 +30,16 @@ func printNextSteps(stdout, stderr io.Writer, setName string, hasFixes bool, nex
 	fmt.Fprintf(stdout, "# Next steps: %s\n\n%d actions · %d investigations · %d market findings\n\n", setName, len(next.Actions), len(next.Investigations), len(next.Findings))
 	fmt.Fprintln(stdout, "## Actions")
 	for _, q := range next.Actions {
-		fmt.Fprintf(stdout, "\n- **%s**\n  - Change: %s\n  - Where: %s\n  - Done when: %s\n  - Verification: %s\n", q.Title, q.Claim, q.Target, q.DoneWhen, q.Verification.Summary)
+		fmt.Fprintf(stdout, "\n- **%s**\n  - Change: %s\n  - Where: %s\n  - Done when: %s\n  - Verification: %s\n", q.Title, excerpt.Text(q.Claim), q.Target, excerpt.Text(q.DoneWhen), excerpt.Text(q.Verification.Summary))
 	}
 	fmt.Fprintln(stdout, "\n## Investigations")
 	for _, inv := range next.Investigations {
-		fmt.Fprintf(stdout, "\n- **%s**\n  - Why: %s\n  - Read-only check: %s\n  - Decision: %s\n", inv.Title, inv.Why, inv.Check, inv.Decision)
+		fmt.Fprintf(stdout, "\n- **%s**\n  - Why: %s\n  - Read-only check: %s\n  - Decision: %s\n", inv.Title, excerpt.Text(inv.Why), excerpt.Text(inv.Check), excerpt.Text(inv.Decision))
 	}
 	fmt.Fprintln(stdout, "\n## Market findings")
 	for _, f := range next.Findings {
-		fmt.Fprintf(stdout, "\n- **%s**: %s\n  - Evidence: %s\n", f.Title, f.Detail, f.Evidence)
+		fmt.Fprintf(stdout, "\n- **%s**: %s\n", f.Title, excerpt.Text(f.Detail))
+		printEvidence(stdout, f.Evidence)
 	}
 	switch {
 	case kept == nil:
@@ -46,5 +48,20 @@ func printNextSteps(stdout, stderr io.Writer, setName string, hasFixes bool, nex
 		return fmt.Errorf("next steps rebuild failed: %w", kept)
 	default:
 		return fmt.Errorf("next steps rebuild failed: %w\n%s", kept, app.KeptAnalysisNote)
+	}
+}
+
+// printEvidence prints evidence as a sub-item: inline when it is one line, else one quote a line.
+func printEvidence(w io.Writer, evidence string) {
+	lines := excerpt.Lines(evidence)
+	switch len(lines) {
+	case 0:
+	case 1:
+		fmt.Fprintf(w, "  - Evidence: %s\n", lines[0])
+	default:
+		fmt.Fprintln(w, "  - Evidence:")
+		for _, l := range lines {
+			fmt.Fprintf(w, "    - %s\n", l)
+		}
 	}
 }
