@@ -58,7 +58,7 @@ type Response struct {
 	Header http.Header
 	Body   []byte
 	URL    string // after redirects
-	Cut    bool   // the body was longer than MaxBody
+	Cut    bool   // the body was longer than MaxBody, or ended before the length it declared
 }
 
 func (r *Response) ContentType() string {
@@ -105,6 +105,9 @@ func (f *Fetcher) Get(ctx context.Context, url string, ua ...string) (*Response,
 		return nil, err
 	}
 	out := &Response{Status: resp.StatusCode, Header: resp.Header, Body: body, URL: resp.Request.URL.String()}
+	// The connection closed before the body's declared length (or its last chunk): what came
+	// is kept, as before, and marked cut, since the page goes on past it.
+	out.Cut = err != nil
 	if len(body) > MaxBody {
 		out.Body, out.Cut = body[:MaxBody], true
 	}

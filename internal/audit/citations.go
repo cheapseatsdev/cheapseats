@@ -112,8 +112,9 @@ const (
 
 // fetchText is a page's visible text, from today's cache or fetched; skipped says why there's none.
 // A shell or a challenge is read through o.Reader when there is one, and via says so ("exa").
-// cut says the text may stop short of the page: the response passed MaxBody, or the text passed
-// maxText. The day cache doesn't record it, so text read from the cache reads as cut.
+// cut says the text may stop short of the page: the response passed MaxBody or ended early, the
+// text passed maxText, or the page is a shell that no Reader rendered (its text is what plain HTTP
+// got, not the page). The day cache doesn't record it, so text read from the cache reads as cut.
 func fetchText(ctx context.Context, o CiteOptions, robots *robotsCache, u, day string) (status int, skipped, text, via string, cut bool) {
 	cached := false
 	if o.DB != nil {
@@ -138,6 +139,7 @@ func fetchText(ctx context.Context, o CiteOptions, robots *robotsCache, u, day s
 		}
 		if skipped == shellReason {
 			skipped = "" // what plain HTTP got: a page with a little text, as before the fallback
+			cut = true   // but not the rendered page, so it can't show what the page lacks
 		}
 	}
 	return status, skipped, text, "", cut

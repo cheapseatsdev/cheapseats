@@ -301,42 +301,78 @@ func TestTruncatedTargetCanShowAlreadyDone(t *testing.T) {
 	}
 }
 
-// A raw response cut at audit.MaxBody can extract to short, complete-looking text: a readable
-// paragraph, then inline script past the cut, then the rest of the page. The reader's cut must
-// reach the artifact so the omission it seems to show can't verify.
-func TestReadCutAtRawCapCannotVerifyRemainingChange(t *testing.T) {
+// A read that stops short of the page can extract to short text that looks complete. Each such
+// read must reach the artifact as truncated, so the omission it seems to show can't verify:
+//   - raw-cap: a readable paragraph, then inline script past audit.MaxBody, then the rest;
+//   - short-body: the server declares a longer Content-Length and closes after a readable prefix;
+//   - shell: a page empty without JavaScript, read with no Reader to render it.
+//
+// A whole page served the same way verifies, so each failure is the cut's doing.
+func TestReadStoppedShortCannotVerifyRemainingChange(t *testing.T) {
 	restore := audit.AllowLoopbackForTests()
 	defer restore()
-	cfg, set, f, page, d := omissionFixture()
-	body := "<html><body><p>" + page + "</p><script>" + strings.Repeat("var x = 1;\n", audit.MaxBody/10) + "</script><p>Requires Go 1.27 or later.</p></body></html>"
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/setup" {
-			http.NotFound(w, r)
-			return
-		}
-		w.Header().Set("content-type", "text/html; charset=utf-8")
-		w.Write([]byte(body))
-	}))
-	defer srv.Close()
-	old := f.Target
-	f.Target = srv.URL + "/setup"
-	f.Check = strings.Replace(f.Check, old, f.Target, 1)
-	for g, p := range d.Checks {
-		if p.Source == old {
-			p.Source = f.Target
-			d.Checks[g] = p
-		}
-	}
-	read := func(ctx context.Context, u string) (string, bool, error) {
-		return audit.ReadCurrent(ctx, u, audit.CiteOptions{})
-	}
-	pages := readArtifacts(WithVerifier(context.Background(), read), cfg, []Fix{f})
-	if len(pages) != 1 || pages[0].Text == "" || !pages[0].Truncated || len([]rune(pages[0].Text)) > MaxVerificationTargetRunes {
-		t.Fatalf("a read cut at the raw cap reached the reviewer as complete: %+v", pages)
-	}
-	a, prompt := reviewWithFakeAnalyst(t, cfg, set, f, read, d)
-	if len(a.Fixes) != 0 || len(a.Investigations) != 1 || !strings.Contains(a.Investigations[0].Why, "remaining_change") || !strings.Contains(prompt, `"truncated":true`) {
-		t.Fatalf("an omission from a cut read verified: %+v", a)
+	_, _, _, page, _ := omissionFixture()
+	more := "<p>" + strings.Repeat("The setup guide covers local installs for small teams. ", 4) + "</p>"
+	whole := "<html><body><p>" + page + "</p>" + more + "</body></html>"
+	for _, tc := range []struct {
+		name      string
+		serve     func(w http.ResponseWriter)
+		truncated bool
+	}{
+		{"whole", func(w http.ResponseWriter) { w.Write([]byte(whole)) }, false},
+		{"raw-cap", func(w http.ResponseWriter) {
+			w.Write([]byte("<html><body><p>" + page + "</p>" + more + "<script>" + strings.Repeat("var x = 1;\n", audit.MaxBody/10) + "</script><p>Requires Go 1.27 or later.</p></body></html>"))
+		}, true},
+		{"short-body", func(w http.ResponseWriter) {
+			conn, buf, err := w.(http.Hijacker).Hijack()
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			defer conn.Close()
+			prefix := "<html><body><p>" + page + "</p>" + more
+			fmt.Fprintf(buf, "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: %d\r\n\r\n%s", len(prefix)+5000, prefix)
+			buf.Flush()
+		}, true},
+		{"shell", func(w http.ResponseWriter) {
+			w.Write([]byte(`<html><body><div id="root"><p>` + page + `</p></div><script src="/app.js"></script></body></html>`))
+		}, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg, set, f, _, d := omissionFixture()
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/setup" {
+					http.NotFound(w, r)
+					return
+				}
+				w.Header().Set("content-type", "text/html; charset=utf-8")
+				tc.serve(w)
+			}))
+			defer srv.Close()
+			old := f.Target
+			f.Target = srv.URL + "/setup"
+			f.Check = strings.Replace(f.Check, old, f.Target, 1)
+			for g, p := range d.Checks {
+				if p.Source == old {
+					p.Source = f.Target
+					d.Checks[g] = p
+				}
+			}
+			read := func(ctx context.Context, u string) (string, bool, error) {
+				return audit.ReadCurrent(ctx, u, audit.CiteOptions{}) // no Reader
+			}
+			pages := readArtifacts(WithVerifier(context.Background(), read), cfg, []Fix{f})
+			if len(pages) != 1 || pages[0].Text == "" || pages[0].Truncated != tc.truncated {
+				t.Fatalf("truncated=%v, want %v: %+v", len(pages) == 1 && pages[0].Truncated, tc.truncated, pages)
+			}
+			a, _ := reviewWithFakeAnalyst(t, cfg, set, f, read, d)
+			if verified := len(a.Fixes) == 1; verified == tc.truncated {
+				t.Fatalf("verified=%v from a read with truncated=%v: %+v", verified, tc.truncated, a)
+			}
+			if tc.truncated && (len(a.Investigations) != 1 || !strings.Contains(a.Investigations[0].Why, "remaining_change")) {
+				t.Fatalf("an omission from a read that stopped short was not held back by remaining_change: %+v", a)
+			}
+		})
 	}
 }
 

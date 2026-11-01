@@ -2,6 +2,7 @@ package audit
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -33,9 +34,23 @@ func cutTestServer(t *testing.T) (*httptest.Server, *atomic.Int32) {
 		case "/text-cut":
 			hits.Add(1)
 			w.Write([]byte("<html><body><p>" + strings.Repeat(para, maxText/len(para)+2) + "</p></body></html>"))
+		case "/short-body": // declares more than it sends, then closes
+			hits.Add(1)
+			conn, buf, err := w.(http.Hijacker).Hijack()
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			defer conn.Close()
+			prefix := "<html><body><p>" + para + "</p>"
+			fmt.Fprintf(buf, "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: %d\r\n\r\n%s", len(prefix)+5000, prefix)
+			buf.Flush()
 		case "/shell":
 			hits.Add(1)
 			w.Write([]byte(`<html><body><div id="root"></div><script src="/app.js"></script></body></html>`))
+		case "/shell-words": // a shell with some words: past ReadCurrent's 20-word floor, under emptyText
+			hits.Add(1)
+			w.Write([]byte(`<html><body><div id="root"><p>` + cutTestPara + cutTestPara + `</p></div><script src="/app.js"></script></body></html>`))
 		default:
 			http.NotFound(w, r)
 		}
@@ -45,14 +60,15 @@ func cutTestServer(t *testing.T) (*httptest.Server, *atomic.Int32) {
 }
 
 // ReadCurrent says when its text may stop short of the page, at every limit on the way: the raw
-// response (MaxBody), the visible text (maxText), and a Reader's text at maxText (the app's
-// reader cuts there before caching). A whole page is not cut.
+// response (MaxBody), a body that ends before its declared length, the visible text (maxText), a
+// shell no Reader rendered, and a Reader's text at maxText (the app's reader cuts there before
+// caching). A whole page, or a shell a Reader rendered whole, is not cut.
 func TestReadCurrentReportsCutAtEveryLimit(t *testing.T) {
 	restore := AllowLoopbackForTests()
 	defer restore()
 	srv, _ := cutTestServer(t)
 	ctx := context.Background()
-	for path, want := range map[string]bool{"/whole": false, "/raw-cut": true, "/text-cut": true} {
+	for path, want := range map[string]bool{"/whole": false, "/raw-cut": true, "/short-body": true, "/text-cut": true, "/shell-words": true} {
 		text, cut, err := ReadCurrent(ctx, srv.URL+path, CiteOptions{})
 		if err != nil || cut != want || !strings.Contains(text, "starter workflow") {
 			t.Errorf("%s: cut=%v, want %v (%v)", path, cut, want, err)
@@ -67,6 +83,11 @@ func TestReadCurrentReportsCutAtEveryLimit(t *testing.T) {
 		if _, cut, err := ReadCurrent(ctx, srv.URL+"/shell", CiteOptions{Reader: reader}); err != nil || cut != tc.want {
 			t.Errorf("reader text of %d bytes: cut=%v, want %v (%v)", len(tc.text), cut, tc.want, err)
 		}
+	}
+	// A Reader that can't render the shell leaves plain HTTP's text, which is not the page.
+	failing := func(context.Context, string) (string, string, bool) { return "", "", false }
+	if _, cut, err := ReadCurrent(ctx, srv.URL+"/shell-words", CiteOptions{Reader: failing}); err != nil || !cut {
+		t.Errorf("an unrendered shell read as whole: cut=%v (%v)", cut, err)
 	}
 }
 
