@@ -296,11 +296,12 @@ func (s *Server) mcpHandler() http.Handler {
 			}
 			return reviewDigest(rev, &e), nil
 		})
-	addTool(srv, "regrade", "Grade a set's (or one run's) stored answers again with today's grader prompt and model, brand and competitors, so older runs join the current method's trend; answers are not asked again, and runs already graded that way are skipped. dry_run (the default) only says how many answers it would grade and the estimated cost. With dry_run false it costs one grader call per answer (nothing on the claude-code provider), within the daily budget, and runs in the background.",
+	addTool(srv, "regrade", "Grade a set's (or one run's) stored answers again with today's grader prompt and model, brand and competitors, so older runs join the current method's trend; answers are not asked again, and runs already graded that way are skipped unless force is true (for a fix to the grading code itself; forced_runs, forced_answers and forced_usd say what it adds). dry_run (the default) only says how many answers it would grade and the estimated cost. With dry_run false it costs one grader call per answer (nothing on the claude-code provider), within the daily budget, and runs in the background.",
 		func(ctx context.Context, a struct {
 			Target    string `json:"target" jsonschema:"prompt set id, or a run id"`
 			SinceDays *int   `json:"since_days,omitempty" jsonschema:"for a set, only runs from the last N days (default 28; 0 for all)"`
 			DryRun    *bool  `json:"dry_run,omitempty" jsonschema:"only plan it, grading nothing (default true)"`
+			Force     bool   `json:"force,omitempty" jsonschema:"also re-grade runs already graded with today's inputs, after a fix to the grading code (default false)"`
 		}) (any, error) {
 			since := 28
 			if a.SinceDays != nil {
@@ -310,10 +311,10 @@ func (s *Server) mcpHandler() http.Handler {
 				return nil, fmt.Errorf("since_days %d: want 0 (all) or more", since)
 			}
 			if a.DryRun == nil || *a.DryRun {
-				p, err := s.App.PlanRegrade(ctx, a.Target, since)
+				p, err := s.App.PlanRegrade(ctx, a.Target, since, a.Force)
 				return regradeDigest(p, false), err
 			}
-			p, err := s.App.StartRegrade(a.Target, since)
+			p, err := s.App.StartRegrade(a.Target, since, a.Force)
 			if err != nil {
 				return nil, err
 			}

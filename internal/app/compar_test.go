@@ -143,7 +143,7 @@ func TestAttemptsStayMeasurableAcrossAMethodChange(t *testing.T) {
 
 	// Re-grading the set brings the three runs to today's method; the attempt is measured: the
 	// brand went from named in none of the 24 answers before to all 36 after.
-	rep, err := a.Regrade(ctx, "s", o.RegradeSinceDays)
+	rep, err := a.Regrade(ctx, "s", o.RegradeSinceDays, false)
 	if err != nil || len(rep.Regraded) != 3 || rep.Current != 2 {
 		t.Fatalf("regrade: %+v %v", rep, err)
 	}

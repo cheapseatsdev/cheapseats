@@ -65,7 +65,7 @@ func TestTrendsTakeRegradedRunsAsTheNewMethod(t *testing.T) {
 	}
 
 	// The dry run counts answers and grades nothing.
-	p, err := a.PlanRegrade(ctx, "s", 0)
+	p, err := a.PlanRegrade(ctx, "s", 0, false)
 	if err != nil || len(p.Runs) != 3 || p.Answers != 6 || p.Current != 1 || p.CurrentAnswers != 2 || p.EstimatedUSD <= 0 {
 		t.Fatalf("plan: %+v %v", p, err)
 	}
@@ -75,7 +75,7 @@ func TestTrendsTakeRegradedRunsAsTheNewMethod(t *testing.T) {
 
 	// Re-grade the two most recent old runs, one by one.
 	for _, id := range []string{"r-2", "r-3"} {
-		rep, err := a.Regrade(ctx, id, 0)
+		rep, err := a.Regrade(ctx, id, 0, false)
 		if err != nil || len(rep.Regraded) != 1 || rep.Answers != 2 {
 			t.Fatalf("%s: %+v %v", id, rep, err)
 		}

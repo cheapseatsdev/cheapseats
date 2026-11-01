@@ -1110,7 +1110,7 @@ func (s *Server) regradePage(w http.ResponseWriter, r *http.Request) {
 		opts = append(opts, filterOption{Label: label, On: d == days, Href: "?" + q.Encode()})
 	}
 	data := map[string]any{"Set": st, "Since": days, "Options": opts, "Busy": s.App.Regrading(st.ID), "Started": r.URL.Query().Get("started") != "", "Spend": s.spend(r.Context())}
-	if p, err := s.App.PlanRegrade(r.Context(), st.ID, days); err != nil {
+	if p, err := s.App.PlanRegrade(r.Context(), st.ID, days, false); err != nil {
 		data["Err"] = err.Error()
 	} else {
 		data["Plan"] = p
@@ -1125,7 +1125,7 @@ func (s *Server) regradeForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	days := regradeDays(r.FormValue("since"))
-	if _, err := s.App.StartRegrade(id, days); err != nil {
+	if _, err := s.App.StartRegrade(id, days, false); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
