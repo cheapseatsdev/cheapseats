@@ -24,7 +24,7 @@ of (under 10 characters), or in which no item has a usable title, is a failed an
 an empty one: the run records the reason as its analysis error, and a rebuild keeps the analysis it
 already had. Retrying usually gives a normal result.
 
-Current-page reads use the audit fetcher's public-address guard, robots policy and daily cache.
+Current-page reads use the audit fetcher's public-address guard and robots policy. They fetch fresh rather than from the daily cache, so each read can say whether it was cut ([why](analysis.md#why-verification-reads-pages-fresh)).
 Optional rendered-content fallback follows the existing Exa configuration and accounting.
 Generation and verification use the configured analyst and admission budget. Stored checks
 retain source quotes and reasons. Reads are evidence, not proof of future recommendations.

@@ -113,19 +113,18 @@ const (
 // fetchText is a page's visible text, from today's cache or fetched; skipped says why there's none.
 // A shell or a challenge is read through o.Reader when there is one, and via says so ("exa").
 // cut says the text may stop short of the page: the response passed MaxBody, or the text passed
-// maxText. A cached row written before cut was recorded (NULL) can't say, so it reads as cut.
+// maxText. The day cache doesn't record it, so text read from the cache reads as cut.
 func fetchText(ctx context.Context, o CiteOptions, robots *robotsCache, u, day string) (status int, skipped, text, via string, cut bool) {
 	cached := false
 	if o.DB != nil {
-		var c sql.NullBool
-		cached = o.DB.QueryRowContext(ctx, `SELECT status, error, text, cut FROM page_fetches WHERE url=? AND day=?`, u, day).Scan(&status, &skipped, &text, &c) == nil
-		cut = !c.Valid || c.Bool
+		cached = o.DB.QueryRowContext(ctx, `SELECT status, error, text FROM page_fetches WHERE url=? AND day=?`, u, day).Scan(&status, &skipped, &text) == nil
+		cut = cached
 	}
 	if !cached {
 		status, skipped, text, cut = fetchNow(ctx, o.Fetcher, robots, u)
 		if o.DB != nil && ctx.Err() == nil {
-			o.DB.ExecContext(ctx, `INSERT OR REPLACE INTO page_fetches (url, day, status, error, text, fetched_at, cut) VALUES (?,?,?,?,?,?,?)`,
-				u, day, status, skipped, text, time.Now().UTC().Format(time.RFC3339), cut)
+			o.DB.ExecContext(ctx, `INSERT OR REPLACE INTO page_fetches (url, day, status, error, text, fetched_at) VALUES (?,?,?,?,?,?)`,
+				u, day, status, skipped, text, time.Now().UTC().Format(time.RFC3339))
 		}
 	}
 	switch skipped {

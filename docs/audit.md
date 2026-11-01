@@ -85,8 +85,7 @@ Also on the **Site audit** page ("Check citations", for any finished run),
 
 Third-party pages are fetched most-cited first, then most-returned in searches, where robots.txt
 allows `CheapSeats-Audit`. HTTP readings are cached per URL and UTC day for 30 days; matching uses
-at most 200,000 bytes of visible text. Each cached reading records whether it was cut (the body
-passed 2 MiB or the text passed 200,000 bytes), which the analyst's verification uses. Whole-word, case-insensitive matches find the brand or
+at most 200,000 bytes of visible text. Whole-word, case-insensitive matches find the brand or
 aliases and the set's competitors. A page naming competitors but not the brand is **outreach**.
 This is a page-content lead, not proof the assistant read the full page or an outreach success
 prediction. A short alias does not match inside another word; a common-word name can still match

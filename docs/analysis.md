@@ -18,7 +18,7 @@ The analyst also receives the audience, category and prompt-set description. A v
 
 The first analyst call reads graded results with raw answer excerpts and result IDs. It keeps search queries, returned results, fetched URLs and citations distinct. It suggests at most eight candidates and can instead return investigations or findings. The limit is in the prompt rather than the output schema, which the Claude API can't constrain by list length; if the analyst returns more, the eight best ranked are kept. Each candidate must earn its place with evidence, a bounded read-only check naming the artifact and specific unknown, and a concrete business decision that the answer could change. Weak ideas are omitted with a short explanation; they do not become research work by default.
 
-Before a candidate becomes work, the app's reader checks a bounded shortlist of current targets and brand pages. Analysis requests at most 12 pages and supplies them to a separate verification call: at most 30,000 characters of each candidate's target and at most 12,000 characters of each other page. A page is marked truncated when it was cut to that limit, or when the reader stopped short of it: the response passed the 2 MiB read limit, or its visible text passed 200,000 bytes. A page from the day's fetch cache that predates this record reads as truncated. Page text goes to the configured analyst provider as evidence. A failed, blocked or empty read remains unknown.
+Before a candidate becomes work, the app's reader checks a bounded shortlist of current targets and brand pages. Analysis requests at most 12 pages and supplies them to a separate verification call: at most 30,000 characters of each candidate's target and at most 12,000 characters of each other page. A page is marked truncated when it was cut to that limit, or when the reader stopped short of it: the response passed the 2 MiB read limit, or its visible text passed 200,000 bytes. Verification reads each page fresh rather than from the citation check's day cache, which doesn't record whether a reading was cut; a page read through the optional Exa reader is marked truncated when its text reached the 200,000-byte cap. Page text goes to the configured analyst provider as evidence. A failed, blocked or empty read remains unknown.
 
 The verification checks:
 
@@ -32,6 +32,12 @@ The verification checks:
 | Completion | The team can complete and check the work without requiring a future recommendation or another publisher's acceptance |
 
 Each passing check needs a source, an exact quote and a reason specific to the candidate. The app checks that the source was actually supplied and that its quote occurs in that source. Existing-page and outreach changes require a readable current target. A quote cannot show that something is missing, so a remaining change passes only on a page supplied whole: the app rejects a remaining-change check whose source is truncated, and that candidate stays an investigation. For a product candidate, which may cite any supplied page, the page it quotes must be whole, and the reviewer is told that nothing a truncated page about the feature omits counts as missing. An excerpt can still show existing work. The strategy check must cite the advisory brief; a product change must quote an explicit goal, rather than general positioning or a boundary. A new-page proposal stays an investigation until the relevant existing-content inventory has been checked; a few sampled pages cannot establish that no equivalent content exists.
+
+### Why verification reads pages fresh
+
+- The alternative was to record whether each reading was cut in a `cut` column on `page_fetches`, the day cache. That is a schema 20 migration, and an older build refuses an upgraded database, so it breaks rollback.
+- Fresh reads avoid a stored-format change for a feature that is still being measured. They cost at most 12 extra page fetches per analysis.
+- Revisit this if the volume or latency of verification fetches becomes a problem.
 
 These checks support an editorial decision; they do not prove that a proposed change will improve visibility. A verifier can still misinterpret quoted evidence. Inspect its reasons before taking a consequential action.
 

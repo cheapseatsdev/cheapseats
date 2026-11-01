@@ -8,11 +8,17 @@ import (
 )
 
 // ReadCurrent supplies current page evidence to the adviser through the same guarded
-// fetcher, robots policy, daily cache and optional rendered reader as citation checks.
+// fetcher, robots policy and optional rendered reader as citation checks.
 // An unreadable page is unknown, never evidence that content does not exist. cut says the text
 // may stop short of the page (a response or its text passed the read limits), so what it lacks
 // may be on the page.
+//
+// It always fetches fresh, ignoring o.DB: the day cache (page_fetches) doesn't record whether a
+// reading was cut, and recording it would be a stored-format change (docs/analysis.md, "Why
+// verification reads pages fresh"). A Reader's own cache keeps text cut at maxText, so its cut
+// is still seen.
 func ReadCurrent(ctx context.Context, u string, o CiteOptions) (text string, cut bool, err error) {
+	o.DB = nil
 	if o.Fetcher == nil {
 		o.Fetcher = NewFetcher(nil, 4)
 	}
