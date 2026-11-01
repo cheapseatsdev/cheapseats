@@ -54,6 +54,6 @@ expose all three views. `/api/quick-wins` and `get_quick_wins` retain their acti
 return only verified actions. `cheapseats next-steps <run-id>` prints the three views; `fixes`
 remains an alias. Run reports show their own analysis; the hub uses the latest completed
 analysis of each active set. When the latest finished run's analysis failed, the hub, the
-dashboard and `/api/next-steps` say so, with the provider's request id, and say which analysis
+dashboard, `/api/next-steps`, `get_next_steps` and, beside its list, `get_quick_wins` say so, with the provider's request id, and say which analysis
 they show instead: the run's own earlier one, its candidates as unverified investigations, or an
 older run's ([reading a run](reading-a-run.md#next-steps)).

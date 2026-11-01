@@ -149,7 +149,7 @@ func (s *Server) mcpHandler() http.Handler {
 			}
 			return s.selectNextSteps(steps, app.QuickWinFilter{Set: a.Set, Status: a.Status, Priority: a.Priority}, a.Kind, a.Limit, a.Brief), nil
 		})
-	addTool(srv, "get_quick_wins", "Compatibility view of verified actions only, from the latest analysis of every prompt set. Use get_next_steps for investigations and market findings. Each action has a ready-to-paste prompt for Claude Code, its status (open, proposed or accepted; dismissed fixes only when asked for) and the work submitted for it or earlier for the same page. A page that several sets' lists ask for is one card, with the other sets' fixes under also_in (each with the run_id and rank mark_fix takes).",
+	addTool(srv, "get_quick_wins", "Compatibility view of verified actions only, from the latest analysis of every prompt set. Use get_next_steps for investigations and market findings. Each action has a ready-to-paste prompt for Claude Code, its status (open, proposed or accepted; dismissed fixes only when asked for) and the work submitted for it or earlier for the same page. A page that several sets' lists ask for is one card, with the other sets' fixes under also_in (each with the run_id and rank mark_fix takes). When a set's latest analysis failed, a second text block holds analysis_errors, as get_next_steps gives them: the error and which analysis the list shows instead.",
 		func(ctx context.Context, a struct {
 			Gap      string `json:"gap,omitempty" jsonschema:"documentation, positioning, third-party or product"`
 			Set      string `json:"set,omitempty" jsonschema:"only fixes from this prompt set"`
@@ -167,7 +167,15 @@ func (s *Server) mcpHandler() http.Handler {
 			if a.Limit > 0 && len(out) > a.Limit {
 				out = out[:a.Limit]
 			}
-			return actionHandoffs(out, a.Brief), nil
+			steps, err := s.App.NextSteps(ctx)
+			if err != nil {
+				return nil, err
+			}
+			failed := s.selectNextSteps(steps, app.QuickWinFilter{Set: a.Set}, "", 0, true).Errors
+			if len(failed) == 0 {
+				return actionHandoffs(out, a.Brief), nil
+			}
+			return besideList{actionHandoffs(out, a.Brief), map[string]any{"analysis_errors": failed}}, nil
 		})
 	addTool(srv, "mark_fix", "Record work submitted for a fix: the commit or pull request, as proposed (open PR) or accepted (merged). The fix then leaves the open actions; a later fix for the same page stays open and shows this attempt and its outcome. Or dismiss a fix the team won't do: state dismissed, no url, and the reason as the note. The analyst is told every dismissal's reason and stops proposing fixes that rest on it.",
 		func(ctx context.Context, a struct {
@@ -604,15 +612,31 @@ func wrap[In any](h func(context.Context, In) (any, error)) mcp.ToolHandlerFor[I
 		if out == nil {
 			return nil, nil, errors.New("no result")
 		}
+		var beside []mcp.Content
+		if bl, ok := out.(besideList); ok {
+			out = bl.list
+			b, err := json.Marshal(bl.beside)
+			if err != nil {
+				return nil, nil, err
+			}
+			beside = append(beside, &mcp.TextContent{Text: string(b)})
+		}
 		b, err := json.Marshal(out)
 		if err != nil {
 			return nil, nil, err
 		}
 		if len(b) == 0 || b[0] != '{' {
-			return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(b)}}}, nil, nil
+			return &mcp.CallToolResult{Content: append([]mcp.Content{&mcp.TextContent{Text: string(b)}}, beside...)}, nil, nil
 		}
 		return nil, out, nil
 	}
+}
+
+// besideList is a list result with an object beside it, in a second text block, so the list
+// keeps the shape clients already read. Only a list takes one.
+type besideList struct {
+	list   any
+	beside any
 }
 
 // runDigest is get_run's answer: small enough to read in one go.
@@ -739,11 +763,14 @@ func runDigest(d *RunData) any {
 		Fixes          []analysis.Fix          `json:"fixes"` // compatibility: verified actions, without implementation prompts
 		Investigations []app.NextInvestigation `json:"investigations"`
 		MarketFindings []app.NextFinding       `json:"market_findings"`
-		Insights       string                  `json:"insights"`
-		Opinion        opinion.Report          `json:"opinion"`
-		SecondOpinion  *app.Agreement          `json:"second_opinion,omitempty"`
-		Misstatements  *app.FactReport         `json:"misstatements,omitempty"` // the fact check, when the run was checked
-		Prompts        []prompt                `json:"prompts"`
+		// The run's own analysis error, with which analysis the lists above are (shown), when
+		// its latest build failed.
+		AnalysisError *app.AnalysisError `json:"analysis_error,omitempty"`
+		Insights      string             `json:"insights"`
+		Opinion       opinion.Report     `json:"opinion"`
+		SecondOpinion *app.Agreement     `json:"second_opinion,omitempty"`
+		Misstatements *app.FactReport    `json:"misstatements,omitempty"` // the fact check, when the run was checked
+		Prompts       []prompt           `json:"prompts"`
 		// The neutral retrieval baseline's host table, present only when [exa] searched the run's
 		// prompts: per host, the prompts a neutral index ranks it for against the prompts the
 		// assistants found it for, and the reading (content, query, both).
@@ -751,7 +778,7 @@ func runDigest(d *RunData) any {
 
 		Opportunities []report.Opportunity `json:"opportunities"`
 	}{&r, sum.Overall, sum.Slices, sum.Unbranded, sum.BrandedPrompts, sum.BrandRank(), voice, head(sum.HeadToHead, 10), objections,
-		sum.Classes, sum.PageTypes, head(sum.Hosts, 10), head(sum.Outreach, 10), prospects, head(d.CitedChanges, 10), uncited, pages, fixes, d.Investigations, d.MarketFindings, d.Insights, op, second, d.Misstatements, prompts, neutral, head(sum.Opportunities, 10)}
+		sum.Classes, sum.PageTypes, head(sum.Hosts, 10), head(sum.Outreach, 10), prospects, head(d.CitedChanges, 10), uncited, pages, fixes, d.Investigations, d.MarketFindings, d.AnalysisError, d.Insights, op, second, d.Misstatements, prompts, neutral, head(sum.Opportunities, 10)}
 }
 
 // auditDigest is audit_sites' answer: each site in a line or two, and the findings without info

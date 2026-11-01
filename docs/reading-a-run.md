@@ -38,10 +38,16 @@ failed build never replaces an analysis the run already has, so `shown` is one o
 - `older-run`: an older run's analysis; the failed run has none.
 - `none`: no analysis of the set is available, and `shown_run_id` is absent.
 
+`verification_failed` is true when the shown analysis is itself a failed verification's
+candidates, unverified: always with `unverified`, and with `older-run` when that run's
+verification failed too, which the message then says.
+
 `set` filters these too; `kind` does not hide them. The Next steps page and the dashboard show
-the same message above the advice. A run report, `GET /api/runs/{id}` and
-`/api/runs/{id}/fixes` give the run's own error the same way, in `analysis_error`, and the
-report shows it with the request id instead of the provider's raw reply.
+the same message above the advice. A run report, `GET /api/runs/{id}`,
+`/api/runs/{id}/fixes` and MCP `get_run` give the run's own error the same way, in
+`analysis_error`, and the report shows it with the request id instead of the provider's raw
+reply. MCP `get_quick_wins` keeps its list and, when a set it covers has an error, adds a second
+text block holding `analysis_errors`.
 
 `/quick-wins` remains a route alias. `/api/quick-wins` and MCP `get_quick_wins` remain
 compatibility views of verified actions only. They do not expose unverified historical suggestions

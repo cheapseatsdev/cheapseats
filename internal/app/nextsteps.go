@@ -31,6 +31,9 @@ type AnalysisError struct {
 	RunID      string `json:"run_id"`
 	ShownRunID string `json:"shown_run_id,omitempty"`
 	Shown      string `json:"shown"`
+	// The shown analysis is itself a failed verification's, its candidates unverified
+	// investigations: always for ShownUnverified, and for ShownOlderRun when that run's failed too.
+	VerificationFailed bool `json:"verification_failed,omitempty"`
 	AnalysisFailure
 }
 
@@ -68,11 +71,22 @@ func (e AnalysisError) Showing() string {
 	case ShownUnverified:
 		return "Its candidates are shown as investigations, unverified: the run has no verified analysis to show instead."
 	case ShownOlderRun:
-		return "Showing the analysis from run " + e.ShownRunID + " instead."
+		return "Showing the analysis from run " + e.ShownRunID + " instead." + e.olderUnverified()
 	default:
 		return "There is no earlier analysis to show."
 	}
 }
+
+// olderUnverified completes the older-run sentence when that run's verification failed too.
+func (e AnalysisError) olderUnverified() string {
+	if e.Shown != ShownOlderRun || !e.VerificationFailed {
+		return ""
+	}
+	return " That run's verification failed too, so its candidates are shown as investigations, unverified."
+}
+
+// OlderUnverified is olderUnverified for templates, which link the run themselves.
+func (e AnalysisError) OlderUnverified() string { return e.olderUnverified() }
 
 // AnalysisFailure is a stored analysis error made readable: a provider's JSON reply becomes its
 // message, with the request id kept for support.
@@ -196,7 +210,7 @@ func (a *App) latestAnalysisError(ctx context.Context, s sets.Set, shownRun stri
 	if err != nil {
 		return nil, err
 	}
-	return &AnalysisError{SetID: s.ID, SetName: s.Name, RunID: id, ShownRunID: shownRun, Shown: shownBeside(id, shownRun, shown), AnalysisFailure: ReadAnalysisError(stored.String)}, nil
+	return &AnalysisError{SetID: s.ID, SetName: s.Name, RunID: id, ShownRunID: shownRun, Shown: shownBeside(id, shownRun, shown), VerificationFailed: shownRun != "" && shown.VerificationFailed, AnalysisFailure: ReadAnalysisError(stored.String)}, nil
 }
 
 // RunNextSteps preserves the historical run's prompt numbering and work history.
@@ -219,7 +233,7 @@ func (a *App) RunNextSteps(ctx context.Context, id string) (NextSteps, error) {
 		if body.Valid {
 			shown = id
 		}
-		out.Errors = append(out.Errors, AnalysisError{SetID: r.SetID, SetName: r.Snapshot.Set.Name, RunID: id, ShownRunID: shown, Shown: shownBeside(id, shown, an), AnalysisFailure: ReadAnalysisError(failed.String)})
+		out.Errors = append(out.Errors, AnalysisError{SetID: r.SetID, SetName: r.Snapshot.Set.Name, RunID: id, ShownRunID: shown, Shown: shownBeside(id, shown, an), VerificationFailed: shown != "" && an.VerificationFailed, AnalysisFailure: ReadAnalysisError(failed.String)})
 	}
 	if !body.Valid {
 		return out, nil
