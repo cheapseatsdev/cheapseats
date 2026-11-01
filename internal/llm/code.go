@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"go/ast"
 	"go/parser"
-	"go/scanner"
 	"go/token"
 	"hash"
+	"io"
 	"io/fs"
+	"reflect"
 	"sort"
 	"strings"
 )
@@ -48,12 +49,12 @@ func GoFiles(fsys fs.FS) map[string][]byte {
 	return files
 }
 
-// CodeDigest is the SHA-256 of Go code's tokens: comments and layout (the semicolons put in at line
-// ends among it) don't count, so it changes with what the code does and not with how it's written
-// up. files are one package's files, by name. Without names, all of them count. With names, the roots, each of which must be
-// a top-level declaration (a func, a type, a var or const, or a method as Type.Method), count with
-// every declaration in the package they use, directly or not: whatever a root's code names, and a
-// type's methods, since encoding/json and the like call those unnamed.
+// CodeDigest is the SHA-256 of Go code's syntax trees (hashNode): comments, semicolons and layout
+// aren't in a tree, so it changes with what the code does and not with how it's written up. files
+// are one package's files, by name. Without names, all of them count. With names, the roots, each
+// of which must be a top-level declaration (a func, a type, a var or const, or a method as
+// Type.Method), count with every declaration in the package they use, directly or not: whatever a
+// root's code names, and a type's methods, since encoding/json and the like call those unnamed.
 func CodeDigest(files map[string][]byte, names ...string) (string, error) {
 	paths := make([]string, 0, len(files))
 	for p := range files {
@@ -61,27 +62,25 @@ func CodeDigest(files map[string][]byte, names ...string) (string, error) {
 	}
 	sort.Strings(paths)
 	h := sha256.New()
-	if len(names) == 0 {
-		for _, p := range paths {
-			fmt.Fprintf(h, "%s\x00", p)
-			hashTokens(h, files[p])
-		}
-		return fmt.Sprintf("%x", h.Sum(nil)), nil
-	}
 	fset := token.NewFileSet()
-	decls := map[string]codeDecl{}
+	decls := map[string]ast.Node{}
 	methods := map[string][]string{} // a type's methods, as Type.Method
 	for _, p := range paths {
-		src := files[p]
-		f, err := parser.ParseFile(fset, p, src, parser.SkipObjectResolution)
+		f, err := parser.ParseFile(fset, p, files[p], parser.SkipObjectResolution)
 		if err != nil {
 			return "", err
+		}
+		if len(names) == 0 {
+			fmt.Fprintf(h, "%s\x00", p)
+			hashNode(h, reflect.ValueOf(f.Name))
+			hashNode(h, reflect.ValueOf(f.Decls))
+			continue
 		}
 		for _, d := range f.Decls {
 			switch d := d.(type) {
 			case *ast.FuncDecl:
 				name, recv := funcName(d)
-				decls[name] = codeDecl{src, fset, d.Type.Pos(), d.End(), d}
+				decls[name] = d
 				if recv != "" {
 					methods[recv] = append(methods[recv], name)
 				}
@@ -89,13 +88,13 @@ func CodeDigest(files map[string][]byte, names ...string) (string, error) {
 				for _, s := range d.Specs {
 					switch s := s.(type) {
 					case *ast.TypeSpec:
-						decls[s.Name.Name] = codeDecl{src, fset, s.Pos(), s.End(), s}
+						decls[s.Name.Name] = s
 					case *ast.ValueSpec:
 						// A const in a group can take its type and value from the one above it
 						// (iota), so the group counts as one.
-						c := codeDecl{src, fset, s.Pos(), s.End(), s}
+						var c ast.Node = s
 						if d.Tok == token.CONST && d.Lparen.IsValid() {
-							c = codeDecl{src, fset, d.Pos(), d.End(), d}
+							c = d
 						}
 						for _, n := range s.Names {
 							if n.Name != "_" {
@@ -106,6 +105,9 @@ func CodeDigest(files map[string][]byte, names ...string) (string, error) {
 				}
 			}
 		}
+	}
+	if len(names) == 0 {
+		return fmt.Sprintf("%x", h.Sum(nil)), nil
 	}
 	seen := map[string]bool{}
 	queue := []string{}
@@ -124,7 +126,7 @@ func CodeDigest(files map[string][]byte, names ...string) (string, error) {
 	for len(queue) > 0 {
 		n := queue[0]
 		queue = queue[1:]
-		ast.Inspect(decls[n].node, func(x ast.Node) bool {
+		ast.Inspect(decls[n], func(x ast.Node) bool {
 			if id, ok := x.(*ast.Ident); ok {
 				add(id.Name)
 			}
@@ -140,19 +142,10 @@ func CodeDigest(files map[string][]byte, names ...string) (string, error) {
 	}
 	sort.Strings(used)
 	for _, n := range used {
-		d := decls[n]
 		fmt.Fprintf(h, "%s\x00", n)
-		hashTokens(h, d.src[d.fset.Position(d.start).Offset:d.fset.Position(d.end).Offset])
+		hashNode(h, reflect.ValueOf(decls[n]))
 	}
 	return fmt.Sprintf("%x", h.Sum(nil)), nil
-}
-
-// codeDecl is a top-level declaration: its source span and its syntax.
-type codeDecl struct {
-	src        []byte
-	fset       *token.FileSet
-	start, end token.Pos
-	node       ast.Node
 }
 
 // funcName is a func's name, or Type.Method and Type for a method.
@@ -176,20 +169,56 @@ func funcName(d *ast.FuncDecl) (name, recv string) {
 	return d.Name.Name, ""
 }
 
-// hashTokens writes src's tokens to h. The semicolons the scanner puts in at line ends (reported
-// with the literal "\n") are layout and left out, so a one-line func and the same func split over
-// lines are the same. A semicolon written in the source (literal ";") counts: it can change what
-// code means, as in switch f() {} and switch f(); {}.
-func hashTokens(h hash.Hash, src []byte) {
-	var s scanner.Scanner
-	s.Init(token.NewFileSet().AddFile("", -1, len(src)), src, nil, 0) // comments skipped
-	for {
-		_, tok, lit := s.Scan()
-		if tok == token.EOF {
+// hashNode writes a canonical form of a syntax tree to h: each node's type, then its fields in
+// declaration order, with a marker for a nil child (so s[1:] and s[:1], or a for loop's init and
+// its post statement, differ), identifiers' names, literals' kinds
+// and values (a struct field's tag among them) and operators. Positions are left out but for
+// whether one is there, since a few things are written only as one: the "=" of type A = B, the
+// "..." of f(xs...). Comments and resolved objects are left out. Layout and semicolons, written or
+// put in at line ends, never reach the tree, so they don't count.
+func hashNode(h hash.Hash, v reflect.Value) {
+	switch v.Kind() {
+	case reflect.Interface, reflect.Pointer:
+		if v.IsNil() {
+			io.WriteString(h, "nil\x00")
 			return
 		}
-		if tok != token.SEMICOLON || lit == ";" {
-			fmt.Fprintf(h, "%s %s\x00", tok, lit)
+		hashNode(h, v.Elem())
+	case reflect.Slice:
+		fmt.Fprintf(h, "[%d\x00", v.Len())
+		for i := 0; i < v.Len(); i++ {
+			hashNode(h, v.Index(i))
 		}
+		io.WriteString(h, "]\x00")
+	case reflect.Struct:
+		fmt.Fprintf(h, "%s{\x00", v.Type().Name())
+		for i := 0; i < v.NumField(); i++ {
+			f := v.Type().Field(i)
+			switch f.Type {
+			case posType:
+				fmt.Fprintf(h, "%t\x00", v.Field(i).Interface().(token.Pos).IsValid())
+			case commentType, objectType, scopeType:
+			default:
+				hashNode(h, v.Field(i))
+			}
+		}
+		io.WriteString(h, "}\x00")
+	case reflect.String:
+		fmt.Fprintf(h, "%q\x00", v.String())
+	case reflect.Int:
+		if t, ok := v.Interface().(token.Token); ok {
+			fmt.Fprintf(h, "%s\x00", t)
+		} else {
+			fmt.Fprintf(h, "%d\x00", v.Int())
+		}
+	default: // bool, ast.ChanDir
+		fmt.Fprintf(h, "%v\x00", v.Interface())
 	}
 }
+
+var (
+	posType     = reflect.TypeOf(token.NoPos)
+	commentType = reflect.TypeOf((*ast.CommentGroup)(nil))
+	objectType  = reflect.TypeOf((*ast.Object)(nil))
+	scopeType   = reflect.TypeOf((*ast.Scope)(nil))
+)

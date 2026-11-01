@@ -1,6 +1,9 @@
 package llm
 
 import (
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"strings"
 	"testing"
 )
@@ -104,12 +107,55 @@ func TestCodeDigestFollowsGenericReceivers(t *testing.T) {
 	}
 }
 
-// A semicolon written in the source can change what code does, so it counts; only those the
-// scanner puts in at line ends are layout.
-func TestCodeDigestKeepsWrittenSemicolons(t *testing.T) {
-	tag := "package p\n\nfunc f() bool { return false }\n\nfunc F() int {\n\tswitch f() {\n\tcase false:\n\t\treturn 1\n\t}\n\treturn 0\n}\n"
-	init := strings.Replace(tag, "switch f() {", "switch f(); {", 1)
-	if codeTestDigest(t, tag, "F") == codeTestDigest(t, init, "F") || codeTestDigest(t, tag) == codeTestDigest(t, init) {
-		t.Errorf("switch f() {} and switch f(); {} hash the same")
+// The digest is of the syntax tree, so what gofmt changes (semicolons it removes or a for header
+// it splits) doesn't count, and code whose tree differs does even where its tokens barely do.
+func TestCodeDigestFollowsTheTree(t *testing.T) {
+	fn := func(body string) string {
+		return "package p\n\nvar x bool\n\nfunc a()        {}\nfunc b()        {}\nfunc f() bool   { return x }\nfunc g(...int)  {}\n\nfunc F() {\n" + body + "\n}\n"
+	}
+	for name, pair := range map[string][2]string{
+		"if x { a(); b() } and the same over lines": {"if x { a(); b() }", "if x {\n\ta()\n\tb()\n}"},
+		"for ; x; {} and for x {}":                  {"for ; x; {\n}", "for x {\n}"},
+		"a three-clause for on one line and split":  {"for i := 0; i < 3; i++ {\n\ta()\n}", "for i := 0;\n\ti < 3;\n\ti++ {\n\ta()\n}"},
+	} {
+		if codeTestDigest(t, fn(pair[0]), "F") != codeTestDigest(t, fn(pair[1]), "F") || codeTestDigest(t, fn(pair[0])) != codeTestDigest(t, fn(pair[1])) {
+			t.Errorf("%s hash differently", name)
+		}
+	}
+	for name, pair := range map[string][2]string{
+		// f() is the tag in the first and a statement before a tagless switch in the second.
+		"switch f() {} and switch f(); {}": {"switch f() {\ncase false:\n\ta()\n}", "switch f(); {\ncase false:\n\ta()\n}"},
+		// A newline after f() puts a semicolon in: the second is switch f(); {}.
+		"switch f() { and switch f() then { on the next line": {"switch f() {\ncase false:\n\ta()\n}", "switch f()\n{\ncase false:\n\ta()\n}"},
+		"g(xs...) and g(xs)": {"xs := []int{}\ng(xs...)", "xs := []int{}\ng(xs)"},
+		// The same nodes in different slots: only the nil children's markers tell these apart.
+		"s[1:] and s[:1]":                  {"s := []int{}\n_ = s[1:]", "s := []int{}\n_ = s[:1]"},
+		"for a(); ; {} and for ; ; a() {}": {"for a(); ; {\n}", "for ; ; a() {\n}"},
+	} {
+		if codeTestDigest(t, fn(pair[0]), "F") == codeTestDigest(t, fn(pair[1]), "F") || codeTestDigest(t, fn(pair[0])) == codeTestDigest(t, fn(pair[1])) {
+			t.Errorf("%s hash the same", name)
+		}
+	}
+	alias, defined := "package p\n\ntype A = int\n", "package p\n\ntype A int\n"
+	if codeTestDigest(t, alias, "A") == codeTestDigest(t, defined, "A") {
+		t.Errorf("type A = int and type A int hash the same")
+	}
+}
+
+// What the two switches parse to, so TestCodeDigestFollowsTheTree tests the difference it means to.
+func TestSwitchFormsParseDifferently(t *testing.T) {
+	for src, wantInit := range map[string]bool{
+		"package p\n\nfunc F() {\n\tswitch f() {\n\t}\n}\n":    false,
+		"package p\n\nfunc F() {\n\tswitch f(); {\n\t}\n}\n":   true,
+		"package p\n\nfunc F() {\n\tswitch f()\n\t{\n\t}\n}\n": true,
+	} {
+		f, err := parser.ParseFile(token.NewFileSet(), "p.go", src, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sw := f.Decls[0].(*ast.FuncDecl).Body.List[0].(*ast.SwitchStmt)
+		if (sw.Init != nil) != wantInit || (sw.Tag != nil) == wantInit {
+			t.Errorf("%q: Init %v, Tag %v", src, sw.Init, sw.Tag)
+		}
 	}
 }

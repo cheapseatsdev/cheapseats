@@ -11,7 +11,7 @@ import (
 
 // evaluatorPinnedDigest is EvaluatorDigest now. When it changes, every stored evaluation check,
 // check batch and experiment reads as stale and can't be resumed, so a change must be meant.
-const evaluatorPinnedDigest = "2fd6e8f8b11fbf631df644e398803471f68ea56b1941f1f0606bb19fb159cb02"
+const evaluatorPinnedDigest = "0a058d70fc31bb664e199724adc35cb943e3ddfdd8febe688e00d5622f599d14"
 
 // The digest follows the grader's prompt, its schema as sent, its user message, the code in this
 // package, the shared code that sends a structured request and reads the reply, and the sets code
@@ -76,19 +76,18 @@ func TestGoldenRecordDecodesThroughCoveredTypes(t *testing.T) {
 			return
 		}
 		seen[typ] = true
-		switch typ.Kind() {
-		case reflect.Pointer, reflect.Slice, reflect.Array:
-			walk(typ.Elem())
-			return
-		case reflect.Map:
-			walk(typ.Key())
-			walk(typ.Elem())
-			return
-		}
+		// A named type is checked before anything inside it: a named slice or map from another
+		// package (type Aliases []string, with its own UnmarshalJSON) decodes through its code.
 		if p := typ.PkgPath(); p != "" && p != gradePkg && !covered[p+"."+typ.Name()] {
 			t.Errorf("GoldenRecord decodes through %s, which the evaluator digest doesn't cover", typ)
 		}
-		if typ.Kind() == reflect.Struct {
+		switch typ.Kind() {
+		case reflect.Pointer, reflect.Slice, reflect.Array:
+			walk(typ.Elem())
+		case reflect.Map:
+			walk(typ.Key())
+			walk(typ.Elem())
+		case reflect.Struct:
 			for i := 0; i < typ.NumField(); i++ {
 				walk(typ.Field(i).Type)
 			}
