@@ -1,6 +1,8 @@
 package report
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/cheapseatsdev/cheapseats/internal/answer"
@@ -97,6 +99,58 @@ func TestSitesIncludeOnesNoAnswerReached(t *testing.T) {
 	for _, p := range s.Pages {
 		if p.URL == "https://docs.acme.com/a" && (p.SiteKind != "docs" || !p.FirstParty) {
 			t.Errorf("page: %+v", p)
+		}
+	}
+}
+
+// An own page's credit counts each unbranded citing answer once: named by its verdict, recommended
+// only of the choice answers. A branded prompt names the brand trivially, so it is left out, and a
+// third-party page cited by the same answers gets nothing.
+func TestOwnPageCredit(t *testing.T) {
+	brand := config.Brand{Name: "Acme", Domains: []string{"acme.com"}}
+	ownCreditCites := func(urls ...string) *answer.Answer {
+		a := &answer.Answer{}
+		for _, u := range urls {
+			a.Citations = append(a.Citations, answer.Link{URL: u})
+		}
+		return a
+	}
+	const own, other = "https://acme.com/pricing", "https://review.example/best"
+	res := []run.Result{
+		{PromptIdx: 0, Prompt: "best tool for x", Track: answer.Search, Status: "done",
+			Grade: &grade.Grade{Verdict: grade.Absent}, Answer: ownCreditCites(own, other)},
+		{PromptIdx: 1, Prompt: "which tool for y", Track: answer.Search, Status: "done",
+			Grade: &grade.Grade{Verdict: grade.Recommended}, Answer: ownCreditCites(own, own, other)},
+		{PromptIdx: 2, Prompt: "how does z work", Info: true, Track: answer.Search, Status: "done",
+			Grade: &grade.Grade{Verdict: grade.Mentioned}, Answer: ownCreditCites(own, other)},
+		{PromptIdx: 3, Prompt: "is Acme good for x", Track: answer.Search, Status: "done",
+			Grade: &grade.Grade{Verdict: grade.Recommended}, Answer: ownCreditCites(own, other)},
+	}
+	s := Build(brand, res)
+	var ownPage, otherPage *Page
+	for i := range s.Pages {
+		switch s.Pages[i].URL {
+		case own:
+			ownPage = &s.Pages[i]
+		case other:
+			otherPage = &s.Pages[i]
+		}
+	}
+	if ownPage == nil || otherPage == nil {
+		t.Fatalf("pages = %+v", s.Pages)
+	}
+	if ownPage.Cited != 4 || ownPage.CitedUnbranded != 3 || ownPage.CitedNamed != 2 || ownPage.CitedChoice != 2 || ownPage.CitedRecommended != 1 {
+		t.Errorf("own page: cited %d, unbranded %d, named %d, choice %d, recommended %d; want 4, 3, 2, 2, 1",
+			ownPage.Cited, ownPage.CitedUnbranded, ownPage.CitedNamed, ownPage.CitedChoice, ownPage.CitedRecommended)
+	}
+	if otherPage.CitedUnbranded+otherPage.CitedNamed+otherPage.CitedChoice+otherPage.CitedRecommended != 0 {
+		t.Errorf("third-party page should get no credit counts: %+v", otherPage)
+	}
+	// Cited and never credited is the case this is for: get_run must say 0, not drop the key.
+	js, _ := json.Marshal(Page{FirstParty: true, CitedUnbranded: 3, CitedChoice: 2})
+	for _, w := range []string{`"cited_named":0`, `"cited_recommended":0`} {
+		if !strings.Contains(string(js), w) {
+			t.Errorf("an uncredited own page's JSON lacks %s: %s", w, js)
 		}
 	}
 }

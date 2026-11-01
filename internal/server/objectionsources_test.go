@@ -148,7 +148,7 @@ func TestObjectionSourcesReachEverySurface(t *testing.T) {
 	}
 
 	page := get("/runs/" + r.ID)
-	for _, w := range []string{"Pages behind it", `<a class="mono" href="` + own + `"`, "owned · ×3", "earned · ×1", "1 from memory"} {
+	for _, w := range []string{"Pages behind it", `<a class="mono" href="` + own + `"`, "owned · ×3", "earned · ×1", "1 from memory", "Named when cited", `<td class="num">3 of 3</td>`} { // prompts 0-2 are info, so no recommended count
 		if !strings.Contains(page, w) {
 			t.Errorf("run page lacks %q", w)
 		}
