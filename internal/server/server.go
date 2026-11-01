@@ -1149,7 +1149,11 @@ func (s *Server) rebuildFixesForm(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "complete idle run required", http.StatusConflict)
 		return
 	}
-	go s.App.BuildFixes(context.Background(), id)
+	go func() {
+		if err := s.App.BuildFixes(context.Background(), id); err != nil {
+			slog.Error("fix list", "run", id, "err", err)
+		}
+	}()
 	http.Redirect(w, r, "/runs/"+id+"#fixes", http.StatusSeeOther)
 }
 

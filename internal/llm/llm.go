@@ -12,10 +12,12 @@ import (
 	"github.com/cheapseatsdev/cheapseats/internal/bounded"
 	"github.com/cheapseatsdev/cheapseats/internal/config"
 	"github.com/cheapseatsdev/cheapseats/internal/redact"
+	"log/slog"
 	"math/rand/v2"
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -171,19 +173,81 @@ func Structured(ctx context.Context, model, system, user string, maxTokens int, 
 	if err != nil {
 		return nil, err
 	}
-	if sr := Str(resp["stop_reason"]); sr == "refusal" || sr == "max_tokens" {
-		return resp, fmt.Errorf("structured output stopped: %s", sr)
+	// Only a reply that ended on its own is a whole answer. refusal and max_tokens were the
+	// two checked; model_context_window_exceeded and pause_turn are stops too, and a stop
+	// reason added later is safer read as one than decoded. "" is a reply without the field.
+	// The error is stored (fixes_error) and an alert is keyed on its text, so it says only what
+	// stays the same when the failure repeats; the counts go to the log line.
+	switch sr := Str(resp["stop_reason"]); sr {
+	case "", "end_turn", "stop_sequence":
+	default:
+		slog.Warn("structured output stopped", "operation", operation(ctx), "reply", Reply(resp))
+		return resp, fmt.Errorf("structured output stopped: %s (%s)", sr, ReplyShape(resp))
 	}
+	if err := json.Unmarshal([]byte(ReplyText(resp)), out); err != nil {
+		slog.Warn("structured output undecodable", "operation", operation(ctx), "err", err, "reply", Reply(resp))
+		return resp, fmt.Errorf("decoding structured output: %w (%s)", err, ReplyShape(resp))
+	}
+	return resp, nil
+}
+
+// Operation is the label WithOperation gave ctx ("analysis/<run id>"), or "".
+func Operation(ctx context.Context) string { return operation(ctx) }
+
+// ReplyShape describes a Messages reply by what stays the same when it repeats: its stop
+// reason, content block types, and whether it had any text. Errors that are stored and alerted
+// on use it; Reply adds the counts, for a log line.
+func ReplyShape(resp map[string]any) string {
+	if resp == nil {
+		return "no reply"
+	}
+	sr := Str(resp["stop_reason"])
+	if sr == "" {
+		sr = "none"
+	}
+	var blocks []string
+	for _, b := range List(resp["content"]) {
+		blocks = append(blocks, Str(Map(b)["type"]))
+	}
+	text := "text present"
+	if strings.TrimSpace(ReplyText(resp)) == "" {
+		text = "no text"
+	}
+	return fmt.Sprintf("stop_reason %s, blocks [%s], %s", sr, strings.Join(blocks, " "), text)
+}
+
+// ReplyText is a Messages reply's text blocks joined, which Structured decodes. Thinking and
+// any other blocks are left out.
+func ReplyText(resp map[string]any) string {
 	text := ""
 	for _, b := range List(resp["content"]) {
 		if Str(Map(b)["type"]) == "text" {
 			text += Str(Map(b)["text"])
 		}
 	}
-	if err := json.Unmarshal([]byte(text), out); err != nil {
-		return resp, fmt.Errorf("decoding structured output: %w", err)
+	return text
+}
+
+// Reply describes a Messages reply for an error or a log line: its stop reason, input and
+// output tokens, content block types and the length of its text. An output that decodes but
+// says nothing can then be told apart: a short reply that ended on its own, one whose output
+// went to thinking, or a text block missing.
+func Reply(resp map[string]any) string {
+	if resp == nil {
+		return "no reply"
 	}
-	return resp, nil
+	u := Map(resp["usage"])
+	sr := Str(resp["stop_reason"])
+	if sr == "" {
+		sr = "none"
+	}
+	var blocks []string
+	for _, b := range List(resp["content"]) {
+		blocks = append(blocks, Str(Map(b)["type"]))
+	}
+	return fmt.Sprintf("stop_reason %s, %d input tokens, %d output tokens, blocks [%s], %d characters of text",
+		sr, Int(u["input_tokens"])+Int(u["cache_read_input_tokens"])+Int(u["cache_creation_input_tokens"]), Int(u["output_tokens"]),
+		strings.Join(blocks, " "), len([]rune(ReplyText(resp))))
 }
 
 // structuredBody is a Messages request for JSON matching schema; ProbeSchema sends the same shape.

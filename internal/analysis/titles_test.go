@@ -1,14 +1,20 @@
 package analysis
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/cheapseatsdev/cheapseats/internal/answer"
+	"github.com/cheapseatsdev/cheapseats/internal/config"
 	"github.com/cheapseatsdev/cheapseats/internal/grade"
+	"github.com/cheapseatsdev/cheapseats/internal/llm"
 	"github.com/cheapseatsdev/cheapseats/internal/run"
 )
 
@@ -84,6 +90,119 @@ func TestDegenerateAnalystOutputIsAnError(t *testing.T) {
 		if !errors.Is(err, ErrDegenerate) || !strings.Contains(err.Error(), c.want) || calls != 1 {
 			t.Errorf("%s: want %q before verification, got %v after %d calls", name, c.want, err, calls)
 		}
+	}
+}
+
+// fakeAnalyst serves each request the next of replies through the API path, and captures slog.
+func fakeAnalyst(t *testing.T, replies ...map[string]any) *bytes.Buffer {
+	t.Helper()
+	n := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(replies[n%len(replies)])
+		n++
+	}))
+	t.Cleanup(srv.Close)
+	old := llm.AnthropicURL
+	llm.AnthropicURL = srv.URL
+	t.Cleanup(func() { llm.AnthropicURL = old })
+	t.Setenv("ANTHROPIC_API_KEY", "sk-ant-test-0123456789abcdef")
+	t.Setenv(config.AnthropicBaseURLVar, "")
+	return captureLog(t)
+}
+
+func captureLog(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	var buf bytes.Buffer
+	old := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(old) })
+	return &buf
+}
+
+func emptyReply(text string, in, out int) map[string]any {
+	return map[string]any{
+		"stop_reason": "end_turn",
+		"content": []any{
+			map[string]any{"type": "thinking", "thinking": "", "signature": "s"},
+			map[string]any{"type": "text", "text": text},
+		},
+		"usage": map[string]any{"input_tokens": in, "output_tokens": out},
+	}
+}
+
+var oneResult = []run.Result{{ID: 7, PromptIdx: 0, Answerer: "fake", Track: answer.Search, Status: "done", Grade: &grade.Grade{Verdict: grade.Absent}, Answer: &answer.Answer{Text: "An answer."}}}
+
+// Run r-20261101-050336-9f0f23 got empty insights from the API twice, each billed, and the
+// error said only that. The stored error now adds the reply's stable shape (stop reason, block
+// types, whether it had text), and the same failure with other counts gives the same error, as
+// the ops watch alerts on a change in fixes_error.
+func TestDegenerateAPIOutputErrorIsStable(t *testing.T) {
+	cfg, set, _, _, _ := verificationFixture()
+	cfg.Analyst = config.Model{Model: "claude-opus-5-5"}
+	fakeAnalyst(t,
+		emptyReply(`{"fixes":[],"insights":"","investigations":[],"market_findings":[]}`, 118000, 950),
+		emptyReply(`{"fixes":[],"insights":" ","investigations":[],"market_findings":[]}`, 121500, 1830))
+	var errs []string
+	for range 2 {
+		_, _, err := Build(context.Background(), cfg, set, oneResult, nil, nil)
+		if !errors.Is(err, ErrDegenerate) {
+			t.Fatalf("want ErrDegenerate, got %v", err)
+		}
+		errs = append(errs, err.Error())
+	}
+	if errs[0] != errs[1] {
+		t.Errorf("the same failure gave different errors:\n%s\n%s", errs[0], errs[1])
+	}
+	if want := "insights are 0 characters, under 10 (stop_reason end_turn, blocks [thinking text], text present)"; !strings.HasSuffix(errs[0], want) {
+		t.Errorf("error = %q, want it to end %q", errs[0], want)
+	}
+}
+
+// The log line has what the error leaves out: the run, the counts, the prompt's size and the
+// start of the reply, redacted and cut short, as the text quotes the run's answers.
+func TestDegenerateAPIOutputIsLoggedWithTheRun(t *testing.T) {
+	cfg, set, _, _, _ := verificationFixture()
+	cfg.Analyst = config.Model{Model: "claude-opus-5-5"}
+	key := "sk-ant-test-0123456789abcdef"
+	tail := "END-OF-A-LONG-REPLY"
+	text := `{"fixes":[],"insights":"","investigations":[],"market_findings":[{"title":"Answers quote ` + key + `","detail":"` + strings.Repeat("d", 2000) + tail + `","evidence":"e","prompts":[1]}]}`
+	buf := fakeAnalyst(t, emptyReply(text, 118000, 950))
+	ctx := llm.WithOperation(context.Background(), "analysis/r-logged")
+	if _, _, err := Build(ctx, cfg, set, oneResult, nil, nil); !errors.Is(err, ErrDegenerate) {
+		t.Fatalf("want ErrDegenerate, got %v", err)
+	}
+	log := buf.String()
+	for _, want := range []string{"analyst output unusable", "run=r-logged", "118000 input tokens", "950 output tokens", "prompt_chars=", "[REDACTED]", "…"} {
+		if !strings.Contains(log, want) {
+			t.Errorf("log lacks %q:\n%s", want, log)
+		}
+	}
+	if strings.Contains(log, key) {
+		t.Error("the log has the API key")
+	}
+	if strings.Contains(log, tail) || strings.Count(log, "d") > rawReplyLog {
+		t.Errorf("the reply text was not cut to %d characters", rawReplyLog)
+	}
+}
+
+// Through the claude CLI there is no reply to describe: the error is the plain one and the log
+// still names the run and the prompt's size.
+func TestDegenerateCLIOutputIsLoggedWithoutAReply(t *testing.T) {
+	cfg, set, _, _, _ := verificationFixture()
+	old := structuredCLI
+	t.Cleanup(func() { structuredCLI = old })
+	structuredCLI = func(_ context.Context, _, _, _ string, _ map[string]any, out any) error {
+		return json.Unmarshal([]byte(`{"insights":"","fixes":[],"investigations":[],"market_findings":[]}`), out)
+	}
+	buf := captureLog(t)
+	ctx := llm.WithOperation(context.Background(), "analysis/r-cli")
+	_, _, err := Build(ctx, cfg, set, oneResult, nil, nil)
+	if !errors.Is(err, ErrDegenerate) || err.Error() != "the analyst's output is unusable: its insights are 0 characters, under 10" {
+		t.Fatalf("want the plain degenerate error, got %v", err)
+	}
+	log := buf.String()
+	if !strings.Contains(log, "run=r-cli") || !strings.Contains(log, "prompt_chars=") || strings.Contains(log, "reply=") {
+		t.Errorf("log = %s", log)
 	}
 }
 
