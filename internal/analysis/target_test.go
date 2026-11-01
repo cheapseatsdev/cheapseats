@@ -32,6 +32,13 @@ func TestPlanProblemSaysWhichTestFailed(t *testing.T) {
 		{"Compare https://acme.example/pricing with https://acme.example/docs?tab=Install to confirm the links.", "https://acme.example/docs?tab=Install"},
 		// Sentence punctuation after a URL in the check is not part of it; the target's own is.
 		{"Read https://acme.example/a. Then confirm whether the install links work.", "https://acme.example/a"},
+		// An apostrophe between two URL characters is part of the URL; a quote around it is not.
+		{"Read https://x.example/john's-guide and confirm whether the install links work.", "https://x.example/john's-guide"},
+		{"Read https://x.example/john\u2019s-guide and confirm whether the install links work.", "https://x.example/john\u2019s-guide"},
+		{"Read 'https://x.example/a' and confirm whether the install links work.", "https://x.example/a"},
+		{"Read 'https://x.example/john's-guide' and confirm whether the install links work.", "https://x.example/john's-guide"},
+		{"Read https://x.example/a's. Then confirm whether the install links work.", "https://x.example/a's"},
+		{"Read https://x.example/a!'note' and confirm whether the install links work.", "https://x.example/a"},
 		// A delimited URL is taken exactly as written inside its delimiters.
 		{"Read <https://acme.example/docs> and confirm whether the install links work.", "https://acme.example/docs"},
 		{"Read [https://acme.example/docs] and confirm whether the install links work.", "https://acme.example/docs"},
@@ -55,6 +62,8 @@ func TestPlanProblemSaysWhichTestFailed(t *testing.T) {
 		{"Read https://acme.example/docs?tab=install and confirm whether the links work.", f.Decision, f.Evidence, "https://acme.example/docs?tab=Install", "its check does not name its target URL"},
 		// No punctuation is trimmed, and a longer URL that starts with the target is another page.
 		{"Read https://acme.example/Guide_ and confirm whether the install links work.", f.Decision, f.Evidence, "https://acme.example/Guide_(CLI)", "its check does not name its target URL"},
+		{"Read https://x.example/john's-guide and confirm whether the install links work.", f.Decision, f.Evidence, "https://x.example/john", "its check does not name its target URL"},
+		{"Read 'https://x.example/a' and confirm whether the install links work.", f.Decision, f.Evidence, "https://x.example/a'", "its check does not name its target URL"},
 		// Inside delimiters nothing is trimmed: the punctuation is part of the URL written there.
 		{"Read <https://acme.example/docs!> and confirm whether the install links work.", f.Decision, f.Evidence, "https://acme.example/docs", "its check does not name its target URL"},
 		{"Read \"https://acme.example/docs.\" and confirm whether the install links work.", f.Decision, f.Evidence, "https://acme.example/docs", "its check does not name its target URL"},

@@ -221,9 +221,41 @@ func locator(u string) string {
 	return strings.TrimSuffix(host+rest, "/")
 }
 
-// urlInCheck finds the absolute URLs written in a check. A URL ends at whitespace, or at a quote
-// or angle bracket, which a URL can't contain unescaped.
-var urlInCheck = regexp.MustCompile("(?i)https?://[^\\s<>\"'`]+")
+// urlInCheck finds where each absolute URL in a check starts; urlEnd finds where it ends.
+var urlInCheck = regexp.MustCompile("(?i)https?://")
+
+// urlChar reports whether r can stand on either side of an apostrophe inside a URL: a letter,
+// a digit, or one of -._~/.
+func urlChar(r rune) bool {
+	return unicode.IsLetter(r) || unicode.IsDigit(r) || strings.ContainsRune("-._~/", r)
+}
+
+// inWord reports whether the apostrophe (' or \u2019) at check[i:] sits between two URL
+// characters, as in /john's-guide, so it is part of the URL rather than a quote.
+func inWord(check string, i int) bool {
+	r, n := utf8.DecodeRuneInString(check[i:])
+	if r != '\'' && r != '\u2019' {
+		return false
+	}
+	prev, _ := utf8.DecodeLastRuneInString(check[:i])
+	next, _ := utf8.DecodeRuneInString(check[i+n:])
+	return urlChar(prev) && urlChar(next)
+}
+
+// urlEnd is where the URL starting at start in check ends: at whitespace, an angle bracket, a
+// straight double quote or a backtick, which a URL can't contain unescaped, or at an apostrophe
+// (' or \u2019) that isn't between two URL characters.
+func urlEnd(check string, start int) int {
+	i := start
+	for i < len(check) {
+		r, n := utf8.DecodeRuneInString(check[i:])
+		if unicode.IsSpace(r) || strings.ContainsRune("<>\"`", r) || (r == '\'' || r == '\u2019') && !inWord(check, i) {
+			break
+		}
+		i += n
+	}
+	return i
+}
 
 // trimSentence strips what prose puts after a bare URL that ends a sentence or list item in a
 // check: sentence punctuation, closing quotes, and a closing parenthesis the URL didn't open
@@ -263,7 +295,7 @@ func delimited(check string, start int) (string, bool) {
 		switch {
 		case unicode.IsSpace(r):
 			return "", false
-		case r == closer && depth == 0:
+		case r == closer && depth == 0 && !inWord(check, start+i):
 			return check[start : start+i], true
 		case r == closer:
 			depth--
@@ -278,12 +310,17 @@ func delimited(check string, start int) (string, bool) {
 // written inside it; a bare one without the sentence punctuation after it (trimSentence).
 func checkURLs(check string) []string {
 	var out []string
+	end := 0
 	for _, at := range urlInCheck.FindAllStringIndex(check, -1) {
+		if at[0] < end {
+			continue // a scheme inside the URL before it
+		}
+		end = urlEnd(check, at[0])
 		if u, ok := delimited(check, at[0]); ok {
 			out = append(out, u)
 			continue
 		}
-		out = append(out, trimSentence(check[at[0]:at[1]]))
+		out = append(out, trimSentence(check[at[0]:end]))
 	}
 	return out
 }
