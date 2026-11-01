@@ -32,7 +32,7 @@ docker run --rm --name cheapseats --stop-timeout 30 \
   --env-file .env \
   -v "$PWD:/config:ro" \
   -v cheapseats-data:/data \
-  ghcr.io/cheapseatsdev/cheapseats:0.6.0
+  ghcr.io/cheapseatsdev/cheapseats:0.7.0
 ```
 
 Open <http://127.0.0.1:3000> and sign in with the token from `.env`. The container listens on
@@ -44,7 +44,7 @@ container mounts them read-only. Validate changes before restarting the containe
 
 ```bash
 docker run --rm --env-file .env -v "$PWD:/config:ro" \
-  ghcr.io/cheapseatsdev/cheapseats:0.6.0 check
+  ghcr.io/cheapseatsdev/cheapseats:0.7.0 check
 ```
 
 API runs cost money. Check the model IDs, prices and budget in `cheapseats.toml` before running
@@ -62,15 +62,20 @@ Cheap Seats releases an image, `ghcr.io/cheapseatsdev/cheapseats:<version>`, and
 `oci://ghcr.io/cheapseatsdev/charts/cheapseats`. Build your config into a deployment image:
 
 ```dockerfile
-FROM ghcr.io/cheapseatsdev/cheapseats:0.6.0
+FROM ghcr.io/cheapseatsdev/cheapseats:0.7.0
 COPY cheapseats.toml /config/cheapseats.toml
 COPY prompt-sets /config/prompt-sets
 ARG REVISION=""
 ENV CHEAPSEATS_CONFIG_REV=$REVISION
 ```
 
-Use one tag per config commit on either host. Roll back by deploying the previous tag; upgrade
-Cheap Seats by reviewing the `FROM` change. For a local trial,
+Use one tag per config commit on either host. Roll back a config change by deploying the previous
+tag. Upgrade Cheap Seats by reviewing the `FROM` change, and take a
+[`cheapseats backup`](#backups) first: an upgrade can migrate the database (0.7.0 takes it to schema
+19), and an older Cheap Seats won't open a newer database. To roll back across a schema change, stop
+Cheap Seats, move `cheapseats.db` and its `-wal` and `-shm` aside, put the `cheapseats.db.bak-v<N>`
+copy from before the upgrade (or your backup) in its place, then deploy the previous tag. Writes
+since the upgrade are lost. For a local trial,
 [mount the config checkout](#try-docker-with-api-keys) instead of building an image.
 
 ## What any deployment needs

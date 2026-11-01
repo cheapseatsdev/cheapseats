@@ -4,9 +4,8 @@ An evaluation should answer a specific question before you change anything. For
 grading, the question is whether we interpret saved answers correctly—not whether
 we can get a higher visibility rate by changing buyer questions.
 
-The Evaluation workbench is an **unreleased preview**, off by default and absent
-from the 0.6.0 image. This branch includes the work through
-[saved-run imports, PR #161](https://github.com/cheapseatsdev/cheapseats/pull/161).
+The Evaluation workbench ships in 0.7.0 as a **preview**, off by default and
+never shown by a read-only server, so the public demo does not have it.
 Use [the technical guide](evaluation.md#try-the-review-workflow-locally) for setup,
 `CHEAPSEATS_EVALUATION=1`, private data directories and exact commands.
 

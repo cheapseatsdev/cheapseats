@@ -51,7 +51,7 @@ docker run --rm --name cheapseats --stop-timeout 30 \
   --env-file .env \
   -v "$PWD:/config:ro" \
   -v cheapseats-data:/data \
-  ghcr.io/cheapseatsdev/cheapseats:0.6.0
+  ghcr.io/cheapseatsdev/cheapseats:0.7.0
 ```
 
 Open <http://127.0.0.1:3000> and sign in with the token from `.env`. The named volume keeps
@@ -189,10 +189,10 @@ The [CLI reference](https://cheapseats.dev/docs/reference/#cli) covers all comma
 including audits, search probes, discovery and optional provider passes.
 
 **Evaluation preview:** [Choosing and running evaluations](docs/evaluation-workflow.md)
-explains the lifecycle, outcomes and rerun signals. The unreleased [review workbench](docs/evaluation.md) lets
-you label saved answers, batch-check judgments and compare grader prompts against
-a frozen dataset. It requires the preview build and `CHEAPSEATS_EVALUATION=1`;
-the 0.6.0 image does not include it. Reviews and comparisons do not change the
+explains the lifecycle, outcomes and rerun signals. The [review workbench](docs/evaluation.md), a
+preview in 0.7.0, lets you label saved answers, batch-check judgments and compare grader prompts
+against a frozen dataset. It is off by default: set `CHEAPSEATS_EVALUATION=1` to turn it on.
+A read-only server never shows it. Reviews and comparisons do not change the
 production grader automatically.
 
 ## API and MCP

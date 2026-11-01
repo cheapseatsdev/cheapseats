@@ -89,7 +89,7 @@ Inspect class coverage, errors on rare classes and label provenance before drawi
 a conclusion. Historical pilot agreement below is agreement with earlier model
 labels.
 
-The unreleased [Evaluation workbench](evaluation.md) provides blind initial human
+The [Evaluation workbench](evaluation.md), a preview in 0.7.0, provides blind initial human
 review, batch independent checks, frozen dataset versions and paired prompt
 comparisons. It does not replace this test or update its fixtures automatically.
 
@@ -110,7 +110,7 @@ answer names a retired brand name absent from today's config are excluded.
 
 ### Labeling
 
-Prefer the preview [review workflow](evaluation.md#what-to-do-next) when available:
+Prefer the preview [review workflow](evaluation.md#what-to-do-next) when it is enabled:
 it hides the imported proposal until you commit a judgment and keeps review history.
 For manual file labeling, read the complete prompt and answer before consulting the
 old label or quote, then edit `expected`:
