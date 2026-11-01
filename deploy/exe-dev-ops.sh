@@ -6,13 +6,14 @@
 #            stops making progress, or a set's newest day's recommended rate fell beyond noise
 #            against the previous run day (each problem once), sent with exe.dev's email gateway
 #
-#   [PORT=8000] deploy/exe-dev-ops.sh <vm> <alert email>
+#   deploy/exe-dev-ops.sh <vm> <alert email>
 #
 # The rate check is the Rankings page's paired day-over-day test, read from /api/rankings over the
 # last 8 days with the first of CHEAPSEATS_TOKENS in the VM's cheapseats.env (without a token, only
 # runs are checked), for the recommended rate only. Daily and weekly sets are compared; a set that
 # runs less often than weekly is not. Its margin is 95%, so a drop outside noise happens by chance
-# about one day in 40 for each set and track. PORT is the one deploy/exe-dev.sh was given.
+# about once in 40 runs of each set and track. The watch reads Cheap Seats' port from its service
+# on the VM, so running this again never needs it.
 #
 # The email must be someone exe.dev lets the VM write to: the VM's owner, a teammate, or someone
 # who has signed in to it. Run again to change it. The backups are on the VM's own disk: they
@@ -21,7 +22,6 @@ set -euo pipefail
 
 vm=${1:?usage: deploy/exe-dev-ops.sh <vm> <alert email>}
 to=${2:?usage: deploy/exe-dev-ops.sh <vm> <alert email>}
-port=${PORT:-8000}
 host="$vm.exe.xyz"
 remote() { ssh -o BatchMode=yes "$host" "$@"; }
 
@@ -53,7 +53,10 @@ remote "cat > '$dir/bin/cheapseats-watch' && chmod +x '$dir/bin/cheapseats-watch
 # date and systemd.
 set -euo pipefail
 to=$1
-port=${2:-8000}
+# The port Cheap Seats serves on, from its own unit (deploy/exe-dev.sh writes serve -addr), so a
+# deploy on another port is followed without being told.
+port=$(systemctl show -p ExecStart --value cheapseats.service 2>/dev/null | sed -n 's/.* -addr [^ ;]*:\([0-9][0-9]*\).*/\1/p' | head -n 1 || true)
+port=${port:-8000}
 dir="$HOME/cheapseats"
 seen="$dir/watch.seen"
 touch "$seen"
@@ -83,7 +86,10 @@ problems=$(sqlite3 -separator $'\t' "$db" "
 # not compared. Lines are shaped like the ones above, keyed "<set>/<track> <date> recommended
 # down". The token reaches curl on stdin, not in its arguments, where other users on the VM could
 # read it. If the app does not answer or its reply does not parse, the run problems still go out.
-token=$(sed -n 's/^CHEAPSEATS_TOKENS=//p' "$dir/cheapseats.env" 2>/dev/null | head -n 1 | cut -d, -f1 | tr -d '"' || true)
+# The token as the server reads it: the last assignment (as systemd takes it), either kind of quote
+# removed, the first entry that is not blank once trimmed.
+token=$(sed -n 's/^CHEAPSEATS_TOKENS=//p' "$dir/cheapseats.env" 2>/dev/null | tail -n 1 | tr -d "\"'" | tr ',' '\n' |
+	sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | grep -m 1 . || true)
 if [ -n "$token" ]; then
 	fell=""
 	if rankings=$(printf 'header = "Authorization: Bearer %s"\n' "$token" |
@@ -182,7 +188,7 @@ if [ -n "$drops" ]; then
 Rate drops:
 
 $drops
-A drop outside noise happens by chance about 1 day in 40 for each set and track; read it on
+A drop outside noise happens by chance about once in 40 runs of each set and track; read it on
 Rankings (https://$host.exe.xyz/rankings) before acting."
 fi
 python3 -c 'import json,sys; print(json.dumps({"to": sys.argv[1], "subject": sys.argv[2], "body": sys.argv[3]}))' \
@@ -212,7 +218,7 @@ Description=Email when a Cheap Seats run or rate needs a look
 [Service]
 Type=oneshot
 User=$user
-ExecStart=$dir/bin/cheapseats-watch $to $port"
+ExecStart=$dir/bin/cheapseats-watch $to"
 unit cheapseats-watch.timer "[Unit]
 Description=Check Cheap Seats' runs hourly
 [Timer]
