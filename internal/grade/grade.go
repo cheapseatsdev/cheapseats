@@ -156,14 +156,29 @@ var source embed.FS
 
 // code is the digest of the code the grader runs: every non-test file in this package (its types
 // and their JSON tags, constants, functions), and the shared code that builds a structured output
-// request and reads its reply on either transport. Comments and layout don't count.
+// request and reads its reply on either transport. Comments and layout don't count. It also
+// covers sets.Competitor and what it uses: a GoldenRecord, the frozen evidence an evaluation check
+// grades, decodes its competitors through Competitor's JSON tags, so renaming one would change
+// what Input sends from a stored case. The rest of a GoldenRecord decodes through this package.
 var code = sync.OnceValue(func() string {
 	d, err := llm.CodeDigest(llm.GoFiles(source))
 	if err != nil {
 		panic("grade: " + err.Error())
 	}
-	return "grade " + d + "\nllm " + llm.StructuredCode() + "\nanswer " + answer.StructuredCode()
+	return "grade " + d + "\nllm " + llm.StructuredCode() + "\nanswer " + answer.StructuredCode() + "\nsets " + setsCode()
 })
+
+// setsCodeRoots are the declarations in internal/sets whose code the evaluator digest covers.
+var setsCodeRoots = []string{"Competitor"}
+
+// setsCode is the digest of the sets code a GoldenRecord decodes through.
+func setsCode() string {
+	d, err := llm.CodeDigest(llm.GoFiles(sets.Source()), setsCodeRoots...)
+	if err != nil {
+		panic("grade: " + err.Error())
+	}
+	return d
+}
 
 // EvaluatorDigest identifies the grader by what it sends and how it reads the reply, not by its
 // source text: stored checks, batches and experiments made with another digest are stale. The

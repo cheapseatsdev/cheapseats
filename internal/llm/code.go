@@ -48,9 +48,9 @@ func GoFiles(fsys fs.FS) map[string][]byte {
 	return files
 }
 
-// CodeDigest is the SHA-256 of Go code's tokens: comments, semicolons and layout don't count, so
-// it changes with what the code does and not with how it's written up. files are one package's
-// files, by name. Without names, all of them count. With names, the roots, each of which must be
+// CodeDigest is the SHA-256 of Go code's tokens: comments and layout (the semicolons put in at line
+// ends among it) don't count, so it changes with what the code does and not with how it's written
+// up. files are one package's files, by name. Without names, all of them count. With names, the roots, each of which must be
 // a top-level declaration (a func, a type, a var or const, or a method as Type.Method), count with
 // every declaration in the package they use, directly or not: whatever a root's code names, and a
 // type's methods, since encoding/json and the like call those unnamed.
@@ -164,7 +164,10 @@ func funcName(d *ast.FuncDecl) (name, recv string) {
 	if s, ok := t.(*ast.StarExpr); ok {
 		t = s.X
 	}
-	if g, ok := t.(*ast.IndexExpr); ok { // a generic type's method
+	switch g := t.(type) { // a generic type's method: T[A], or T[A, B] with more parameters
+	case *ast.IndexExpr:
+		t = g.X
+	case *ast.IndexListExpr:
 		t = g.X
 	}
 	if id, ok := t.(*ast.Ident); ok {
@@ -173,8 +176,10 @@ func funcName(d *ast.FuncDecl) (name, recv string) {
 	return d.Name.Name, ""
 }
 
-// hashTokens writes src's tokens to h. Semicolons are left out: whether one is written or put in
-// at a line's end is layout, and gofmt'd Go can't mean two things without one.
+// hashTokens writes src's tokens to h. The semicolons the scanner puts in at line ends (reported
+// with the literal "\n") are layout and left out, so a one-line func and the same func split over
+// lines are the same. A semicolon written in the source (literal ";") counts: it can change what
+// code means, as in switch f() {} and switch f(); {}.
 func hashTokens(h hash.Hash, src []byte) {
 	var s scanner.Scanner
 	s.Init(token.NewFileSet().AddFile("", -1, len(src)), src, nil, 0) // comments skipped
@@ -183,7 +188,7 @@ func hashTokens(h hash.Hash, src []byte) {
 		if tok == token.EOF {
 			return
 		}
-		if tok != token.SEMICOLON {
+		if tok != token.SEMICOLON || lit == ";" {
 			fmt.Fprintf(h, "%s %s\x00", tok, lit)
 		}
 	}

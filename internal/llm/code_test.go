@@ -84,3 +84,32 @@ func TestStructuredCodeCoversItsHelpers(t *testing.T) {
 		t.Errorf("a change to Str, which ReplyText uses, left the digest alone")
 	}
 }
+
+// A method on a generic type counts with its type whatever the number of type parameters: T[A]
+// is an IndexExpr receiver, T[A, B] an IndexListExpr.
+func TestCodeDigestFollowsGenericReceivers(t *testing.T) {
+	for typ, src := range map[string]string{
+		"Box": "package p\n\ntype Box[A any] struct{}\n\nfunc (x *Box[A]) MarshalJSON() ([]byte, error) { return nil, nil }\n\n" +
+			"func Root() any { return Box[int]{} }\n",
+		"Pair": "package p\n\ntype Pair[A, B any] struct{}\n\nfunc (x *Pair[A, B]) MarshalJSON() ([]byte, error) { return nil, nil }\n\n" +
+			"func Root() any { return Pair[int, int]{} }\n",
+	} {
+		edited := strings.Replace(src, "return nil, nil", "return []byte(\"null\"), nil", 1)
+		if codeTestDigest(t, src, "Root") == codeTestDigest(t, edited, "Root") {
+			t.Errorf("changing a method of %s left the digest of a root that uses it alone", typ)
+		}
+		if _, err := CodeDigest(map[string][]byte{"p.go": []byte(src)}, typ+".MarshalJSON"); err != nil {
+			t.Errorf("%s.MarshalJSON is not a declaration: %v", typ, err)
+		}
+	}
+}
+
+// A semicolon written in the source can change what code does, so it counts; only those the
+// scanner puts in at line ends are layout.
+func TestCodeDigestKeepsWrittenSemicolons(t *testing.T) {
+	tag := "package p\n\nfunc f() bool { return false }\n\nfunc F() int {\n\tswitch f() {\n\tcase false:\n\t\treturn 1\n\t}\n\treturn 0\n}\n"
+	init := strings.Replace(tag, "switch f() {", "switch f(); {", 1)
+	if codeTestDigest(t, tag, "F") == codeTestDigest(t, init, "F") || codeTestDigest(t, tag) == codeTestDigest(t, init) {
+		t.Errorf("switch f() {} and switch f(); {} hash the same")
+	}
+}
