@@ -216,13 +216,15 @@ func Input(cfg *config.Config, set sets.Set, prompt, answer string) string {
 	return b.String()
 }
 
-// namesBrand reports whether the answer contains the brand's name or an alias, ignoring case. It's
-// deliberately loose (a substring, so "rl" passes in "world"): it only ever overrules the model one
-// way, so a false match leaves the model's verdict standing.
+// namesBrand reports whether the answer contains the brand's name or an alias, folded the way
+// evidence quotes are: case, markdown marks, runs of space and curly quotes don't count, so
+// "**Cheap** **Seats**" and "Cheap\nSeats" name Cheap Seats. It's deliberately loose (a substring,
+// so "rl" passes in "world"): it only ever overrules the model one way, so a false match leaves the
+// model's verdict standing.
 func namesBrand(answer string, b config.Brand) bool {
-	text := strings.ToLower(answer)
+	text, _, _ := fold(answer)
 	for _, n := range append([]string{b.Name}, b.Aliases...) {
-		if n = strings.ToLower(strings.TrimSpace(n)); n != "" && strings.Contains(text, n) {
+		if n, _, _ = fold(strings.TrimSpace(n)); n != "" && strings.Contains(text, n) {
 			return true
 		}
 	}
