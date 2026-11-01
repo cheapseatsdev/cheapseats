@@ -26,12 +26,12 @@ func TestReadCurrentKeepsUnavailableEvidenceUnknown(t *testing.T) {
 	}))
 	defer srv.Close()
 	ctx := context.Background()
-	text, err := ReadCurrent(ctx, srv.URL+"/ok", CiteOptions{})
-	if err != nil || !strings.Contains(text, "starter workflow") {
+	text, cut, err := ReadCurrent(ctx, srv.URL+"/ok", CiteOptions{})
+	if err != nil || cut || !strings.Contains(text, "starter workflow") {
 		t.Fatalf("readable evidence: %q %v", text, err)
 	}
 	for _, path := range []string{"/missing", "/private"} {
-		text, err := ReadCurrent(ctx, srv.URL+path, CiteOptions{})
+		text, _, err := ReadCurrent(ctx, srv.URL+path, CiteOptions{})
 		if err == nil || text != "" {
 			t.Fatalf("%s must be unknown, not missing content evidence: %q %v", path, text, err)
 		}

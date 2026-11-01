@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/cheapseatsdev/cheapseats/internal/config"
 	"github.com/cheapseatsdev/cheapseats/internal/llm"
@@ -21,9 +22,12 @@ const (
 	MaxVerificationPageRunes = 12000
 )
 
+const truncatedMarker = " [excerpt truncated]"
+
 // VerifyPage is supplied by the app, which owns public-address restrictions,
 // caching, timeouts and any provider accounting. Analysis never fetches by itself.
-type VerifyPage func(context.Context, string) (string, error)
+// cut says the text may stop short of the page, because a read limit was reached.
+type VerifyPage func(context.Context, string) (text string, cut bool, err error)
 type verifierKey struct{}
 
 func WithVerifier(ctx context.Context, read VerifyPage) context.Context {
@@ -46,7 +50,7 @@ func generate(ctx context.Context, cfg *config.Config, prompt string, shape map[
 func clip(s string, n int) string {
 	r := []rune(s)
 	if len(r) > n {
-		return string(r[:n]) + " [excerpt truncated]"
+		return string(r[:n]) + truncatedMarker
 	}
 	return s
 }
@@ -197,10 +201,13 @@ func rejectCandidate(a *Analysis, f Fix, why string) {
 	omit(a, "candidate", f.Title, why)
 }
 
+// artifact is one page supplied to the verifier. Truncated says its text is incomplete: the
+// reader stopped short of the page, or the text was clipped to MaxVerificationPageRunes.
 type artifact struct {
-	URL   string `json:"url"`
-	Text  string `json:"text,omitempty"`
-	Error string `json:"error,omitempty"`
+	URL       string `json:"url"`
+	Text      string `json:"text,omitempty"`
+	Truncated bool   `json:"truncated"`
+	Error     string `json:"error,omitempty"`
 }
 
 func webURL(raw string) string {
@@ -247,14 +254,19 @@ func readArtifacts(ctx context.Context, cfg *config.Config, fs []Fix) []artifact
 		if ctx.Err() != nil {
 			break
 		}
-		t, err := read(ctx, u)
+		t, cut, err := read(ctx, u)
 		p := artifact{URL: u}
 		if err != nil {
 			p.Error = clip(err.Error(), 300)
 		} else if strings.TrimSpace(t) == "" {
 			p.Error = "No readable current content returned."
 		} else {
+			// Truncated when this clip applies, or when the reader stopped short of the page.
 			p.Text = clip(t, MaxVerificationPageRunes)
+			p.Truncated = cut || utf8.RuneCountInString(t) > MaxVerificationPageRunes
+			if p.Truncated && !strings.HasSuffix(p.Text, truncatedMarker) {
+				p.Text += truncatedMarker
+			}
 		}
 		out = append(out, p)
 	}
@@ -399,7 +411,7 @@ For each zero-based candidate index return verified, investigate, already-done, 
 
 Each gate requires passed, source, an exact contiguous quote from that source, and a specific reason connecting the quote to this candidate's remaining change and explicit business decision. Failed/unknown gates use passed=false. Source must be one supplied artifact URL or brand.advisory, brand.facts, candidate.done_when. Do not invent documents or use an unrelated quote as proof. existing_work and remaining_change must cite the current target for page/outreach changes and explain what already exists and the exact material difference still needed. capability must support every claim and keep API/CLI versus consumer-app and software versus operating costs distinct. strategy must cite brand.advisory and show fit with intended goals and boundaries; product expansion requires quoting an explicit Goals entry authorizing it, not merely general positioning or a boundary. Reject generic research plans whose check cannot change the supplied business decision. eligibility must use current publisher submission/qualification rules for outreach, not assume a public list accepts PRs; for owned work explain why publisher eligibility is inapplicable. completion must quote the entire candidate.done_when and confirm a team-controlled completion check, not a future recommendation/rank/citation or another publisher merging a PR. Sources may support several gates only when each reason establishes that particular gate.
 
-Do not mark verified unless all six gates pass with evidence. Current supplied artifacts (clipped text is only an excerpt; an error proves nothing):
+Do not mark verified unless all six gates pass with evidence. Current supplied artifacts (truncated text is only an excerpt; an error proves nothing):
 %s`, cfg.Brand.About, cfg.Brand.Audience, cfg.Brand.Category, set.Description, cfg.Brand.Advisory.Text(), strings.Join(cfg.Brand.Facts, "\n"), input)
 	var reviewed struct {
 		Decisions []decision `json:"decisions"`
@@ -472,7 +484,7 @@ func checkedProof(p proof, gate string, f Fix, cfg *config.Config, pages []artif
 	default:
 		for _, page := range pages {
 			if page.URL == webURL(p.Source) {
-				text = strings.TrimSuffix(page.Text, " [excerpt truncated]")
+				text = strings.TrimSuffix(page.Text, truncatedMarker)
 				break
 			}
 		}

@@ -30,7 +30,7 @@ func TestFailedVerificationReturnsItsErrorWithTheInvestigations(t *testing.T) {
 		return json.Unmarshal(b, out)
 	}
 	results := []run.Result{{ID: 7, PromptIdx: 0, Answerer: "fake", Track: answer.Search, Status: "done", Grade: &grade.Grade{Verdict: grade.Absent}, Answer: &answer.Answer{Text: "An answer."}}}
-	ctx := WithVerifier(context.Background(), func(context.Context, string) (string, error) { return pages[0].Text, nil })
+	ctx := WithVerifier(context.Background(), func(context.Context, string) (string, bool, error) { return pages[0].Text, false, nil })
 	a, _, err := Build(ctx, cfg, set, results, nil, nil)
 	var verr *VerificationError
 	if !errors.As(err, &verr) || verr.Candidates != 1 || !strings.Contains(err.Error(), "schema refused") {
@@ -60,7 +60,7 @@ func verifyFailureBuild(t *testing.T, ctx context.Context, cfg *config.Config, s
 // investigations with no error, so a rebuild replaced the run's verified analysis with them.
 func TestUnreadablePagesAreAFailedVerification(t *testing.T) {
 	cfg, set, f, _, _ := verificationFixture()
-	ctx := WithVerifier(context.Background(), func(context.Context, string) (string, error) { return "", errors.New("HTTP 503") })
+	ctx := WithVerifier(context.Background(), func(context.Context, string) (string, bool, error) { return "", false, errors.New("HTTP 503") })
 	a, calls, err := verifyFailureBuild(t, ctx, cfg, set, f)
 	var verr *VerificationError
 	if !errors.As(err, &verr) || !strings.Contains(err.Error(), "HTTP 503") || !a.VerificationFailed || len(a.Investigations) != 1 || calls != 1 {
@@ -74,7 +74,7 @@ func TestNoAdvisoryIsACompleteAnalysisOfInvestigations(t *testing.T) {
 	cfg, set, f, pages, _ := verificationFixture()
 	cfg.Brand.Advisory = config.Advisory{}
 	reads := 0
-	ctx := WithVerifier(context.Background(), func(context.Context, string) (string, error) { reads++; return pages[0].Text, nil })
+	ctx := WithVerifier(context.Background(), func(context.Context, string) (string, bool, error) { reads++; return pages[0].Text, false, nil })
 	a, calls, err := verifyFailureBuild(t, ctx, cfg, set, f)
 	if err != nil || a.VerificationFailed || len(a.Investigations) != 1 || !strings.Contains(a.Investigations[0].Why, "No advisory") {
 		t.Fatalf("no advisory must give investigations without an error: %+v %v", a, err)
