@@ -361,8 +361,10 @@ func dispatch(ctx context.Context, cmd string, args []string) error {
 		if err != nil {
 			return err
 		}
+		// A failed rebuild that kept the run's earlier analysis prints that analysis, then fails.
+		var kept *app.KeptAnalysisError
 		if *rebuild {
-			if err := a.BuildFixes(ctx, fs.Arg(0)); err != nil {
+			if err := a.BuildFixes(ctx, fs.Arg(0)); err != nil && !errors.As(err, &kept) {
 				return err
 			}
 		}
@@ -397,6 +399,9 @@ func dispatch(ctx context.Context, cmd string, args []string) error {
 		fmt.Println("\n## Market findings")
 		for _, f := range next.Findings {
 			fmt.Printf("\n- **%s**: %s\n  - Evidence: %s\n", f.Title, f.Detail, f.Evidence)
+		}
+		if kept != nil {
+			return fmt.Errorf("next steps rebuild failed: %w\n%s", kept, app.KeptAnalysisNote)
 		}
 		return nil
 	case "themes":

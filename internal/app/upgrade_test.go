@@ -608,7 +608,7 @@ func TestUpgradeKeepsAnAnalysisStoredBeforeVerificationFailedOnAFailedRebuild(t 
 	}
 	a := &App{DB: db}
 	failed := &analysis.VerificationError{Candidates: 1, Err: fmt.Errorf("HTTP 529: overloaded")}
-	a.recordAnalysis(context.Background(), "before-mark", analysis.Analysis{VerificationFailed: true}, 0, failed)
+	a.recordAnalysis(context.Background(), "before-mark", verifyFailureFrom(t, a, "before-mark"), analysis.Analysis{VerificationFailed: true}, 0, failed)
 	var after string
 	if err := db.QueryRow(`SELECT fixes FROM runs WHERE id='before-mark'`).Scan(&after); err != nil || after != stored {
 		t.Fatalf("a failed rebuild replaced the older analysis: %q %v", after, err)

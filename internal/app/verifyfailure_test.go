@@ -24,6 +24,14 @@ func verifyFailureRow(t *testing.T, a *App, id string) (fixes, insights, fixesAt
 	return
 }
 
+func verifyFailureFrom(t *testing.T, a *App, id string) (at sql.NullString) {
+	t.Helper()
+	if err := a.DB.QueryRow(`SELECT fixes_at FROM runs WHERE id=?`, id).Scan(&at); err != nil {
+		t.Fatal(err)
+	}
+	return at
+}
+
 // A run's first analysis whose verification failed has nothing better to show: its candidates
 // are stored as investigations, marked as such, with the error, so the run page, the API and
 // the watch script's fixes_error check all see that the analysis didn't complete.
@@ -31,7 +39,7 @@ func TestFailedVerificationOfAFirstBuildIsStoredWithItsError(t *testing.T) {
 	a, id := providersApp(t)
 	ctx := context.Background()
 	failed := &analysis.VerificationError{Candidates: 1, Err: errors.New("HTTP 529: overloaded")}
-	if err := a.recordAnalysis(ctx, id, verifyFailureAnalysis(), 0.5, failed); err != nil {
+	if err := a.recordAnalysis(ctx, id, verifyFailureFrom(t, a, id), verifyFailureAnalysis(), 0.5, failed); err != nil {
 		t.Fatal(err)
 	}
 	fixes, _, fixesAt, fe, cost := verifyFailureRow(t, a, id)
@@ -43,7 +51,7 @@ func TestFailedVerificationOfAFirstBuildIsStoredWithItsError(t *testing.T) {
 	}
 
 	// A clean rebuild replaces it and clears the error.
-	if err := a.recordAnalysis(ctx, id, analysis.Analysis{Insights: "Verified."}, 0, nil); err != nil {
+	if err := a.recordAnalysis(ctx, id, verifyFailureFrom(t, a, id), analysis.Analysis{Insights: "Verified."}, 0, nil); err != nil {
 		t.Fatal(err)
 	}
 	fixes, _, _, fe, _ = verifyFailureRow(t, a, id)
@@ -59,14 +67,15 @@ func TestFailedVerificationOfARebuildKeepsTheEarlierAnalysis(t *testing.T) {
 	a, id := providersApp(t)
 	ctx := context.Background()
 	good := analysis.Analysis{Insights: "The verified analysis.", Fixes: []analysis.Fix{{Rank: 1, Title: "Add the pricing table", Target: "https://cheapseats.dev/pricing"}}}
-	if err := a.recordAnalysis(ctx, id, good, 1, nil); err != nil {
+	if err := a.recordAnalysis(ctx, id, verifyFailureFrom(t, a, id), good, 1, nil); err != nil {
 		t.Fatal(err)
 	}
 	fixes, insights, fixesAt, _, _ := verifyFailureRow(t, a, id)
 
 	failed := &analysis.VerificationError{Candidates: 1, Err: errors.New("HTTP 529: overloaded")}
-	err := a.recordAnalysis(ctx, id, verifyFailureAnalysis(), 0.5, failed)
-	if err == nil || !strings.Contains(err.Error(), "earlier analysis is kept: HTTP 529: overloaded") {
+	err := a.recordAnalysis(ctx, id, verifyFailureFrom(t, a, id), verifyFailureAnalysis(), 0.5, failed)
+	var kept *KeptAnalysisError
+	if !errors.As(err, &kept) || !strings.Contains(err.Error(), "earlier analysis is kept: HTTP 529: overloaded") {
 		t.Fatalf("a failed rebuild must report its error: %v", err)
 	}
 	afterFixes, afterInsights, afterAt, fe, cost := verifyFailureRow(t, a, id)
@@ -78,8 +87,34 @@ func TestFailedVerificationOfARebuildKeepsTheEarlierAnalysis(t *testing.T) {
 	}
 
 	// The same failure again changes only the cost: nothing new for the watch script to send.
-	a.recordAnalysis(ctx, id, verifyFailureAnalysis(), 0.5, failed)
+	a.recordAnalysis(ctx, id, verifyFailureFrom(t, a, id), verifyFailureAnalysis(), 0.5, failed)
 	if _, _, again, fe2, _ := verifyFailureRow(t, a, id); again != fixesAt || fe2 != fe {
 		t.Errorf("a repeated failure changed fixes_at %v or fixes_error %v", again, fe2)
+	}
+}
+
+// A CLI rebuild stored a clean analysis while the server's rebuild of the same run was failing.
+// The server's failure then stamped "the earlier analysis is kept" on the new, clean analysis.
+func TestFailedRebuildLeavesAnAnalysisStoredMeanwhileClean(t *testing.T) {
+	a, id := providersApp(t)
+	ctx := context.Background()
+	if err := a.recordAnalysis(ctx, id, verifyFailureFrom(t, a, id), analysis.Analysis{Insights: "First."}, 1, nil); err != nil {
+		t.Fatal(err)
+	}
+	from := verifyFailureFrom(t, a, id)
+	// The other process's analysis, stored while this build ran.
+	if _, err := a.DB.Exec(`UPDATE runs SET fixes=?, insights='Newer.', fixes_at='2999-01-01T00:00:00Z', fixes_error=NULL WHERE id=?`, analysis.Encode(analysis.Analysis{Insights: "Newer."}), id); err != nil {
+		t.Fatal(err)
+	}
+	for _, failed := range []error{&analysis.VerificationError{Candidates: 1, Err: errors.New("HTTP 529: overloaded")}, errors.New("analyst: HTTP 500")} {
+		err := a.recordAnalysis(ctx, id, from, verifyFailureAnalysis(), 0.5, failed)
+		var kept *KeptAnalysisError
+		if err == nil || errors.As(err, &kept) {
+			t.Fatalf("the failure must be returned, but not as keeping the earlier analysis: %v", err)
+		}
+	}
+	_, insights, at, fe, cost := verifyFailureRow(t, a, id)
+	if fe.Valid || insights.String != "Newer." || at.String != "2999-01-01T00:00:00Z" || cost != 2 {
+		t.Errorf("the newer analysis changed: error %v, insights %q, fixes_at %v, cost %v", fe, insights.String, at, cost)
 	}
 }
