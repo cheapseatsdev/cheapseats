@@ -175,7 +175,8 @@ var schema = map[string]any{
 	"type": "object",
 	"properties": map[string]any{
 		"insights": str(),
-		"fixes": map[string]any{"type": "array", "maxItems": MaxCandidates, "items": map[string]any{
+		// At most MaxCandidates: the prompt says so and verifyCandidates keeps the best ranked.
+		"fixes": map[string]any{"type": "array", "items": map[string]any{
 			"type": "object",
 			"properties": map[string]any{
 				"rank":      map[string]any{"type": "integer"},
