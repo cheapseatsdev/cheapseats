@@ -110,6 +110,12 @@ and restarts. It records the config commit on every run and refuses committed sy
 could reach outside the config. If startup fails, it restores the previous binary and config.
 Runs in progress resume after restart.
 
+With `LIVE_CHECK=1`, the check on the VM also runs `cheapseats check -live`
+([the live schema check](deploying.md#the-live-schema-check)). It sends each structured output
+schema to the API once, using the service's `cheapseats.env`, and stops the deploy before the swap
+if the API refuses one. It costs a few cents and is capped at `LIVE_BUDGET` dollars (default
+`0.25`). Use it on a release with schema changes when the VM's grader or analyst uses the API.
+
 ## Running it
 
 | | |

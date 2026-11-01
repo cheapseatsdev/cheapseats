@@ -32,9 +32,10 @@ compatibility views of verified actions only. They do not expose unverified hist
 as ready work. `get_run` and `GET /api/runs/{id}` include investigations and market findings alongside
 verified actions; the existing `fixes` view contains verified actions only.
 
-MCP `get_started` includes the current `advisory` positioning, goals and intentional boundaries
-for deciding what to do next. This context does not alter measured answers or grades. With no open
-verified actions, it points to investigations or market findings and allows a no-action conclusion.
+MCP `get_started` does not include the `advisory` positioning, goals or boundaries: they are internal
+strategy, and an MCP server can be shared or public. The advisory still guides the analyst that builds
+Next steps. With no open verified actions, `get_started` points to investigations or market findings
+and allows a no-action conclusion.
 
 ## Scores
 

@@ -2,9 +2,7 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
-	"io"
 
 	"github.com/cheapseatsdev/cheapseats/internal/app"
 	"github.com/cheapseatsdev/cheapseats/internal/config"
@@ -16,11 +14,8 @@ import (
 // so a check that changes nothing costs nothing. It never fails check: a problem is a note.
 // Without a key or proxy it prints one note and opens nothing, so CI stays fast; -no-jev skips
 // it altogether.
-func judgeSuggestions(ctx context.Context, cfg *config.Config, args []string) {
-	fs := flag.NewFlagSet("check", flag.ContinueOnError)
-	fs.SetOutput(io.Discard)
-	noJev := fs.Bool("no-jev", false, "skip Jev's prompt suggestions")
-	if fs.Parse(args) != nil || *noJev || cfg.TypeSafe == nil || !cfg.PromptReviewOn() {
+func judgeSuggestions(ctx context.Context, cfg *config.Config, noJev bool) {
+	if noJev || cfg.TypeSafe == nil || !cfg.PromptReviewOn() {
 		return
 	}
 	if m := config.Missing(config.TypeSafeProvider); m != "" {
