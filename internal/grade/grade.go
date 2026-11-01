@@ -68,7 +68,10 @@ func (g Grade) IsTopPick(brand string) bool {
 	return g.TopPick != nil && strings.EqualFold(*g.TopPick, brand)
 }
 
-var schema = llm.RegisterSchema("grade", "grader", map[string]any{
+// The grader writes the fields in required's order (llm.RegisterOrderedSchema): its reasoning and
+// the evidence quote first, then the verdict they support. Sent sorted (evidence first) or with
+// the verdict first, it more often called a brand mentioned when the answer only echoed its name.
+var schema = llm.RegisterOrderedSchema("grade", "grader", map[string]any{
 	"type": "object",
 	"properties": map[string]any{
 		"verdict":       map[string]any{"type": "string", "enum": []string{"recommended", "mentioned", "absent"}},
@@ -83,7 +86,7 @@ var schema = llm.RegisterSchema("grade", "grader", map[string]any{
 		"praise":        map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
 		"evidence":      map[string]any{"type": "string"},
 	},
-	"required":             []string{"verdict", "position", "top_pick", "named", "reasoning", "why_not_top", "objections", "other_product", "tone", "praise", "evidence"},
+	"required":             []string{"reasoning", "evidence", "verdict", "position", "top_pick", "named", "why_not_top", "objections", "other_product", "tone", "praise"},
 	"additionalProperties": false,
 })
 
