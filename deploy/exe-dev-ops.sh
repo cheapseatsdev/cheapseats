@@ -49,30 +49,52 @@ touch "$seen"
 db="file:$dir/data/cheapseats.db?mode=ro"
 since=$(date -u -d '2 days ago' +%Y-%m-%dT%H:%M:%SZ)
 stale=$(date -u -d '2 hours ago' +%Y-%m-%dT%H:%M:%SZ)
-# Each line is "key<TAB>message"; a key goes in the seen file once its message is sent. A failed
-# fix list keeps its error until the next good build replaces it, so its key is the run, the time
-# of its last good build and a checksum of the error: a rebuild that fails differently, or fails
-# after a good build, is new; the same failure next hour is not.
+# Each line is "key<TAB>recent<TAB>message"; a key goes in the seen file once its message is sent.
+# A failed fix list keeps its error until a good build replaces it, so its key is the run, its
+# fixes_at and a checksum of the error. fixes_at changes only when an analysis is stored (a good
+# build, or a first build that kept a degraded one); a rebuild that fails leaves it as it was. So
+# the same failure again, whether next hour or from another rebuild, is not new; a different
+# error, or a failure after a good build, is. recent is 1 for a run finished in the last two days.
 problems=$(sqlite3 -separator $'\t' "$db" "
-  SELECT id || ' ' || status, id || ' ' || status || ': ' || name || ' — ' || replace(replace(COALESCE(error, ''), char(10), ' '), char(9), ' ') FROM runs
+  SELECT id || ' ' || status, 1, id || ' ' || status || ': ' || name || ' — ' || replace(replace(COALESCE(error, ''), char(10), ' '), char(9), ' ') FROM runs
     WHERE status IN ('partial','failed','budget') AND finished_at >= '$since';
-  SELECT id || ' fix list failed ' || COALESCE(fixes_at, 'never'), id || ' fix list failed: ' || name || ' — ' || replace(replace(fixes_error, char(10), ' '), char(9), ' ') FROM runs
+  SELECT id || ' fix list failed ' || COALESCE(fixes_at, 'never'), COALESCE(finished_at, '') >= '$since', id || ' fix list failed: ' || name || ' — ' || replace(replace(fixes_error, char(10), ' '), char(9), ' ') FROM runs
     WHERE fixes_error IS NOT NULL;
-  SELECT r.id || ' stalled', r.id || ' stalled: ' || r.name || ' — no answer finished since ' || COALESCE(MAX(x.finished_at), r.started_at)
+  SELECT r.id || ' stalled', 1, r.id || ' stalled: ' || r.name || ' — no answer finished since ' || COALESCE(MAX(x.finished_at), r.started_at)
     FROM runs r LEFT JOIN results x ON x.run_id = r.id
     WHERE r.status = 'running' GROUP BY r.id
     HAVING COALESCE(MAX(x.finished_at), r.started_at) < '$stale';")
+# Earlier versions keyed a failed fix list "<run> fix list failed" and looked only at runs finished
+# in the last two days, so their seen file holds none of these keys. The first time this version
+# runs, it records a failed fix list already there as seen, without an email, if an earlier
+# version sent it (the old key is in the seen file) or never would have (the run finished more than
+# two days ago); the rest are sent, as an earlier version would have sent them. Then it marks the
+# seen file, and from there each failure is sent once.
+upgrade=""
+if ! grep -qxF '# keys v2' "$seen"; then
+	upgrade=1
+fi
 new=""
-while IFS=$'\t' read -r key line; do
+while IFS=$'\t' read -r key recent line; do
 	[ -z "$key" ] && continue
 	case $key in
-	*' fix list failed '*) key="$key $(printf '%s' "$line" | cksum | cut -d' ' -f1)" ;;
+	*' fix list failed '*)
+		old=${key% *} # "<run> fix list failed", as earlier versions keyed it
+		key="$key $(printf '%s' "$line" | cksum | cut -d' ' -f1)"
+		if [ -n "$upgrade" ] && ! grep -qxF "$key" "$seen" && { [ "$recent" != 1 ] || grep -qxF "$old" "$seen"; }; then
+			printf '%s\n' "$key" >>"$seen"
+			continue
+		fi
+		;;
 	esac
 	if ! grep -qxF "$key" "$seen"; then
 		new="$new$line"$'\n'
 		printf '%s\n' "$key" >>"$seen"
 	fi
 done <<<"$problems"
+if [ -n "$upgrade" ]; then
+	printf '%s\n' '# keys v2' >>"$seen"
+fi
 [ -z "$new" ] && exit 0
 host=$(hostname)
 body="Cheap Seats on $host needs a look:

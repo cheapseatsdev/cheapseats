@@ -68,9 +68,12 @@ This guide covers the VM setup; its deploy script builds the app on your machine
 5. **Backups and alerts:** a nightly copy of the database (the newest 14 kept, in
    `~/cheapseats/backups`), and an hourly check that emails when a run ends partial, failed or out of
    budget, a fix list fails, or a run stalls. Each problem is sent once. A fix list failure is
-   sent whenever it happens, including a rebuild of an old run; a rebuild that fails again with
-   the same error before any good build is not sent again. The address must be one exe.dev lets
-   the VM write to: its owner, a teammate, or someone who has signed in to it.
+   sent whenever it happens, including a rebuild of an old run. Another rebuild that fails with
+   the same error is not sent again; a different error, or a failure after a good build, is. The
+   first check after an upgrade from an earlier version doesn't resend the fix list failures that
+   version sent, or send old runs' failures it never checked (it looked only at runs from the
+   last two days). The address must be one exe.dev lets the VM write to: its owner, a teammate,
+   or someone who has signed in to it.
 
    ```bash
    deploy/exe-dev-ops.sh <vm> you@example.com
