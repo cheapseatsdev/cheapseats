@@ -535,7 +535,7 @@ func printThemes(a *app.App, id string, t opinion.Themes) error {
 		if th.Beneficiary != "" {
 			who = ", helps " + th.Beneficiary
 		}
-		fmt.Printf("\n%-11s %s (%d answers%s)\n            “%s”\n", th.Kind, th.Name, th.Answers, who, excerpt.Quote(th.Quote))
+		fmt.Printf("\n%-11s %s (%d answers%s)\n            “%s”\n", th.Kind, th.Name, th.Answers, who, excerpt.Text(th.Quote))
 	}
 	return nil
 }

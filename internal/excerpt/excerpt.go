@@ -1,264 +1,176 @@
-// Package excerpt prepares model-written text that quotes AI answers for display: the analyst's
+// Package excerpt renders model-written text that quotes AI answers: the analyst's insights and
 // evidence, the grader's evidence and reasoning, theme and misstatement quotes.
 //
 // The analyst reads each answer as a Go-quoted string (fmt %q, see analysis.results2text), so
 // the quotes it copies into evidence often keep their escapes: `3756: "on \"Cheap Seats\""`.
-// Answers are Markdown, so quotes also carry `**bold**` and the like. Stored text stays as the
-// model wrote it; these functions clean it only for people to read. They return plain text:
-// HTML escaping is the template's job, so nothing here ever becomes markup.
+// Answers are Markdown, so quotes also carry **bold**, `code` and links. Stored text stays as the
+// model wrote it. For display it is read as CommonMark with goldmark, the parser the insights
+// already use, so a backslash escape, a code span or a link destination means what the spec
+// says it means, with no hand-written rules to get wrong: \" shows as ", **x** as bold, and code
+// and URLs exactly as written.
 package excerpt
 
 import (
+	"bytes"
 	"fmt"
+	"html/template"
 	"regexp"
 	"strconv"
 	"strings"
-	"unicode"
-	"unicode/utf8"
+
+	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark/ast"
+	"github.com/yuin/goldmark/parser"
+	"github.com/yuin/goldmark/renderer"
+	"github.com/yuin/goldmark/text"
+	"github.com/yuin/goldmark/util"
 )
 
-// Prose cleans model-written prose that may embed a quote (a claim, a reason, a summary): it
-// drops the backslash in \" and \' outside code spans and URLs, and changes nothing else.
-// Prose can carry code, globs or markup a reader copies (**/README.md, <meta name="x">), so
-// asterisks and quotes stay.
-func Prose(s string) string {
+// markdown renders Markdown to HTML. goldmark escapes raw HTML unless told otherwise (it's never
+// told), drops javascript: and similar link destinations, and makes no links of bare URLs; an
+// image becomes its alt text, so model output can't make a reader's browser fetch anything.
+var markdown = goldmark.New(goldmark.WithRendererOptions(renderer.WithNodeRenderers(util.Prioritized(altTextImages{}, 500))))
+
+// inline reads text as one or more paragraphs of inline Markdown only: emphasis, code spans,
+// links, autolinks and raw HTML, but no headings, lists, quotes or link reference definitions,
+// so a quote that starts "1." or "#" or "[1]: url" reads as written.
+var inline = parser.NewParser(
+	parser.WithBlockParsers(util.Prioritized(parser.NewParagraphParser(), 100)),
+	parser.WithInlineParsers(parser.DefaultInlineParsers()...),
+)
+
+// Block renders Markdown with its blocks, for the analyst's insights.
+func Block(md string) template.HTML {
+	var b bytes.Buffer
+	if markdown.Convert([]byte(md), &b) != nil {
+		return template.HTML(template.HTMLEscapeString(md))
+	}
+	return template.HTML(b.String())
+}
+
+// HTML renders text as inline Markdown with no surrounding <p>: escapes as the spec reads them,
+// emphasis as <strong>/<em>, code spans and links as such. Raw HTML in the text is shown as
+// text (insights omit it), since a claim like `Add <meta name="description">` must keep it.
+// The result comes only from goldmark's renderer, which escapes everything it writes.
+func HTML(s string) template.HTML {
+	src := []byte(s)
+	doc := parseInline(src)
+	var b bytes.Buffer
+	if markdown.Renderer().Render(&b, src, doc) != nil {
+		return template.HTML(template.HTMLEscapeString(s))
+	}
+	return template.HTML(strings.TrimSpace(b.String()))
+}
+
+// parseInline parses src as inline Markdown, turning each paragraph into a text block (which
+// renders without <p>) and each piece of raw HTML into raw text (which renders escaped).
+func parseInline(src []byte) ast.Node {
+	doc := inline.Parse(text.NewReader(src))
+	for c := doc.FirstChild(); c != nil; {
+		next := c.NextSibling()
+		if p, ok := c.(*ast.Paragraph); ok {
+			tb := ast.NewTextBlock()
+			tb.SetLines(p.Lines())
+			for k := p.FirstChild(); k != nil; {
+				kn := k.NextSibling()
+				tb.AppendChild(tb, k)
+				k = kn
+			}
+			doc.ReplaceChild(doc, p, tb)
+		}
+		c = next
+	}
+	var raws []*ast.RawHTML
+	ast.Walk(doc, func(n ast.Node, entering bool) (ast.WalkStatus, error) {
+		if r, ok := n.(*ast.RawHTML); ok && entering {
+			raws = append(raws, r)
+		}
+		return ast.WalkContinue, nil
+	})
+	for _, r := range raws {
+		parent := r.Parent()
+		for i := 0; i < r.Segments.Len(); i++ {
+			parent.InsertBefore(parent, r, ast.NewRawTextSegment(r.Segments.At(i)))
+		}
+		parent.RemoveChild(parent, r)
+	}
+	return doc
+}
+
+// Text is the plain text of inline Markdown, for a terminal or anything else that isn't HTML:
+// escapes resolved, emphasis marks dropped, code span content verbatim, a link as "text (url)"
+// (or the URL alone when that is its text), an image as its alt text and raw HTML as written.
+func Text(s string) string {
+	src := []byte(s)
 	var b strings.Builder
-	for _, sg := range segments(strings.TrimSpace(s), false) {
-		if sg.raw {
-			b.WriteString(sg.text)
+	for c := inline.Parse(text.NewReader(src)).FirstChild(); c != nil; c = c.NextSibling() {
+		if b.Len() > 0 {
+			b.WriteByte(' ')
+		}
+		writeText(&b, src, c)
+	}
+	return b.String()
+}
+
+func writeText(b *strings.Builder, src []byte, n ast.Node) {
+	switch n := n.(type) {
+	case *ast.Text:
+		v := n.Segment.Value(src)
+		if !n.IsRaw() {
+			v = util.ResolveEntityNames(util.ResolveNumericReferences(util.UnescapePunctuations(v)))
+		}
+		b.Write(v)
+		if n.SoftLineBreak() || n.HardLineBreak() {
+			b.WriteByte(' ')
+		}
+		return
+	case *ast.String:
+		b.Write(n.Value)
+		return
+	case *ast.CodeSpan:
+		for c := n.FirstChild(); c != nil; c = c.NextSibling() {
+			if t, ok := c.(*ast.Text); ok {
+				v := t.Segment.Value(src)
+				if bytes.HasSuffix(v, []byte("\n")) {
+					v = append(v[:len(v)-1:len(v)-1], ' ')
+				}
+				b.Write(v)
+			}
+		}
+		return
+	case *ast.RawHTML:
+		for i := 0; i < n.Segments.Len(); i++ {
+			seg := n.Segments.At(i)
+			b.Write(seg.Value(src))
+		}
+		return
+	case *ast.AutoLink:
+		b.Write(n.URL(src))
+		return
+	case *ast.Link:
+		var label strings.Builder
+		for c := n.FirstChild(); c != nil; c = c.NextSibling() {
+			writeText(&label, src, c)
+		}
+		if dest := string(n.Destination); label.String() != dest {
+			b.WriteString(label.String() + " (" + dest + ")")
 		} else {
-			b.WriteString(unescape(sg.text, false))
+			b.WriteString(dest)
 		}
+		return
 	}
-	return b.String()
+	for c := n.FirstChild(); c != nil; c = c.NextSibling() {
+		writeText(b, src, c)
+	}
 }
 
-// Quote cleans one quoted excerpt of an answer for display between “ and ”. Code spans and URLs
-// pass through byte for byte (a code span loses only its backticks); in the plain text around
-// them it undoes \", \' and \\, drops well-formed inline Markdown emphasis, makes runs of white
-// space one space, writes ... as … and turns straight quote marks into typographic ones. A
-// Markdown link reads "text (url)", or the URL alone when that is its text. A matching pair of
-// outer quote marks is removed. When a mark could be content (a glob, a path), it stays.
-func Quote(s string) string {
-	var b strings.Builder
-	prev := ' '
-	for _, sg := range segments(trimOuter(strings.TrimSpace(s)), true) {
-		t := sg.text
-		if !sg.raw {
-			t = unescape(t, true)
-			t = untilStable(t, bold, "$1$2$3")
-			t = untilStable(t, italic, "$1$2$3")
-			t = space.ReplaceAllString(t, " ")
-			t = strings.ReplaceAll(t, "...", "…")
-			t = curl(t, prev)
-		}
-		b.WriteString(t)
-		if r, _ := utf8.DecodeLastRuneInString(t); r != utf8.RuneError {
-			prev = r
-		}
-	}
-	return strings.TrimSpace(b.String())
-}
+// altTextImages renders an image as nothing but its children, the alt text.
+type altTextImages struct{}
 
-// Emphasis is a span whose marks touch text on the inside and nothing word-like on the outside,
-// so **/README.md, a**b**c and 5 * 3 * 2 are left alone. Its text can't start with / or . (a
-// glob). The outer characters are captured, since Go's regexp has no lookaround.
-var (
-	bold   = regexp.MustCompile(`(^|[^\p{L}\p{N}_/.*])\*\*([^\s*/.](?:[^*\n]*?[^\s*])?)\*\*($|[^\p{L}\p{N}_/.*])`)
-	italic = regexp.MustCompile(`(^|[^\p{L}\p{N}_/.*])\*([^\s*/.](?:[^*\n]*?[^\s*])?)\*($|[^\p{L}\p{N}_/.*])`)
-	space  = regexp.MustCompile(`\s+`)
-	link   = regexp.MustCompile(`^\[([^\]\n]+)\]\((https?://[^)\s]+)\)`)
-	// A bare URL runs to white space, a quote mark, a backtick, a backslash or an angle bracket;
-	// trailing sentence punctuation is not part of it.
-	bareURL = regexp.MustCompile("^https?://[^\\s<>\"'“”‘’`\\\\]+")
-)
-
-// untilStable applies re until nothing changes: neighbouring spans share the character between
-// them, which a single non-overlapping pass leaves for the second span.
-func untilStable(s string, re *regexp.Regexp, repl string) string {
-	for i := 0; i < 8; i++ {
-		t := re.ReplaceAllString(s, repl)
-		if t == s {
-			break
-		}
-		s = t
-	}
-	return s
-}
-
-// segment is a run of text; raw text (code, a URL) must reach the reader exactly as written.
-type segment struct {
-	text string
-	raw  bool
-}
-
-// segments splits s into plain text, code spans and URLs. A code span is a run of backticks up
-// to the next run of the same length; one with no closing run is plain text. For display
-// (quote), a code span drops its backticks and a Markdown link becomes its text, as plain text,
-// and its URL.
-func segments(s string, quote bool) []segment {
-	var out []segment
-	plain := 0 // start of the pending plain text
-	flush := func(i int) {
-		if i > plain {
-			out = append(out, segment{text: s[plain:i]})
-		}
-	}
-	for i := 0; i < len(s); {
-		switch {
-		case s[i] == '`':
-			n := 1
-			for i+n < len(s) && s[i+n] == '`' {
-				n++
-			}
-			fence := s[i : i+n]
-			end := closingFence(s[i+n:], fence)
-			if end < 0 {
-				i += n
-				continue
-			}
-			flush(i)
-			body := s[i+n : i+n+end]
-			if quote {
-				out = append(out, segment{text: body, raw: true})
-			} else {
-				out = append(out, segment{text: fence + body + fence, raw: true})
-			}
-			i += n + end + n
-			plain = i
-		case quote && s[i] == '[' && link.MatchString(s[i:]):
-			m := link.FindStringSubmatch(s[i:])
-			flush(i)
-			if m[1] != m[2] {
-				out = append(out, segment{text: m[1] + " ("}, segment{text: m[2], raw: true}, segment{text: ")"})
-			} else {
-				out = append(out, segment{text: m[2], raw: true})
-			}
-			i += len(m[0])
-			plain = i
-		case (s[i] == 'h') && bareURL.MatchString(s[i:]) && (i == 0 || !isWord(s[i-1])):
-			u := trimURL(bareURL.FindString(s[i:]))
-			flush(i)
-			out = append(out, segment{text: u, raw: true})
-			i += len(u)
-			plain = i
-		default:
-			i++
-		}
-	}
-	flush(len(s))
-	return out
-}
-
-// closingFence is the offset in s of the next backtick run exactly as long as fence, or -1.
-func closingFence(s, fence string) int {
-	for i := 0; i < len(s); {
-		if s[i] != '`' {
-			i++
-			continue
-		}
-		n := 1
-		for i+n < len(s) && s[i+n] == '`' {
-			n++
-		}
-		if n == len(fence) {
-			return i
-		}
-		i += n
-	}
-	return -1
-}
-
-// trimURL drops sentence punctuation after a URL, and a closing parenthesis it didn't open.
-func trimURL(u string) string {
-	for len(u) > 0 {
-		switch c := u[len(u)-1]; {
-		case strings.IndexByte(".,;:!?", c) >= 0:
-			u = u[:len(u)-1]
-		case c == ')' && strings.Count(u, "(") < strings.Count(u, ")"):
-			u = u[:len(u)-1]
-		default:
-			return u
-		}
-	}
-	return u
-}
-
-func isWord(c byte) bool {
-	return c == '_' || '0' <= c && c <= '9' || 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z'
-}
-
-// unescape drops the backslash in \" and \'. In an excerpt (all), \\ also becomes one
-// backslash. Every other sequence, \n included, stays as written: it may be content.
-func unescape(s string, all bool) string {
-	if !strings.Contains(s, `\`) {
-		return s
-	}
-	var b strings.Builder
-	for i := 0; i < len(s); i++ {
-		if s[i] != '\\' || i+1 == len(s) {
-			b.WriteByte(s[i])
-			continue
-		}
-		switch c := s[i+1]; {
-		case c == '"' || c == '\'':
-			b.WriteByte(c)
-		case all && c == '\\':
-			b.WriteByte('\\')
-		default:
-			b.WriteByte('\\')
-			continue
-		}
-		i++
-	}
-	return b.String()
-}
-
-// trimOuter removes one pair of quote marks around the whole of s, when no other mark of the
-// same kind is inside (so `"a" and "b"` keeps its marks).
-func trimOuter(s string) string {
-	for _, p := range [][2]string{{`"`, `"`}, {"“", "”"}} {
-		if len(s) > len(p[0])+len(p[1]) && strings.HasPrefix(s, p[0]) && strings.HasSuffix(s, p[1]) {
-			in := s[len(p[0]) : len(s)-len(p[1])]
-			if !strings.Contains(in, p[0]) && !strings.Contains(in, p[1]) {
-				return strings.TrimSpace(in)
-			}
-		}
-	}
-	return s
-}
-
-// curl turns straight quote marks into typographic ones: a mark after a letter, digit or
-// closing punctuation closes, any other opens; an apostrophe inside a word is ’. prev is the
-// character before s, from the segment before it.
-func curl(s string, prev rune) string {
-	if !strings.ContainsAny(s, `"'`) {
-		return s
-	}
-	var b strings.Builder
-	for _, r := range s {
-		switch r {
-		case '"':
-			if opens(prev) {
-				r = '“'
-			} else {
-				r = '”'
-			}
-		case '\'':
-			if opens(prev) {
-				r = '‘'
-			} else {
-				r = '’'
-			}
-		}
-		b.WriteRune(r)
-		prev = r
-	}
-	return b.String()
-}
-
-func opens(prev rune) bool {
-	return unicode.IsSpace(prev) || strings.ContainsRune("([{“‘—–-/", prev)
+func (altTextImages) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
+	reg.Register(ast.KindImage, func(util.BufWriter, []byte, ast.Node, bool) (ast.WalkStatus, error) {
+		return ast.WalkContinue, nil
+	})
 }
 
 // Cite is one quote from an evidence string with the answer or prompt it names, if any.
@@ -266,7 +178,7 @@ type Cite struct {
 	// "result", "prompt", or "" when the quote names neither.
 	Kind string
 	N    int
-	// The quote, cleaned by Quote, without its marks.
+	// The quote as written, without its outer marks: Markdown, for HTML or Text.
 	Text string
 }
 
@@ -281,15 +193,15 @@ func (c Cite) Label() string {
 // String is the cite as one line of plain text: `result 3756: “…”`.
 func (c Cite) String() string {
 	if c.Kind == "" {
-		return "“" + c.Text + "”"
+		return "“" + Text(c.Text) + "”"
 	}
-	return c.Label() + ": “" + c.Text + "”"
+	return c.Label() + ": “" + Text(c.Text) + "”"
 }
 
 // Parse splits evidence written the way the analyst cites answers, `3756: "quote". 3762:
 // "quote"`, into its quotes. A number alone or after "result" or "answer" is a result ID, and
 // after "prompt" a prompt number; items may be separated by ".", ";", "," or "|". Parse returns
-// nil unless the whole string is such a list, so prose falls back to Prose.
+// nil unless the whole string is such a list, so prose falls back to text.
 func Parse(s string) []Cite {
 	s = strings.TrimSpace(s)
 	var out []Cite
@@ -350,7 +262,7 @@ func item(s string) (Cite, string, bool) {
 			if !ends(body[i+len(closer):]) {
 				return c, "", false
 			}
-			c.Text = Quote(body[:i])
+			c.Text = strings.TrimSpace(body[:i])
 			return c, body[i+len(closer):], c.Text != ""
 		}
 		switch body[i] {
@@ -378,11 +290,11 @@ func ends(rest string) bool {
 }
 
 // Lines is evidence as plain text for a terminal or a message: one line per quote when it
-// parses, else the whole text cleaned by Prose.
+// parses, else the whole text as one line (see Text).
 func Lines(s string) []string {
 	cs := Parse(s)
 	if cs == nil {
-		if p := Prose(s); p != "" {
+		if p := strings.TrimSpace(Text(s)); p != "" {
 			return []string{p}
 		}
 		return nil

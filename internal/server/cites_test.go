@@ -53,23 +53,23 @@ func TestCitesRenderEvidenceAsLinkedQuotes(t *testing.T) {
 		want []string
 	}{
 		"hub findings": {findings, []string{
-			`<blockquote class="evidence">“I don’t have reliable information on “Acme Widgets””</blockquote><figcaption class="muted small">— ` + link + `</figcaption>`,
+			`<blockquote class="evidence">“I don't have reliable information on &quot;Acme Widgets&quot;”</blockquote><figcaption class="muted small">— ` + link + `</figcaption>`,
 			`<blockquote class="evidence">“I don’t know Acme Widgets’ current self-hosting requirements”</blockquote>`,
-			`<p><b>Evidence:</b> 7: &#34;Use the format &#34;name&#34;. 12: &#34;value&#34; as shown&#34;</p>`,
+			`<p><b>Evidence:</b> 7: &quot;Use the format &quot;name&quot;. 12: &quot;value&quot; as shown&quot;</p>`,
 		}},
 		"hub investigations": {investigations, []string{
-			`<b>Why:</b> Answers call it &#34;cheap&#34;`,
-			`<blockquote class="evidence">“Add-ons can push the real cost to about $76/month”</blockquote>`,
+			`<b>Why:</b> Answers call it &quot;cheap&quot;`,
+			`<blockquote class="evidence">“Add-ons can push the real cost to about <strong>$76/month</strong>”</blockquote>`,
 			`<a href="/runs/` + id + `#result-202">result 202</a>`,
 		}},
-		"run page": {run, []string{link, `“Starter is $95/month… roundups list Foo (~$29/mo), Bar (~$24/mo) and Baz (~$20/mo)”`}},
+		"run page": {run, []string{link, `“Starter is $95/month... roundups list Foo (~$29/mo), Bar (~$24/mo) and Baz (~$20/mo)”`}},
 	} {
 		for _, w := range c.want {
 			if !strings.Contains(c.body, w) {
 				t.Errorf("%s: want %s", name, w)
 			}
 		}
-		for _, bad := range []string{`\&#34;`, `\"`, `**$76`, `101: &#34;`, `#result-12"`} {
+		for _, bad := range []string{`\&#34;`, `\&quot;`, `\"`, `**$76`, `101: &#34;`, `101: &quot;`, `#result-12"`} {
 			if strings.Contains(c.body, bad) {
 				t.Errorf("%s: shows %s", name, bad)
 			}

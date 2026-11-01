@@ -30,15 +30,15 @@ func printNextSteps(stdout, stderr io.Writer, setName string, hasFixes bool, nex
 	fmt.Fprintf(stdout, "# Next steps: %s\n\n%d actions · %d investigations · %d market findings\n\n", setName, len(next.Actions), len(next.Investigations), len(next.Findings))
 	fmt.Fprintln(stdout, "## Actions")
 	for _, q := range next.Actions {
-		fmt.Fprintf(stdout, "\n- **%s**\n  - Change: %s\n  - Where: %s\n  - Done when: %s\n  - Verification: %s\n", q.Title, excerpt.Prose(q.Claim), q.Target, excerpt.Prose(q.DoneWhen), excerpt.Prose(q.Verification.Summary))
+		fmt.Fprintf(stdout, "\n- **%s**\n  - Change: %s\n  - Where: %s\n  - Done when: %s\n  - Verification: %s\n", q.Title, excerpt.Text(q.Claim), q.Target, excerpt.Text(q.DoneWhen), excerpt.Text(q.Verification.Summary))
 	}
 	fmt.Fprintln(stdout, "\n## Investigations")
 	for _, inv := range next.Investigations {
-		fmt.Fprintf(stdout, "\n- **%s**\n  - Why: %s\n  - Read-only check: %s\n  - Decision: %s\n", inv.Title, excerpt.Prose(inv.Why), excerpt.Prose(inv.Check), excerpt.Prose(inv.Decision))
+		fmt.Fprintf(stdout, "\n- **%s**\n  - Why: %s\n  - Read-only check: %s\n  - Decision: %s\n", inv.Title, excerpt.Text(inv.Why), excerpt.Text(inv.Check), excerpt.Text(inv.Decision))
 	}
 	fmt.Fprintln(stdout, "\n## Market findings")
 	for _, f := range next.Findings {
-		fmt.Fprintf(stdout, "\n- **%s**: %s\n", f.Title, excerpt.Prose(f.Detail))
+		fmt.Fprintf(stdout, "\n- **%s**: %s\n", f.Title, excerpt.Text(f.Detail))
 		printEvidence(stdout, f.Evidence)
 	}
 	switch {

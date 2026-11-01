@@ -49,10 +49,6 @@ import (
 	"github.com/cheapseatsdev/cheapseats/internal/sets"
 	"github.com/cheapseatsdev/cheapseats/internal/store"
 	"github.com/cheapseatsdev/cheapseats/internal/version"
-	"github.com/yuin/goldmark"
-	"github.com/yuin/goldmark/ast"
-	"github.com/yuin/goldmark/renderer"
-	"github.com/yuin/goldmark/util"
 )
 
 //go:embed templates/*.html static/*
@@ -212,13 +208,12 @@ func New(a *app.App) (*Server, error) {
 			}
 			return fmt.Sprintf("#%d", n)
 		},
-		"markdown": analystMarkdown,
-		// Model-written text that quotes answers, cleaned for reading (see package excerpt):
-		// prose such as a claim or a reason, one quote to set between “ and ”, and evidence
-		// to render with the "cites" partial.
-		"prose": excerpt.Prose,
-		"quote": excerpt.Quote,
-		"cites": newCites,
+		// The analyst's insights, as Markdown with blocks.
+		"markdown": excerpt.Block,
+		// Model-written text that quotes answers (a claim, a reason, a quote), as inline
+		// Markdown, and evidence to render with the "cites" partial (see package excerpt).
+		"inline": excerpt.HTML,
+		"cites":  newCites,
 		// An answer split around its grade's evidence, to highlight it (see grade.Mark).
 		"mark": grade.Mark,
 		"evidence": func(x run.Result) string {
@@ -265,7 +260,7 @@ func newCites(label, runID, evidence string) citesView {
 	v := citesView{Label: label}
 	cs := excerpt.Parse(evidence)
 	if cs == nil {
-		v.Text = excerpt.Prose(evidence)
+		v.Text = evidence
 		return v
 	}
 	for _, c := range cs {
@@ -578,28 +573,6 @@ const contentPolicy = "frame-ancestors 'none'; img-src 'self'; object-src 'none'
 func refuseFraming(h http.Header) {
 	h.Set("Content-Security-Policy", contentPolicy)
 	h.Set("X-Frame-Options", "DENY") // frame-ancestors, for browsers without it
-}
-
-// markdownRenderer renders the analyst's Markdown. goldmark escapes raw HTML unless told
-// otherwise, and an image is rendered as its alt text: the analyst read pages and answers anyone
-// can write, and an image that loads fetches whatever URL they put in it.
-var markdownRenderer = goldmark.New(goldmark.WithRendererOptions(renderer.WithNodeRenderers(util.Prioritized(altTextImages{}, 500))))
-
-func analystMarkdown(md string) template.HTML {
-	var b strings.Builder
-	if markdownRenderer.Convert([]byte(md), &b) != nil {
-		return template.HTML(template.HTMLEscapeString(md))
-	}
-	return template.HTML(b.String())
-}
-
-// altTextImages renders an image as nothing but its children, the alt text.
-type altTextImages struct{}
-
-func (altTextImages) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
-	reg.Register(ast.KindImage, func(util.BufWriter, []byte, ast.Node, bool) (ast.WalkStatus, error) {
-		return ast.WalkContinue, nil
-	})
 }
 
 // emailAllowed reports whether a proxy-signed-in email may use Cheap Seats: anyone when no list is
