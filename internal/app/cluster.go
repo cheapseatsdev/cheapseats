@@ -63,8 +63,9 @@ type phraseCache struct {
 
 // PhraseClusters is the counting map for one kind: a folded phrase the grader wrote, to the
 // wording of the cluster it counts under, as that wording was first written. It holds the stored
-// decisions at or above the configured confidence, one hop deep, and a phrase that is its own
-// cluster maps to its own first wording. An empty map leaves every count as it is.
+// decisions at or above the configured confidence, chains followed to their end (resolveFolds),
+// and a phrase that is its own cluster maps to its own first wording. An empty map leaves every
+// count as it is.
 func (a *App) PhraseClusters(kind string) map[string]string {
 	a.phrases.mu.Lock()
 	defer a.phrases.mu.Unlock()
@@ -96,12 +97,7 @@ func (a *App) PhraseClusters(kind string) map[string]string {
 			rows.Close()
 		}
 	}
-	// One hop: a phrase clustered onto a phrase that is itself clustered.
-	for p, d := range m {
-		if d2, ok := m[grade.Fold(d)]; ok && grade.Fold(d2) != p {
-			m[p] = d2
-		}
-	}
+	m = resolveFolds(m, grade.Fold)
 	if a.phrases.m == nil {
 		a.phrases.m = map[string]map[string]string{}
 	}

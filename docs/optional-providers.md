@@ -103,6 +103,13 @@ stored matches with configured aliases; `report.Options.Aliases` folds board nam
 A `none` decision leaves a separate product and is not asked again. Each undecided candidate takes
 one request; the CLI prints matches and probabilities.
 
+Reading the decisions back is the same on every read. Configuration wins: a stored decision never
+refolds a configured alias or a configured competitor's own name. A chain of decisions is followed
+to its end, so a -> b -> c folds a onto c. Decisions that point round in a circle (a -> b -> a)
+contradict each other about which name is the product's, so every name on the circle stays its
+own row, and a name decided onto one of them folds onto that name and no further. Phrase clusters
+are read back by the same rule.
+
 Give Jev category and answer context, define what counts as the same product, and keep one name's
 candidates in each request. Bare names and unrelated batched questions can change the judgment.
 Use the chosen-option probability described above, not distribution confidence alone.

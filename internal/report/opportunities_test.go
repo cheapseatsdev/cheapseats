@@ -1,6 +1,7 @@
 package report
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/cheapseatsdev/cheapseats/internal/answer"
@@ -79,5 +80,27 @@ func TestOpportunitiesEmpty(t *testing.T) {
 	s := Build(config.Brand{Name: "Acme"}, nil)
 	if s.Opportunities == nil || len(s.Opportunities) != 0 {
 		t.Fatalf("want an empty list, got %#v", s.Opportunities)
+	}
+}
+
+// Every list in a summary is built from maps, so each needs a tie-break: a list sorted on counts
+// alone comes out in Go's randomised map order wherever two rows tie. Every row here ties with
+// another (three products named in the same answers, pages and hosts cited equally), so a missing
+// tie-break shows up as two builds that differ.
+func TestBuildOrdersTiesTheSameEveryTime(t *testing.T) {
+	brand := config.Brand{Name: "Acme", Domains: []string{"acme.example"}}
+	g := grade.Grade{Verdict: grade.Mentioned, TopPick: ptr("Gauge"), Named: []string{"Gauge", "Meter", "Dial", "Acme"}}
+	var res []run.Result
+	for p := 0; p < 4; p++ {
+		res = append(res,
+			citing(p, g, "https://www.techradar.com/best/widgets", "https://www.pcmag.com/picks/the-best-widgets", "https://zapier.com/blog/best-widget-apps/"),
+			citing(p, grade.Grade{Verdict: grade.Absent, TopPick: ptr("Meter"), Named: []string{"Meter", "Gauge", "Dial"}}, "https://acme.example/docs/intro", "https://acme.example/pricing", "https://www.techradar.com/best/widgets"))
+	}
+	opt := Options{Competitors: []sets.Competitor{{Name: "Gauge"}, {Name: "Meter"}, {Name: "Dial"}}}
+	first, _ := json.Marshal(BuildWith(brand, res, opt))
+	for i := 1; i < 50; i++ {
+		if got, _ := json.Marshal(BuildWith(brand, res, opt)); string(got) != string(first) {
+			t.Fatalf("build %d differs from the first:\n first %s\n   now %s", i, first, got)
+		}
 	}
 }

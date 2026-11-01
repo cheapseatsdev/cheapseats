@@ -52,7 +52,9 @@ type aliasCache struct {
 
 // Aliases is the board's folding map: a lower-cased name the grader wrote, to the name it is
 // displayed as. It holds the configured competitors' aliases and the stored Jev decisions at or
-// above the configured confidence.
+// above the configured confidence. Configuration wins: a decision never refolds a configured
+// alias or a configured competitor's own name. Chains are followed to their end, and names whose
+// decisions point round in a circle stay apart (resolveFolds).
 func (a *App) Aliases() map[string]string {
 	a.aliases.mu.Lock()
 	defer a.aliases.mu.Unlock()
@@ -85,7 +87,7 @@ func (a *App) Aliases() map[string]string {
 				continue
 			}
 			seen[v] = true
-			if _, fixed := m[v]; !fixed {
+			if _, fixed := m[v]; !fixed && !isCompetitorName(v, a.Cfg) {
 				m[v] = d
 			}
 		}
@@ -93,14 +95,74 @@ func (a *App) Aliases() map[string]string {
 	} else if a.DB != nil {
 		slog.Error("aliases", "err", err)
 	}
-	// One hop: a variant folded onto a name that is itself folded.
-	for v, d := range m {
-		if d2, ok := m[strings.ToLower(d)]; ok && !strings.EqualFold(d2, v) {
-			m[v] = d2
-		}
-	}
+	m = resolveFolds(m, strings.ToLower)
 	a.aliases.m, a.aliases.valid = m, true
 	return m
+}
+
+// resolveFolds returns a folding map with every chain followed to its end, the same whatever
+// order Go ranges over m in. m maps a key to the display name it folds onto, and key turns a
+// display name back into a key. An entry that maps to itself (key(m[v]) == v) ends a chain.
+//
+// Each entry is a decision that one name is another, so followed in turn they say where a name
+// ends up: a -> b -> c folds a onto c. Where they point round in a circle (a -> b -> a) they
+// contradict each other about which name is the product's, and picking one would be a guess:
+// every name on the circle is left unfolded, and a name decided onto one of them folds onto that
+// name and no further.
+func resolveFolds(m map[string]string, key func(string) string) map[string]string {
+	// next is the key v's entry points at, or false where v ends a chain.
+	next := func(v string) (string, bool) {
+		d, ok := m[v]
+		if !ok {
+			return "", false
+		}
+		k := key(d)
+		return k, k != v
+	}
+	// A walk from v that comes back to v puts v on a circle. One that runs for as many steps as m
+	// has entries without coming back has entered a circle v isn't on.
+	circle := map[string]bool{}
+	for v := range m {
+		x := v
+		for range len(m) {
+			k, ok := next(x)
+			if !ok {
+				break
+			}
+			if k == v {
+				circle[v] = true
+				break
+			}
+			x = k
+		}
+	}
+	out := make(map[string]string, len(m))
+	for v, d := range m {
+		if circle[v] {
+			continue
+		}
+		k, ok := next(v)
+		for ok && !circle[k] {
+			dk, has := m[k]
+			if !has {
+				break
+			}
+			d = dk
+			k, ok = next(k)
+		}
+		out[v] = d
+	}
+	return out
+}
+
+// isCompetitorName reports whether a lower-cased name is a configured competitor's own name.
+func isCompetitorName(k string, cfg *config.Config) bool {
+	for _, c := range cfg.Competitors {
+		if strings.EqualFold(k, strings.TrimSpace(c.Name)) {
+			return true
+		}
+	}
+	return false
 }
 
 func (a *App) invalidateAliases() {
