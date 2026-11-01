@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"regexp"
 	"sort"
 	"strings"
 	"unicode"
@@ -72,7 +73,7 @@ func normalizeNotes(set sets.Set, a *Analysis) {
 			omit(a, "investigation", n.Title, why+" It asked: "+clip(n.Why, 300))
 			continue
 		}
-		if len(n.Prompts) > 0 && strings.TrimSpace(n.Why) != "" && usefulPlan(n.Check, n.Decision, n.Evidence, n.Target) {
+		if len(n.Prompts) > 0 && strings.TrimSpace(n.Why) != "" && planProblem(n.Check, n.Decision, n.Evidence, n.Target) == "" {
 			investigations = append(investigations, n)
 		}
 	}
@@ -165,36 +166,189 @@ func omit(a *Analysis, what, title, why string) {
 	a.Insights += note
 }
 
-// usefulPlan is a structural floor, not a substitute for the analyst's judgment:
-// a check names a bounded artifact, evidence and an actual decision. Short labels
-// and the old generic promotion boilerplate do not earn a research task.
-func usefulPlan(check, decision, evidence, target string) bool {
+// planProblem is a structural floor, not a substitute for the analyst's judgment: a check
+// names a bounded artifact, evidence and an actual decision. Short labels and the old generic
+// promotion boilerplate do not earn a research task. It says why the plan falls short, or ""
+// when it doesn't; each sub-test has its own reason, so an omission says which one failed.
+//
+// When the target is one absolute URL, the check must contain that URL (checkNames). A
+// target that isn't, such as a product capability or a target written as prose, is not
+// tested here: no target page is read for it, so verifyDecision leaves it an investigation.
+func planProblem(check, decision, evidence, target string) string {
 	check, decision = strings.TrimSpace(check), strings.TrimSpace(decision)
-	if len(strings.Fields(check)) < 6 || len(strings.Fields(decision)) < 5 || strings.TrimSpace(evidence) == "" || len([]rune(check)) > 2000 || len([]rune(decision)) > 1000 {
-		return false
+	switch {
+	case strings.TrimSpace(evidence) == "":
+		return "it cites no evidence."
+	case len(strings.Fields(check)) < 6:
+		return "its check is too short to name a bounded read-only check."
+	case len(strings.Fields(decision)) < 5:
+		return "its decision is too short to name a concrete business choice."
+	case len([]rune(check)) > 2000 || len([]rune(decision)) > 1000:
+		return "its check or decision is too long to be bounded."
 	}
-	first := strings.ToLower(strings.Fields(check)[0])
-	switch first {
+	switch strings.ToLower(strings.Fields(check)[0]) {
 	case "read", "inspect", "compare", "check", "confirm", "verify", "list", "review", "find", "search", "count":
 	default:
-		return false
+		return "its check does not start with a read-only verb (Read, Inspect, Compare, Check, Confirm, Verify, List, Review, Find, Search or Count)."
 	}
 	lower := strings.ToLower(decision)
 	for _, generic := range []string{"promote only", "promote if", "investigate further", "whether to investigate", "decide what to do next"} {
 		if strings.Contains(lower, generic) {
-			return false
+			return "its decision is generic boilerplate rather than a concrete business choice."
 		}
 	}
 	if check == decision {
+		return "its check only repeats its decision."
+	}
+	if absoluteURL(target) && !checkNames(check, target) {
+		return "its check does not name its target URL."
+	}
+	return ""
+}
+
+// locator is a URL as the locator test compares it: without its scheme, the scheme and host
+// lower-cased, a leading www. dropped from the host, and one trailing slash removed. The path,
+// query and fragment keep their case (/Docs and /docs are different pages), and nothing else is
+// trimmed: a target ending in punctuation keeps it. checkNames strips sentence punctuation from
+// a bare URL found in a check (checkURLs) before this.
+func locator(u string) string {
+	u = strings.TrimSpace(u)
+	if i := strings.Index(u, "://"); i >= 0 {
+		u = u[i+len("://"):]
+	}
+	host, rest := u, ""
+	if i := strings.IndexAny(u, "/?#"); i >= 0 {
+		host, rest = u[:i], u[i:]
+	}
+	host = strings.TrimPrefix(strings.ToLower(host), "www.")
+	return strings.TrimSuffix(host+rest, "/")
+}
+
+// urlInCheck finds where each absolute URL in a check starts; urlEnd finds where it ends.
+var urlInCheck = regexp.MustCompile("(?i)https?://")
+
+// urlChar reports whether r can stand on either side of an apostrophe inside a URL: a letter,
+// a digit, or one of -._~/.
+func urlChar(r rune) bool {
+	return unicode.IsLetter(r) || unicode.IsDigit(r) || strings.ContainsRune("-._~/", r)
+}
+
+// inWord reports whether the apostrophe (' or \u2019) at check[i:] sits between two URL
+// characters, as in /john's-guide, so it is part of the URL rather than a quote.
+func inWord(check string, i int) bool {
+	r, n := utf8.DecodeRuneInString(check[i:])
+	if r != '\'' && r != '\u2019' {
 		return false
 	}
-	if target != "" {
-		locator := strings.TrimSuffix(strings.TrimPrefix(strings.TrimPrefix(strings.ToLower(target), "https://"), "http://"), "/")
-		if !strings.Contains(strings.ToLower(check), locator) {
-			return false
+	prev, _ := utf8.DecodeLastRuneInString(check[:i])
+	next, _ := utf8.DecodeRuneInString(check[i+n:])
+	return urlChar(prev) && urlChar(next)
+}
+
+// urlEnd is where the URL starting at start in check ends: at whitespace, an angle bracket, a
+// straight double quote or a backtick, which a URL can't contain unescaped, or at an apostrophe
+// (' or \u2019) that isn't between two URL characters.
+func urlEnd(check string, start int) int {
+	i := start
+	for i < len(check) {
+		r, n := utf8.DecodeRuneInString(check[i:])
+		if unicode.IsSpace(r) || strings.ContainsRune("<>\"`", r) || (r == '\'' || r == '\u2019') && !inWord(check, i) {
+			break
+		}
+		i += n
+	}
+	return i
+}
+
+// trimSentence strips what prose puts after a bare URL that ends a sentence or list item in a
+// check: sentence punctuation, closing quotes, and a closing parenthesis the URL didn't open
+// (Guide_(CLI) keeps its own). It is for bare URLs found in a check only; a delimited one and a
+// target are compared as written.
+func trimSentence(u string) string {
+	for u != "" {
+		switch last := u[len(u)-1]; {
+		case strings.IndexByte(".,;:!?\"'", last) >= 0:
+			u = u[:len(u)-1]
+		case strings.HasSuffix(u, "\u201d") || strings.HasSuffix(u, "\u2019"):
+			u = u[:len(u)-len("\u201d")]
+		case last == ')' && strings.Count(u, ")") > strings.Count(u, "("):
+			u = u[:len(u)-1]
+		default:
+			return u
 		}
 	}
-	return true
+	return u
+}
+
+// delimiters pairs each character that can open a delimited URL in a check with its closer.
+var delimiters = map[rune]rune{'<': '>', '(': ')', '[': ']', '"': '"', '\u201c': '\u201d', '\'': '\'', '`': '`'}
+
+// delimited is the URL starting at start in check when a delimiter pair wraps it, everything
+// inside exactly as written, and false when none does: the character before it opens no pair,
+// or whitespace comes before its closer. Brackets and parentheses nest, so (…/Guide_(CLI))
+// closes at the last ).
+func delimited(check string, start int) (string, bool) {
+	open, _ := utf8.DecodeLastRuneInString(check[:start])
+	closer, ok := delimiters[open]
+	if !ok {
+		return "", false
+	}
+	depth := 0
+	for i, r := range check[start:] {
+		switch {
+		case unicode.IsSpace(r):
+			return "", false
+		case r == closer && depth == 0 && !inWord(check, start+i):
+			return check[start : start+i], true
+		case r == closer:
+			depth--
+		case r == open:
+			depth++
+		}
+	}
+	return "", false
+}
+
+// checkURLs are the absolute URLs written in a check: one a delimiter pair wraps, exactly as
+// written inside it; a bare one without the sentence punctuation after it (trimSentence).
+func checkURLs(check string) []string {
+	var out []string
+	end := 0
+	for _, at := range urlInCheck.FindAllStringIndex(check, -1) {
+		if at[0] < end {
+			continue // a scheme inside the URL before it
+		}
+		end = urlEnd(check, at[0])
+		if u, ok := delimited(check, at[0]); ok {
+			out = append(out, u)
+			continue
+		}
+		out = append(out, trimSentence(check[at[0]:end]))
+	}
+	return out
+}
+
+// checkNames reports whether a check contains its target: some URL in the check (checkURLs) is
+// the target, compared as locators.
+func checkNames(check, target string) bool {
+	want := locator(target)
+	for _, u := range checkURLs(check) {
+		if locator(u) == want {
+			return true
+		}
+	}
+	return false
+}
+
+// absoluteURL reports whether a target is one absolute http(s) URL with a dotted host.
+func absoluteURL(target string) bool {
+	t := strings.TrimSpace(target)
+	lower := strings.ToLower(t)
+	if t == "" || len(strings.Fields(t)) != 1 || strings.Count(t, "://") != 1 || !strings.HasPrefix(lower, "https://") && !strings.HasPrefix(lower, "http://") {
+		return false
+	}
+	u, err := url.Parse(t)
+	return err == nil && u.User == nil && strings.Contains(strings.Trim(u.Hostname(), "."), ".")
 }
 
 func rejectCandidate(a *Analysis, f Fix, why string) {
@@ -237,9 +391,13 @@ func readArtifacts(ctx context.Context, cfg *config.Config, fs []Fix) []artifact
 			urls = append(urls, u)
 		}
 	}
-	// Proposed targets first. A home page cannot verify an unrelated target.
+	// Proposed targets first. A home page cannot verify an unrelated target. A product target
+	// is a capability name, and a target that isn't one absolute URL names no page: neither is
+	// read, even when it looks like an address.
 	for _, f := range fs {
-		add(f.Target)
+		if f.Type != Product && absoluteURL(f.Target) {
+			add(f.Target)
+		}
 	}
 	for _, site := range cfg.Brand.AllSites() {
 		add(site.URL)
@@ -340,8 +498,12 @@ func verifyCandidates(ctx context.Context, cfg *config.Config, set sets.Set, a A
 			rejectCandidate(&a, f, why+" It claimed: "+clip(f.Claim, 300))
 			continue
 		}
-		if !usefulPlan(f.Check, f.Decision, f.Evidence, f.Target) {
-			rejectCandidate(&a, f, "no bounded read-only check and concrete business decision justify investigating it.")
+		target := f.Target
+		if f.Type == Product {
+			target = "" // a capability name, never read as a page
+		}
+		if why := planProblem(f.Check, f.Decision, f.Evidence, target); why != "" {
+			rejectCandidate(&a, f, why)
 			continue
 		}
 		if f.Title == "" || f.Target == "" || f.Claim == "" || f.DoneWhen == "" || f.Evidence == "" || len(f.Prompts) == 0 {
@@ -517,9 +679,12 @@ func verifyDecision(d decision, f Fix, cfg *config.Config, pages []artifact) (Ve
 		return Verification{}, "A new page requires checking the relevant existing-content inventory; sampled pages alone do not establish a missing artifact."
 	}
 	if f.Type != Product {
+		// Only a target written as one absolute URL is ever read for its own sake. Another one
+		// (a bare host, say) may equal a brand page read as reference, but was not read as the
+		// target, so it stays unverified.
 		found := false
 		for _, p := range pages {
-			found = found || p.URL == webURL(f.Target) && p.Text != ""
+			found = found || absoluteURL(f.Target) && p.URL == webURL(f.Target) && p.Text != ""
 		}
 		if !found {
 			return Verification{}, "The current target could not be read; its existing work and eligibility remain unknown."
