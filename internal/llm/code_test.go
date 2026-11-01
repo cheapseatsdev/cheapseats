@@ -2,6 +2,7 @@ package llm
 
 import (
 	"go/ast"
+	"go/format"
 	"go/parser"
 	"go/token"
 	"strings"
@@ -127,6 +128,7 @@ func TestCodeDigestFollowsTheTree(t *testing.T) {
 		"switch f() {} and switch f(); {}": {"switch f() {\ncase false:\n\ta()\n}", "switch f(); {\ncase false:\n\ta()\n}"},
 		// A newline after f() puts a semicolon in: the second is switch f(); {}.
 		"switch f() { and switch f() then { on the next line": {"switch f() {\ncase false:\n\ta()\n}", "switch f()\n{\ncase false:\n\ta()\n}"},
+		"1 and 1.0":          {"_ = 1", "_ = 1.0"},
 		"g(xs...) and g(xs)": {"xs := []int{}\ng(xs...)", "xs := []int{}\ng(xs)"},
 		// The same nodes in different slots: only the nil children's markers tell these apart.
 		"s[1:] and s[:1]":                  {"s := []int{}\n_ = s[1:]", "s := []int{}\n_ = s[:1]"},
@@ -139,6 +141,42 @@ func TestCodeDigestFollowsTheTree(t *testing.T) {
 	alias, defined := "package p\n\ntype A = int\n", "package p\n\ntype A int\n"
 	if codeTestDigest(t, alias, "A") == codeTestDigest(t, defined, "A") {
 		t.Errorf("type A = int and type A int hash the same")
+	}
+}
+
+// What gofmt changes doesn't change the digest: each source is hashed against gofmt's form of it.
+func TestCodeDigestIgnoresWhatGofmtChanges(t *testing.T) {
+	for name, src := range map[string]string{
+		"a parenthesized result":     "package p\n\nfunc F() (int) { return 1 }\n",
+		"a parenthesized param type": "package p\n\nfunc F(x (int)) int { return x }\n",
+		"if (x>0)":                   "package p\n\nfunc F(x int) int { if (x>0) { return 1 }; return 0 }\n",
+		"func F(){;}":                "package p\n\nfunc F(){;}\n",
+		"goto L; L:;":                "package p\n\nfunc F() { goto L; L:; }\n",
+		"a number's spelling":        "package p\n\nconst C = 0X1F + 1E3 + 0O17 + 0B1\n\nfunc F() int { return C }\n",
+		"import order":               "package p\n\nimport (\n\t\"strings\"\n\t\"fmt\"\n)\n\nfunc F() { fmt.Println(strings.ToUpper(\"\")) }\n",
+	} {
+		formatted, err := format.Source([]byte(src))
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if string(formatted) == src {
+			t.Fatalf("%s: gofmt leaves it alone, so this tests nothing", name)
+		}
+		if codeTestDigest(t, src, "F") != codeTestDigest(t, string(formatted), "F") || codeTestDigest(t, src) != codeTestDigest(t, string(formatted)) {
+			t.Errorf("%s: gofmt changed the digest\n%s", name, formatted)
+		}
+	}
+	// gofmt keeps these parentheses, but they are as redundant as the ones it removes.
+	if codeTestDigest(t, "package p\n\nfunc F(x int) int { return (x) }\n", "F") != codeTestDigest(t, "package p\n\nfunc F(x int) int { return x }\n", "F") {
+		t.Errorf("return (x) and return x hash differently")
+	}
+	// A label on an empty statement is still a label.
+	if codeTestDigest(t, "package p\n\nfunc F() {\n\tgoto L\nL:\n}\n", "F") == codeTestDigest(t, "package p\n\nfunc F() {\n}\n", "F") {
+		t.Errorf("a labeled empty statement hashes like nothing")
+	}
+	// Grouping is in the tree whether or not it's written with parentheses.
+	if codeTestDigest(t, "package p\n\nfunc F(a, b, c int) int { return (a + b) * c }\n", "F") == codeTestDigest(t, "package p\n\nfunc F(a, b, c int) int { return a + b*c }\n", "F") {
+		t.Errorf("(a + b) * c and a + b*c hash the same")
 	}
 }
 

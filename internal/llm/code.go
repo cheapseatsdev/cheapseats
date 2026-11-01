@@ -5,6 +5,7 @@ import (
 	"embed"
 	"fmt"
 	"go/ast"
+	"go/constant"
 	"go/parser"
 	"go/token"
 	"hash"
@@ -72,8 +73,7 @@ func CodeDigest(files map[string][]byte, names ...string) (string, error) {
 		}
 		if len(names) == 0 {
 			fmt.Fprintf(h, "%s\x00", p)
-			hashNode(h, reflect.ValueOf(f.Name))
-			hashNode(h, reflect.ValueOf(f.Decls))
+			hashFile(h, f)
 			continue
 		}
 		for _, d := range f.Decls {
@@ -171,11 +171,13 @@ func funcName(d *ast.FuncDecl) (name, recv string) {
 
 // hashNode writes a canonical form of a syntax tree to h: each node's type, then its fields in
 // declaration order, with a marker for a nil child (so s[1:] and s[:1], or a for loop's init and
-// its post statement, differ), identifiers' names, literals' kinds
-// and values (a struct field's tag among them) and operators. Positions are left out but for
-// whether one is there, since a few things are written only as one: the "=" of type A = B, the
-// "..." of f(xs...). Comments and resolved objects are left out. Layout and semicolons, written or
-// put in at line ends, never reach the tree, so they don't count.
+// its post statement, differ), identifiers' names, literals' kinds and values (a struct field's tag
+// among them) and operators. Comments and resolved objects are left out, and layout and
+// semicolons never reach the tree. What gofmt changes without changing the code is left out or
+// made canonical too: parentheses (the tree's shape already says how an expression groups),
+// empty statements in a list, a number literal's spelling (0X1F and 0x1F, 1E3 and 1e3) and the
+// order of imports. Positions are left out but for the two things written only as one: the "="
+// of type A = B and the "..." of f(xs...).
 func hashNode(h hash.Hash, v reflect.Value) {
 	switch v.Kind() {
 	case reflect.Interface, reflect.Pointer:
@@ -183,21 +185,42 @@ func hashNode(h hash.Hash, v reflect.Value) {
 			io.WriteString(h, "nil\x00")
 			return
 		}
+		if p, ok := v.Interface().(*ast.ParenExpr); ok {
+			hashNode(h, reflect.ValueOf(p.X))
+			return
+		}
+		if l, ok := v.Interface().(*ast.BasicLit); ok && l.Kind != token.STRING && l.Kind != token.CHAR {
+			// gofmt lowercases a number's prefix and exponent; its value is what counts.
+			fmt.Fprintf(h, "BasicLit{\x00%s\x00%s\x00}\x00", l.Kind, constant.MakeFromLiteral(l.Value, l.Kind, 0).ExactString())
+			return
+		}
 		hashNode(h, v.Elem())
 	case reflect.Slice:
-		fmt.Fprintf(h, "[%d\x00", v.Len())
+		n := 0
 		for i := 0; i < v.Len(); i++ {
-			hashNode(h, v.Index(i))
+			if !isEmptyStmt(v.Index(i)) {
+				n++
+			}
+		}
+		fmt.Fprintf(h, "[%d\x00", n)
+		for i := 0; i < v.Len(); i++ {
+			if !isEmptyStmt(v.Index(i)) {
+				hashNode(h, v.Index(i))
+			}
 		}
 		io.WriteString(h, "]\x00")
 	case reflect.Struct:
-		fmt.Fprintf(h, "%s{\x00", v.Type().Name())
+		t := v.Type()
+		fmt.Fprintf(h, "%s{\x00", t.Name())
 		for i := 0; i < v.NumField(); i++ {
-			f := v.Type().Field(i)
-			switch f.Type {
-			case posType:
-				fmt.Fprintf(h, "%t\x00", v.Field(i).Interface().(token.Pos).IsValid())
-			case commentType, objectType, scopeType:
+			f := t.Field(i)
+			switch {
+			case f.Type == posType:
+				if meaningfulPos[t.Name()+"."+f.Name] {
+					fmt.Fprintf(h, "%t\x00", v.Field(i).Interface().(token.Pos).IsValid())
+				}
+			case f.Type == commentType || f.Type == objectType || f.Type == scopeType:
+			case t == emptyStmtType && f.Name == "Implicit": // a written ; or one before } or a newline
 			default:
 				hashNode(h, v.Field(i))
 			}
@@ -216,9 +239,50 @@ func hashNode(h hash.Hash, v reflect.Value) {
 	}
 }
 
+// isEmptyStmt reports whether a list element is an empty statement, which gofmt drops ({;}) or
+// writes differently (L:; and L: before }). A labeled statement's empty body isn't in a list, so
+// it still counts.
+func isEmptyStmt(v reflect.Value) bool {
+	s, ok := v.Interface().(ast.Stmt)
+	if !ok {
+		return false
+	}
+	_, ok = s.(*ast.EmptyStmt)
+	return ok
+}
+
+// hashFile writes a whole file's tree: its package name, its imports in a fixed order (gofmt sorts
+// them), and every other declaration in order.
+func hashFile(h hash.Hash, f *ast.File) {
+	hashNode(h, reflect.ValueOf(f.Name))
+	imports := make([]string, 0, len(f.Imports))
+	for _, s := range f.Imports {
+		name := ""
+		if s.Name != nil {
+			name = s.Name.Name
+		}
+		imports = append(imports, name+" "+s.Path.Value)
+	}
+	sort.Strings(imports)
+	fmt.Fprintf(h, "imports %q\x00", imports)
+	decls := []ast.Decl{}
+	for _, d := range f.Decls {
+		if g, ok := d.(*ast.GenDecl); !ok || g.Tok != token.IMPORT {
+			decls = append(decls, d)
+		}
+	}
+	hashNode(h, reflect.ValueOf(decls))
+}
+
+// meaningfulPos are the positions whose presence is code: the "=" of an alias and the "..." that
+// passes a slice as a variadic argument. Every other position's presence is layout (a result
+// list's parentheses, a grouped declaration's) or follows from the tree.
+var meaningfulPos = map[string]bool{"TypeSpec.Assign": true, "CallExpr.Ellipsis": true}
+
 var (
-	posType     = reflect.TypeOf(token.NoPos)
-	commentType = reflect.TypeOf((*ast.CommentGroup)(nil))
-	objectType  = reflect.TypeOf((*ast.Object)(nil))
-	scopeType   = reflect.TypeOf((*ast.Scope)(nil))
+	posType       = reflect.TypeOf(token.NoPos)
+	commentType   = reflect.TypeOf((*ast.CommentGroup)(nil))
+	objectType    = reflect.TypeOf((*ast.Object)(nil))
+	scopeType     = reflect.TypeOf((*ast.Scope)(nil))
+	emptyStmtType = reflect.TypeOf(ast.EmptyStmt{})
 )
