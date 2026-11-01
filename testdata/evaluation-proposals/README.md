@@ -1,14 +1,17 @@
-# Proposed Evaluation cases
+# Evaluation challenge cases
 
 These synthetic cases are starting points for human review. They are not trusted
 answers, a measured improvement, or additional golden fixtures. Codex generated
-every proposed label and explanation; no human has adjudicated them. Names,
+every case and its first proposed label. A maintainer reviewed all of them on
+2026-10-31, with the proposals visible: 33 proposals were accepted unchanged and
+the three open grader cases were decided (see "Maintainer decisions"). Because
+the review was not blind, treat these as development cases, not a held-out set. Names,
 features, page contents and `.test` domains are fictional.
 
 | File | Purpose | Current status |
 | --- | --- | --- |
-| `grader-challenges.json` | 22 examples at grading boundaries | Proposed labels, including three unresolved cases |
-| `advice-challenges.json` | 11 examples of useful or unsupported Next steps | Proposed dispositions; no benchmark scorer implemented |
+| `grader-challenges.json` | 22 examples at grading boundaries | Human labels (`human_expected`) |
+| `advice-challenges.json` | 11 examples of useful or unsupported Next steps | Human dispositions (`human_disposition`); no benchmark scorer implemented |
 | `candidate-instructions/` | Two instruction hypotheses to test separately | Unvalidated appendices to the production grader prompt |
 
 ## Review before measuring
@@ -36,9 +39,9 @@ features, page contents and `.test` domains are fictional.
    review gate is a prerequisite for a human decision, not automatic deployment
    or proof of statistical reliability.
 
-The proposal JSON is **not accepted by the current golden JSONL importer**. Do not
-rename it to `.jsonl` or copy assistant proposals into `labeled_by: human`. After
-adjudication, an explicit conversion must preserve the original evidence and real
+The challenge JSON is **not accepted by the current golden JSONL importer**. Do not
+rename it to `.jsonl` or copy these labels into `labeled_by: human` by hand. An
+explicit conversion must preserve the original evidence and real
 review provenance through the workbench's existing record contract. A separate
 review/import contract is still needed for advice artifacts and gate decisions.
 
@@ -55,35 +58,45 @@ Formatting variants expose the difference between a model's interpretation and
 lexical postprocessing. A prompt edit cannot be assumed to repair a code guard.
 
 `evidence` contains human-review support, so it can retain multiple literal spans
-or an echo/namesake passage when the proposed verdict is absent. The production
+or an echo/namesake passage when the verdict is absent. The production
 grader's single `evidence` field remains empty for absence under its current
 contract. No-reference cases correctly have no supporting span: the reviewer must
 read the complete answer. Separate retrieval URLs are annotations, outside the
 answer being graded.
 
-`grader-011`, `grader-017` and `grader-019` remain unresolved proposals. Clarify the
-four-choice and domain-only rules, and recover complete evidence where possible,
-before assigning reference labels. Do not score unresolved examples as absence.
+### Maintainer decisions
+
+`grader-011`, `grader-017` and `grader-019` were decided by a maintainer on
+2026-10-31. Each records the decided rule in `human_adjudication`:
+
+- `grader-011`: four equal endorsements exceed the small-set limit of three, so the
+  brand is mentioned with a positive tone, not recommended.
+- `grader-017`: a configured domain alias identifies the intended brand, so an
+  endorsement through the bare domain is a recommendation and here a top pick.
+- `grader-019`: a cut-off answer is graded on the text present. Favourable
+  description followed by a truncated caveat is a mixed mention.
+
+These rules are not yet in the production rubric.
 
 ## What the advice cases isolate
 
-The proposed decisions use the verifier's six existing gates: `existing_work`,
+The decisions use the verifier's six existing gates: `existing_work`,
 `remaining_change`, `capability`, `strategy`, `eligibility` and `completion`.
 `gates_to_examine` identifies likely problem areas; it is not a complete gold
 checklist. Each passing gate still needs an exact source, quote and explanation.
-The positive owned-page example supplies proposed sources for all six gates.
+The positive owned-page example supplies sources for all six gates.
 Page body hashes pin the synthetic snapshots; hashes do not establish truth.
 
 `advice-001` needs investigation: the complete page gives init and serve commands,
 but no installation command. Complete coverage does not mean every requested
-step is present. Its proposed disposition is not a verified action or an
+step is present. Its disposition is not a verified action or an
 already-done result.
 
 The cases exercise missing installation instructions, intentional boundaries, failed reads,
 irrelevant proof, contradictory tails, missing content inventories, publisher
 control and team-controlled completion. The excerpt case intentionally leaves its
 tail unknown. Rejected actions become investigations only when a bounded check
-could change a useful decision. These are proposals for a future advice benchmark,
+could change a useful decision. These are cases for a future advice benchmark,
 not evidence that the current verifier passes it.
 
 ## Try the instruction hypotheses
@@ -97,5 +110,5 @@ Test each hypothesis separately before considering a combination.
 `whole-answer-check.txt` asks for a final consistency and evidence check. Neither
 changes the rubric or output schema intentionally; a human still needs to confirm
 that the wording preserves their meaning. No provider comparison was run for
-these proposals. Format, provenance, literal quotes and snapshot hashes were
+these cases. Format, provenance, literal quotes and snapshot hashes were
 checked offline; that validation cannot establish label correctness.

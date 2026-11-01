@@ -1,10 +1,12 @@
 {
   "contract": "proposed-advice-benchmark-v1",
-  "status": "proposed",
+  "status": "adjudicated",
   "provenance": {
     "kind": "synthetic",
     "created_by": "Codex",
-    "human_adjudicated": false
+    "human_adjudicated": true,
+    "adjudicated": "2026-10-31",
+    "review": "Maintainer reviewed every case with the Codex proposal visible; not a blind review."
   },
   "scorer_implemented": false,
   "cases": [
@@ -36,12 +38,16 @@
         "action": "Add the three commands needed to start the CLI.",
         "done_when": "The setup page lists install, init and serve commands."
       },
-      "proposed_disposition": "investigate",
       "gates_to_examine": [
         "existing_work",
         "remaining_change"
       ],
-      "rationale": "The page gives init and serve commands but no installation command. Do not mark this already done. Verify the correct install command before treating the remaining edit as supported work."
+      "rationale": "The page gives init and serve commands but no installation command. Do not mark this already done. Verify the correct install command before treating the remaining edit as supported work.",
+      "human_disposition": "investigate",
+      "human_adjudication": {
+        "date": "2026-10-31",
+        "rule": "Accepted the proposed disposition."
+      }
     },
     {
       "id": "advice-002",
@@ -71,11 +77,15 @@
         "action": "Build a managed hosting service.",
         "done_when": "A hosted signup flow is live."
       },
-      "proposed_disposition": "boundary",
       "gates_to_examine": [
         "strategy"
       ],
-      "rationale": "The requested expansion conflicts with an explicit boundary rather than exposing an unowned TODO."
+      "rationale": "The requested expansion conflicts with an explicit boundary rather than exposing an unowned TODO.",
+      "human_disposition": "boundary",
+      "human_adjudication": {
+        "date": "2026-10-31",
+        "rule": "Accepted the proposed disposition."
+      }
     },
     {
       "id": "advice-003",
@@ -105,7 +115,6 @@
         "action": "Replace the missing setup instructions with a complete guide.",
         "done_when": "The setup page includes a verified first-run command."
       },
-      "proposed_disposition": "investigate",
       "gates_to_examine": [
         "existing_work",
         "remaining_change"
@@ -113,6 +122,11 @@
       "rationale": "A read error establishes nothing about missing content. First make one bounded read of the target to decide whether a fix is needed.",
       "annotations": {
         "read_error": "Synthetic timeout; no response body."
+      },
+      "human_disposition": "investigate",
+      "human_adjudication": {
+        "date": "2026-10-31",
+        "rule": "Accepted the proposed disposition."
       }
     },
     {
@@ -143,7 +157,6 @@
         "action": "Add a documented CSV export command.",
         "done_when": "The setup page includes a verified CSV export command."
       },
-      "proposed_disposition": "investigate",
       "gates_to_examine": [
         "capability",
         "remaining_change"
@@ -154,6 +167,11 @@
           "source": "https://exampletracker.test/setup",
           "quote": "Run tracker init to create the local database."
         }
+      },
+      "human_disposition": "investigate",
+      "human_adjudication": {
+        "date": "2026-10-31",
+        "rule": "Accepted the proposed disposition."
       }
     },
     {
@@ -184,11 +202,15 @@
         "action": "Tell users to export CSV from the web interface.",
         "done_when": "The export page shows the web CSV export button."
       },
-      "proposed_disposition": "reject",
       "gates_to_examine": [
         "capability"
       ],
-      "rationale": "The full page explicitly denies the UI capability; the opening CLI claim cannot support a web-interface action."
+      "rationale": "The full page explicitly denies the UI capability; the opening CLI claim cannot support a web-interface action.",
+      "human_disposition": "reject",
+      "human_adjudication": {
+        "date": "2026-10-31",
+        "rule": "Accepted the proposed disposition."
+      }
     },
     {
       "id": "advice-006",
@@ -218,7 +240,6 @@
         "action": "Create a new export guide because no export guide exists anywhere on the site.",
         "done_when": "A new export guide is published with verified commands."
       },
-      "proposed_disposition": "investigate",
       "gates_to_examine": [
         "existing_work",
         "remaining_change"
@@ -226,6 +247,11 @@
       "rationale": "One sampled page is not a site inventory. Check the route/content index and export capability before deciding whether a new page is useful.",
       "annotations": {
         "sitewide_inventory_available": false
+      },
+      "human_disposition": "investigate",
+      "human_adjudication": {
+        "date": "2026-10-31",
+        "rule": "Accepted the proposed disposition."
       }
     },
     {
@@ -256,7 +282,6 @@
         "action": "Submit a listing to an external directory.",
         "done_when": "The publisher accepts and publishes the listing."
       },
-      "proposed_disposition": "reject",
       "gates_to_examine": [
         "completion"
       ],
@@ -264,6 +289,11 @@
       "annotations": {
         "external_publisher": "https://directory.test/submit",
         "note": "The snapshot is a synthetic saved copy of supplied publisher rules, not a live fetch."
+      },
+      "human_disposition": "reject",
+      "human_adjudication": {
+        "date": "2026-10-31",
+        "rule": "Accepted the proposed disposition."
       }
     },
     {
@@ -294,11 +324,15 @@
         "action": "Document the tested runtime version.",
         "done_when": "An AI assistant recommends Example Tracker next week."
       },
-      "proposed_disposition": "reject",
       "gates_to_examine": [
         "completion"
       ],
-      "rationale": "A future model outcome is an impact observation, not a completion test for a documentation edit."
+      "rationale": "A future model outcome is an impact observation, not a completion test for a documentation edit.",
+      "human_disposition": "reject",
+      "human_adjudication": {
+        "date": "2026-10-31",
+        "rule": "Accepted the proposed disposition."
+      }
     },
     {
       "id": "advice-009",
@@ -328,11 +362,15 @@
         "action": "Send unsolicited promotional emails to forum participants.",
         "done_when": "Ten promotional emails are sent."
       },
-      "proposed_disposition": "boundary",
       "gates_to_examine": [
         "strategy"
       ],
-      "rationale": "The explicit advisory forbids unsolicited outreach, even when sending emails is technically controllable."
+      "rationale": "The explicit advisory forbids unsolicited outreach, even when sending emails is technically controllable.",
+      "human_disposition": "boundary",
+      "human_adjudication": {
+        "date": "2026-10-31",
+        "rule": "Accepted the proposed disposition."
+      }
     },
     {
       "id": "advice-010",
@@ -370,7 +408,6 @@
         "action": "Add the supported runtime version beside the setup commands.",
         "done_when": "The setup page states Go 1.27 or later beside the first-run commands, matching the tested runtime reference."
       },
-      "proposed_disposition": "verified",
       "gates_to_examine": [],
       "rationale": "A small owned-page change has a demonstrated gap, a supplied capability source and a team-controlled completion check. This positive case prevents rejecting every candidate from appearing successful.",
       "annotations": {
@@ -401,6 +438,11 @@
           }
         },
         "eligibility_reason": "Owned project documentation; publisher submission rules are inapplicable."
+      },
+      "human_disposition": "verified",
+      "human_adjudication": {
+        "date": "2026-10-31",
+        "rule": "Accepted the proposed disposition."
       }
     },
     {
@@ -431,7 +473,6 @@
         "action": "Add a CSV export example because the guide contains none.",
         "done_when": "The guide contains a tested CSV export example."
       },
-      "proposed_disposition": "investigate",
       "gates_to_examine": [
         "existing_work",
         "remaining_change"
@@ -439,6 +480,11 @@
       "rationale": "A clipped opening cannot prove a whole-page omission. Read the complete target before deciding whether an example is missing.",
       "annotations": {
         "unseen_tail": "Unknown; do not invent it."
+      },
+      "human_disposition": "investigate",
+      "human_adjudication": {
+        "date": "2026-10-31",
+        "rule": "Accepted the proposed disposition."
       }
     }
   ]

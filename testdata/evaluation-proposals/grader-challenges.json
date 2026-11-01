@@ -1,10 +1,12 @@
 {
   "contract": "proposed-grader-challenges-v1",
-  "status": "proposed",
+  "status": "adjudicated",
   "provenance": {
     "kind": "synthetic",
     "created_by": "Codex",
-    "human_adjudicated": false
+    "human_adjudicated": true,
+    "adjudicated": "2026-10-31",
+    "review": "Maintainer reviewed every case with the Codex proposal visible; not a blind review."
   },
   "cases": [
     {
@@ -29,13 +31,17 @@
       "complete": true,
       "evidence": [],
       "rationale": "No reference to the intended brand. Whole-answer review supplies absence support; an empty quote is correct.",
-      "proposed_expected": {
+      "human_expected": {
         "verdict": "absent",
         "top_pick": false,
         "namesake_only": false,
         "tone": "none"
       },
-      "proposed_absence_reason": "no-reference"
+      "absence_reason": "no-reference",
+      "human_adjudication": {
+        "date": "2026-10-31",
+        "rule": "Accepted the proposed label."
+      }
     },
     {
       "id": "grader-002",
@@ -61,13 +67,17 @@
         "I cannot verify Example Tracker or tell you whether it exists."
       ],
       "rationale": "Only ignorance and evaluation advice, with no claim about the product.",
-      "proposed_expected": {
+      "human_expected": {
         "verdict": "absent",
         "top_pick": false,
         "namesake_only": false,
         "tone": "none"
       },
-      "proposed_absence_reason": "echo-only"
+      "absence_reason": "echo-only",
+      "human_adjudication": {
+        "date": "2026-10-31",
+        "rule": "Accepted the proposed label."
+      }
     },
     {
       "id": "grader-003",
@@ -93,13 +103,17 @@
         "If Example Tracker supports scheduled checks, it could be a good pick."
       ],
       "rationale": "A hypothetical is not a substantive product claim.",
-      "proposed_expected": {
+      "human_expected": {
         "verdict": "absent",
         "top_pick": false,
         "namesake_only": false,
         "tone": "none"
       },
-      "proposed_absence_reason": "echo-only"
+      "absence_reason": "echo-only",
+      "human_adjudication": {
+        "date": "2026-10-31",
+        "rule": "Accepted the proposed label."
+      }
     },
     {
       "id": "grader-004",
@@ -125,11 +139,15 @@
         "Example Tracker appears to support scheduled checks, although I have not verified that detail."
       ],
       "rationale": "A hedged concrete feature claim crosses the visibility boundary; neutral here describes epistemic caution rather than product criticism.",
-      "proposed_expected": {
+      "human_expected": {
         "verdict": "mentioned",
         "top_pick": false,
         "namesake_only": false,
         "tone": "neutral"
+      },
+      "human_adjudication": {
+        "date": "2026-10-31",
+        "rule": "Accepted the proposed label."
       }
     },
     {
@@ -156,13 +174,17 @@
         "Example Tracker is a wrist-worn GPS locator for runners."
       ],
       "rationale": "Every use refers to a physical namesake, outside the supplied software identity.",
-      "proposed_expected": {
+      "human_expected": {
         "verdict": "absent",
         "top_pick": false,
         "namesake_only": true,
         "tone": "none"
       },
-      "proposed_absence_reason": "namesake-only"
+      "absence_reason": "namesake-only",
+      "human_adjudication": {
+        "date": "2026-10-31",
+        "rule": "Accepted the proposed label."
+      }
     },
     {
       "id": "grader-006",
@@ -188,11 +210,15 @@
         "The Example Tracker software platform records AI recommendation answers."
       ],
       "rationale": "The intended entity is described as well as the namesake, so namesake-only is false.",
-      "proposed_expected": {
+      "human_expected": {
         "verdict": "mentioned",
         "top_pick": false,
         "namesake_only": false,
         "tone": "neutral"
+      },
+      "human_adjudication": {
+        "date": "2026-10-31",
+        "rule": "Accepted the proposed label."
       }
     },
     {
@@ -219,11 +245,15 @@
         "Do not choose Example Tracker for this team: its unreliable exports make the weekly review harder."
       ],
       "rationale": "Substantive negative information is visibility, without active endorsement.",
-      "proposed_expected": {
+      "human_expected": {
         "verdict": "mentioned",
         "top_pick": false,
         "namesake_only": false,
         "tone": "negative"
+      },
+      "human_adjudication": {
+        "date": "2026-10-31",
+        "rule": "Accepted the proposed label."
       }
     },
     {
@@ -250,11 +280,15 @@
         "Choose Example Tracker."
       ],
       "rationale": "Explicit sole recommendation; the next sentence explains the positive fit.",
-      "proposed_expected": {
+      "human_expected": {
         "verdict": "recommended",
         "top_pick": true,
         "namesake_only": false,
         "tone": "positive"
+      },
+      "human_adjudication": {
+        "date": "2026-10-31",
+        "rule": "Accepted the proposed label."
       }
     },
     {
@@ -281,11 +315,15 @@
         "Choose Example Tracker: its simple setup fits your team well, but its slow exports will make large weekly reviews tedious."
       ],
       "rationale": "An explicit recommendation can retain criticism; tone is a separate decision from verdict.",
-      "proposed_expected": {
+      "human_expected": {
         "verdict": "recommended",
         "top_pick": true,
         "namesake_only": false,
         "tone": "mixed"
+      },
+      "human_adjudication": {
+        "date": "2026-10-31",
+        "rule": "Accepted the proposed label."
       }
     },
     {
@@ -312,11 +350,15 @@
         "I actively recommend three equal choices for your team: Example Tracker for simple setup, Northstar Metrics for exports, and Harbor Monitor for dashboards."
       ],
       "rationale": "Three primary endorsements meet the current small-set rule; no single top pick.",
-      "proposed_expected": {
+      "human_expected": {
         "verdict": "recommended",
         "top_pick": false,
         "namesake_only": false,
         "tone": "positive"
+      },
+      "human_adjudication": {
+        "date": "2026-10-31",
+        "rule": "Accepted the proposed label."
       }
     },
     {
@@ -339,11 +381,19 @@
       ],
       "answer": "I actively recommend four equal choices for your team: Example Tracker, Northstar Metrics, Harbor Monitor and Lantern Signal. Each fits equally well; I have no overall favorite.",
       "complete": true,
-      "evidence": [],
+      "evidence": [
+        "I actively recommend four equal choices for your team: Example Tracker, Northstar Metrics, Harbor Monitor and Lantern Signal."
+      ],
       "rationale": "Four explicitly endorsed equals exceed the <=3 recommendation definition, while the mentioned definition does not explicitly settle this exact boundary. Adjudicate the reading before scoring.",
-      "proposed_unresolved": {
-        "issue": "rubric-ambiguity",
-        "note": "Four explicitly endorsed equals exceed the <=3 recommendation definition, while the mentioned definition does not explicitly settle this exact boundary. Adjudicate the reading before scoring."
+      "human_expected": {
+        "verdict": "mentioned",
+        "top_pick": false,
+        "namesake_only": false,
+        "tone": "positive"
+      },
+      "human_adjudication": {
+        "date": "2026-10-31",
+        "rule": "Keep the small-set limit: more than three equal endorsements is not a recommendation. The brand is still praised, so it is a positive mention."
       }
     },
     {
@@ -371,11 +421,15 @@
         "After checking your requirement for offline exports, I rule it out: Example Tracker cannot meet that requirement."
       ],
       "rationale": "The final decision withdraws the endorsement, while genuine praise remains in the answer. Two human spans preserve both parts; production returns one evidence span.",
-      "proposed_expected": {
+      "human_expected": {
         "verdict": "mentioned",
         "top_pick": false,
         "namesake_only": false,
         "tone": "mixed"
+      },
+      "human_adjudication": {
+        "date": "2026-10-31",
+        "rule": "Accepted the proposed label."
       }
     },
     {
@@ -402,14 +456,18 @@
         "Choose **Example** **Tracker**: it is my strongest recommendation because setup is simple."
       ],
       "rationale": "A human can read the intended identity across harmless formatting; inspect postprocessing as well as the model output.",
-      "proposed_expected": {
+      "annotations": {
+        "possible_failure_layer": "lexical brand matching or normalization; prompt-only changes may be insufficient"
+      },
+      "human_expected": {
         "verdict": "recommended",
         "top_pick": true,
         "namesake_only": false,
         "tone": "positive"
       },
-      "annotations": {
-        "possible_failure_layer": "lexical brand matching or normalization; prompt-only changes may be insufficient"
+      "human_adjudication": {
+        "date": "2026-10-31",
+        "rule": "Accepted the proposed label."
       }
     },
     {
@@ -436,14 +494,18 @@
         "Choose Example\nTracker: it is my strongest recommendation because setup is simple."
       ],
       "rationale": "A human can read the intended identity across harmless formatting; inspect postprocessing as well as the model output.",
-      "proposed_expected": {
+      "annotations": {
+        "possible_failure_layer": "lexical brand matching or normalization; prompt-only changes may be insufficient"
+      },
+      "human_expected": {
         "verdict": "recommended",
         "top_pick": true,
         "namesake_only": false,
         "tone": "positive"
       },
-      "annotations": {
-        "possible_failure_layer": "lexical brand matching or normalization; prompt-only changes may be insufficient"
+      "human_adjudication": {
+        "date": "2026-10-31",
+        "rule": "Accepted the proposed label."
       }
     },
     {
@@ -470,14 +532,18 @@
         "Choose Example  Tracker: it is my strongest recommendation because setup is simple."
       ],
       "rationale": "A human can read the intended identity across harmless formatting; inspect postprocessing as well as the model output.",
-      "proposed_expected": {
+      "annotations": {
+        "possible_failure_layer": "lexical brand matching or normalization; prompt-only changes may be insufficient"
+      },
+      "human_expected": {
         "verdict": "recommended",
         "top_pick": true,
         "namesake_only": false,
         "tone": "positive"
       },
-      "annotations": {
-        "possible_failure_layer": "lexical brand matching or normalization; prompt-only changes may be insufficient"
+      "human_adjudication": {
+        "date": "2026-10-31",
+        "rule": "Accepted the proposed label."
       }
     },
     {
@@ -502,15 +568,19 @@
       "complete": true,
       "evidence": [],
       "rationale": "A longer different product name containing an alias is not an alias match.",
-      "proposed_expected": {
+      "annotations": {
+        "lexical_trap": "ExampleTracker inside ExampleTrackerology"
+      },
+      "human_expected": {
         "verdict": "absent",
         "top_pick": false,
         "namesake_only": false,
         "tone": "none"
       },
-      "proposed_absence_reason": "no-reference",
-      "annotations": {
-        "lexical_trap": "ExampleTracker inside ExampleTrackerology"
+      "absence_reason": "no-reference",
+      "human_adjudication": {
+        "date": "2026-10-31",
+        "rule": "Accepted the proposed label."
       }
     },
     {
@@ -533,11 +603,19 @@
       ],
       "answer": "For your team, start at https://exampletracker.test. It is my strongest recommendation.",
       "complete": true,
-      "evidence": [],
+      "evidence": [
+        "For your team, start at https://exampletracker.test. It is my strongest recommendation."
+      ],
       "rationale": "Adjudicate whether the bare domain alias and pronoun carry a substantive intended-brand endorsement. Do not fill the gap by fetching the site.",
-      "proposed_unresolved": {
-        "issue": "rubric-ambiguity",
-        "note": "Adjudicate whether the bare domain alias and pronoun carry a substantive intended-brand endorsement. Do not fill the gap by fetching the site."
+      "human_expected": {
+        "verdict": "recommended",
+        "top_pick": true,
+        "namesake_only": false,
+        "tone": "positive"
+      },
+      "human_adjudication": {
+        "date": "2026-10-31",
+        "rule": "A configured domain alias identifies the intended brand. An endorsement made through it counts, here as the single strongest recommendation."
       }
     },
     {
@@ -562,18 +640,22 @@
       "complete": true,
       "evidence": [],
       "rationale": "The answer text does not name the brand. A separately recorded source URL is retrieval evidence, not an endorsement.",
-      "proposed_expected": {
-        "verdict": "absent",
-        "top_pick": false,
-        "namesake_only": false,
-        "tone": "none"
-      },
-      "proposed_absence_reason": "no-reference",
       "annotations": {
         "retrieval_only_urls": [
           "https://exampletracker.test/docs"
         ],
         "scope": "Grade only the answer text; the separate rail is not appended to it."
+      },
+      "human_expected": {
+        "verdict": "absent",
+        "top_pick": false,
+        "namesake_only": false,
+        "tone": "none"
+      },
+      "absence_reason": "no-reference",
+      "human_adjudication": {
+        "date": "2026-10-31",
+        "rule": "Accepted the proposed label."
       }
     },
     {
@@ -596,11 +678,19 @@
       ],
       "answer": "Example Tracker has simple setup and looks suitable, but before choosing it you must consider",
       "complete": false,
-      "evidence": [],
+      "evidence": [
+        "Example Tracker has simple setup and looks suitable, but before choosing it you must consider"
+      ],
       "rationale": "The stored answer ends mid-sentence. Do not infer the missing qualification or score a final recommendation.",
-      "proposed_unresolved": {
-        "issue": "incomplete-evidence",
-        "note": "The stored answer ends mid-sentence. Do not infer the missing qualification or score a final recommendation."
+      "human_expected": {
+        "verdict": "mentioned",
+        "top_pick": false,
+        "namesake_only": false,
+        "tone": "mixed"
+      },
+      "human_adjudication": {
+        "date": "2026-10-31",
+        "rule": "Grade only the text that is present. Favourable description followed by a cut-off caveat is a mention, not a recommendation; the caveat makes the tone mixed."
       }
     },
     {
@@ -625,13 +715,17 @@
       "complete": true,
       "evidence": [],
       "rationale": "The question subject is a rival, not the supplied target brand.",
-      "proposed_expected": {
+      "human_expected": {
         "verdict": "absent",
         "top_pick": false,
         "namesake_only": false,
         "tone": "none"
       },
-      "proposed_absence_reason": "no-reference"
+      "absence_reason": "no-reference",
+      "human_adjudication": {
+        "date": "2026-10-31",
+        "rule": "Accepted the proposed label."
+      }
     },
     {
       "id": "grader-021",
@@ -657,11 +751,15 @@
         "Example Tracker stores saved answers and review notes in a local database."
       ],
       "rationale": "A substantive description without an endorsement or evaluative tone.",
-      "proposed_expected": {
+      "human_expected": {
         "verdict": "mentioned",
         "top_pick": false,
         "namesake_only": false,
         "tone": "neutral"
+      },
+      "human_adjudication": {
+        "date": "2026-10-31",
+        "rule": "Accepted the proposed label."
       }
     },
     {
@@ -688,17 +786,21 @@
         "Example Tracker stores saved answers locally."
       ],
       "rationale": "The target receives a neutral description; the positive recommendation describes a rival.",
-      "proposed_expected": {
-        "verdict": "mentioned",
-        "top_pick": false,
-        "namesake_only": false,
-        "tone": "neutral"
-      },
       "annotations": {
         "proposed_bad_model_evidence": "Northstar Metrics is my strongest recommendation because exports are simple.",
         "occurrence_valid": true,
         "supports_target_verdict": false,
         "note": "Quote occurrence is necessary but cannot establish logical support."
+      },
+      "human_expected": {
+        "verdict": "mentioned",
+        "top_pick": false,
+        "namesake_only": false,
+        "tone": "neutral"
+      },
+      "human_adjudication": {
+        "date": "2026-10-31",
+        "rule": "Accepted the proposed label."
       }
     }
   ]
