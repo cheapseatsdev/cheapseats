@@ -32,7 +32,7 @@ docker run --rm --name cheapseats --stop-timeout 30 \
   --env-file .env \
   -v "$PWD:/config:ro" \
   -v cheapseats-data:/data \
-  ghcr.io/cheapseatsdev/cheapseats:0.6.0
+  ghcr.io/cheapseatsdev/cheapseats:0.7.0
 ```
 
 Open <http://127.0.0.1:3000> and sign in with the token from `.env`. The container listens on
@@ -44,7 +44,7 @@ container mounts them read-only. Validate changes before restarting the containe
 
 ```bash
 docker run --rm --env-file .env -v "$PWD:/config:ro" \
-  ghcr.io/cheapseatsdev/cheapseats:0.6.0 check
+  ghcr.io/cheapseatsdev/cheapseats:0.7.0 check
 ```
 
 API runs cost money. Check the model IDs, prices and budget in `cheapseats.toml` before running
@@ -62,7 +62,7 @@ Cheap Seats releases an image, `ghcr.io/cheapseatsdev/cheapseats:<version>`, and
 `oci://ghcr.io/cheapseatsdev/charts/cheapseats`. Build your config into a deployment image:
 
 ```dockerfile
-FROM ghcr.io/cheapseatsdev/cheapseats:0.6.0
+FROM ghcr.io/cheapseatsdev/cheapseats:0.7.0
 COPY cheapseats.toml /config/cheapseats.toml
 COPY prompt-sets /config/prompt-sets
 ARG REVISION=""

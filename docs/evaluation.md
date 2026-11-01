@@ -4,10 +4,9 @@ Start with [Choosing and running evaluations](evaluation-workflow.md) for purpos
 workflow diagrams, outcomes, rerun signals and what success means. This document
 contains setup, exact controls, contracts, limits and recovery behavior.
 
-**Preview:** this workbench is unreleased and is not in 0.6.0. The instructions
-below describe this source branch, built on
-[the Evaluation batch PR](https://github.com/cheapseatsdev/cheapseats/pull/155).
-It is off by default.
+**Preview:** this workbench ships in 0.7.0, off by default. Set
+`CHEAPSEATS_EVALUATION=1` to turn it on. A read-only server never shows it, so the
+public demo does not have it.
 
 Evaluation keeps saved answer evidence, imported model labels and explicit human
 decisions separate from production runs. Importing records and reviewing them
@@ -443,7 +442,8 @@ represent this reviewed benchmark.
 
 ## Database compatibility and privacy
 
-The preview workbench uses database schema 19. Opening an existing database
-backs it up before migration; older binaries refuse newer schemas. Rollback
-requires the pre-migration backup, not merely the older binary. Evaluation tables
+Cheap Seats 0.7.0 uses database schema 19 whether or not Evaluation is on.
+Opening an existing database backs it up before migration; older binaries refuse
+newer schemas. Rollback requires the pre-migration backup, not merely the older
+binary. Evaluation tables
 are private operational data; a read-only copy is not a redaction of its database.
