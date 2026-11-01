@@ -171,7 +171,8 @@ func TestLiveCheckSkipsCLIRoles(t *testing.T) {
 // analyst's fixes item opened with check, often blank, and some replies were every field blank
 // (run r-20261101-050336-9f0f23: 9 of 35 replays; 0 of 20 with insights and title first). So
 // the fixes schema is registered ordered and sends each object's properties in its required
-// order, which is pinned here. Only that order was measured: every other schema is sent exactly
+// order, which is pinned here. The grade schema is ordered too, reasoning first (its order is
+// pinned in internal/grade). Only those orders were measured: every other schema is sent exactly
 // as encoding/json writes it, as before.
 func TestLiveSchemasSendPropertiesInDeclaredOrder(t *testing.T) {
 	sent := map[string]map[string][]string{}
@@ -204,8 +205,8 @@ func TestLiveSchemasSendPropertiesInDeclaredOrder(t *testing.T) {
 			t.Errorf("%s: sent %s, want the content of %s", s.Name, js, plain)
 		}
 	}
-	if !reflect.DeepEqual(orderedNames, []string{"analysis.fixes"}) {
-		t.Errorf("ordered schemas %v, want only analysis.fixes", orderedNames)
+	if !reflect.DeepEqual(orderedNames, []string{"analysis.fixes", "grade"}) {
+		t.Errorf("ordered schemas %v, want only analysis.fixes and grade", orderedNames)
 	}
 	fixes := sent["analysis.fixes"]
 	for path, want := range map[string][]string{
