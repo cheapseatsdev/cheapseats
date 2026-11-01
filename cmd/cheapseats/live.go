@@ -8,6 +8,7 @@ import (
 	"math"
 
 	"github.com/cheapseatsdev/cheapseats/internal/config"
+	"github.com/cheapseatsdev/cheapseats/internal/errclass"
 	"github.com/cheapseatsdev/cheapseats/internal/llm"
 )
 
@@ -56,11 +57,11 @@ func liveSchemaCheck(ctx context.Context, cfg *config.Config, schemas []llm.Name
 		sent++
 		cost := cfg.Cost(m.Model, u)
 		spent += cost
-		var api *llm.APIError
+		var api *errclass.Error
 		switch {
 		case err == nil:
 			fmt.Fprintf(w, "live: %s (%s, %s): accepted ($%.4f)\n", s.Name, s.Role, m.Model, cost)
-		case errors.As(err, &api) && api.Status == 400:
+		case errors.As(err, &api) && api.Category == "http_400":
 			fmt.Fprintf(w, "live: %s (%s, %s): REFUSED: %v\n", s.Name, s.Role, m.Model, err)
 			problems = append(problems, fmt.Errorf("%s: the API refused the schema: %w", s.Name, err))
 		default:

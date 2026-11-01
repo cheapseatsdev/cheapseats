@@ -20,6 +20,7 @@ import (
 	"github.com/cheapseatsdev/cheapseats/internal/answer"
 	"github.com/cheapseatsdev/cheapseats/internal/audit"
 	"github.com/cheapseatsdev/cheapseats/internal/config"
+	"github.com/cheapseatsdev/cheapseats/internal/errclass"
 	"github.com/cheapseatsdev/cheapseats/internal/llm"
 	"github.com/cheapseatsdev/cheapseats/internal/report"
 	"github.com/cheapseatsdev/cheapseats/internal/run"
@@ -157,7 +158,10 @@ func (a *App) recordAnalysis(ctx context.Context, id string, from sql.NullString
 	}
 	var verr *analysis.VerificationError
 	if errors.As(err, &verr) {
-		slog.Error("analysis verification", "run", id, "err", err)
+		// err is safe to log: a provider's or CLI's reply reaches it only through errclass,
+		// whose message is a fixed description plus a redacted excerpt. The category is there to
+		// count failures by kind.
+		slog.Error("analysis verification", "run", id, "category", errclass.Category(err), "err", err)
 		// Only a run with no analysis yet takes the degraded one. fixes IS NULL is checked in the
 		// same statement, so this can't overwrite one stored meanwhile.
 		res, uerr := a.DB.ExecContext(ctx, `UPDATE runs SET fixes=?, insights=?, fixes_at=?, fixes_error=?, analysis_cost_usd=analysis_cost_usd+? WHERE id=? AND fixes IS NULL`, analysis.Encode(an), an.Insights, store.Now(), err.Error(), cost, id)

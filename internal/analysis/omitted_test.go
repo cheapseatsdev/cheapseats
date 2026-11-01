@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/cheapseatsdev/cheapseats/internal/config"
+	"github.com/cheapseatsdev/cheapseats/internal/errclass"
 	"github.com/cheapseatsdev/cheapseats/internal/llm"
 	"github.com/cheapseatsdev/cheapseats/internal/run"
 )
@@ -252,8 +253,8 @@ func TestVerificationFailureTextStaysOutOfLogAndOmitted(t *testing.T) {
 		err      error // the verifier call's error, or nil for an unreadable page
 		category string
 	}{
-		{"cli result", fmt.Errorf("claude: error_during_execution: %s", secret), "call_failed"},
-		{"provider reply", &llm.APIError{Status: 529, Body: secret}, "http_529"},
+		{"cli result", errclass.CLIResult("claude", "error_during_execution", secret), "call_failed"},
+		{"provider reply", errclass.HTTP("", 529, `{"error":{"message":"`+secret+`"},"echo":"`+secret+`"}`), "http_529"},
 		{"timeout", fmt.Errorf("claude: %w: %s", context.DeadlineExceeded, secret), "timeout"},
 		{"decode", fmt.Errorf("%s: %w", secret, &json.SyntaxError{}), "decode"},
 		{"unreadable page", nil, "no_pages"},

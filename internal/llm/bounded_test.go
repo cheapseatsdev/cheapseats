@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/cheapseatsdev/cheapseats/internal/bounded"
+	"github.com/cheapseatsdev/cheapseats/internal/errclass"
 )
 
 // boundedServe answers every request with status and body, counting the calls.
@@ -46,11 +47,11 @@ func TestAnOversizedReplyIsAnErrorAndNotRetried(t *testing.T) {
 func TestAnErrorReplyKeepsOnlyItsStart(t *testing.T) {
 	boundedServe(t, http.StatusBadRequest, strings.Repeat("e", 3*bounded.ErrorPrefix))
 	_, err := Anthropic(context.Background(), map[string]any{"model": "m"})
-	var ae *APIError
-	if !errors.As(err, &ae) || ae.Status != 400 {
+	var ae *errclass.Error
+	if !errors.As(err, &ae) || ae.Status != 400 || ae.Category != "http_400" {
 		t.Fatalf("err %v", err)
 	}
-	if len(ae.Body) != bounded.ErrorPrefix {
-		t.Errorf("error body kept %d bytes; want %d", len(ae.Body), bounded.ErrorPrefix)
+	if len(ae.Detail()) != bounded.ErrorPrefix {
+		t.Errorf("error body kept %d bytes; want %d", len(ae.Detail()), bounded.ErrorPrefix)
 	}
 }

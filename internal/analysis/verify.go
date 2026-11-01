@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"os/exec"
 	"regexp"
 	"sort"
 	"strings"
@@ -14,7 +13,9 @@ import (
 	"unicode/utf8"
 
 	"github.com/cheapseatsdev/cheapseats/internal/config"
+	"github.com/cheapseatsdev/cheapseats/internal/errclass"
 	"github.com/cheapseatsdev/cheapseats/internal/llm"
+	"github.com/cheapseatsdev/cheapseats/internal/redact"
 	"github.com/cheapseatsdev/cheapseats/internal/sets"
 )
 
@@ -448,7 +449,7 @@ func readArtifacts(ctx context.Context, cfg *config.Config, fs []Fix) []artifact
 		t, cut, err := read(ctx, u)
 		p := artifact{URL: u}
 		if err != nil {
-			p.Error = clip(err.Error(), 300)
+			p.Error = clip(err.Error(), 300) // the reader's errors name a URL only through redact.URL
 		} else if strings.TrimSpace(t) == "" {
 			p.Error = "No readable current content returned."
 		} else {
@@ -522,38 +523,17 @@ func unreadable(pages []artifact) error {
 	if len(pages) == 0 {
 		return ErrNoReadablePage
 	}
-	return fmt.Errorf("%w (%d tried; %s: %s)", ErrNoReadablePage, len(pages), pages[0].URL, pages[0].Error)
+	return fmt.Errorf("%w (%d tried; %s: %s)", ErrNoReadablePage, len(pages), redact.URL(pages[0].URL), pages[0].Error)
 }
 
-// FailureCategory names the kind of a verification failure from its type or sentinel, never
-// from its message: a failed call's error can carry the provider's reply, the claude CLI's
-// result or stderr, or a page's read error, and so answer text or a secret. It is what the
-// analysis-built log line and a candidate's omission say about the failure; the full error
-// goes only where it went before (the run's fixes_error). "" for no error.
+// FailureCategory names the kind of a verification failure: no_pages when no current page could
+// be read, otherwise errclass.Category, which reads the error's type or sentinel, never its
+// message. "" for no error.
 func FailureCategory(err error) string {
-	var api *llm.APIError
-	var exit *exec.ExitError
-	var syntax *json.SyntaxError
-	var typ *json.UnmarshalTypeError
-	switch {
-	case err == nil:
-		return ""
-	case errors.Is(err, ErrNoReadablePage):
+	if errors.Is(err, ErrNoReadablePage) {
 		return "no_pages"
-	case errors.Is(err, context.DeadlineExceeded):
-		return "timeout"
-	case errors.Is(err, context.Canceled):
-		return "canceled"
-	case errors.Is(err, llm.ErrNoKey):
-		return "no_key"
-	case errors.As(err, &api):
-		return fmt.Sprintf("http_%d", api.Status)
-	case errors.As(err, &syntax), errors.As(err, &typ):
-		return "decode"
-	case errors.As(err, &exit):
-		return "cli_exit"
 	}
-	return "call_failed"
+	return errclass.Category(err)
 }
 
 func verifyCandidates(ctx context.Context, cfg *config.Config, set sets.Set, a Analysis, cost float64) (Analysis, float64, error) {

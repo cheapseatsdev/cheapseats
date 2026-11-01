@@ -19,6 +19,7 @@ import (
 	"github.com/cheapseatsdev/cheapseats/internal/bounded"
 	"github.com/cheapseatsdev/cheapseats/internal/budget"
 	"github.com/cheapseatsdev/cheapseats/internal/config"
+	"github.com/cheapseatsdev/cheapseats/internal/errclass"
 )
 
 const (
@@ -214,7 +215,7 @@ func (c *Client) post(ctx context.Context, operation, path, model string, body a
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
 		if err != nil {
 			settle(lease, 0, true)
-			return nil, err
+			return nil, errclass.Transport("exa", err)
 		}
 		req.Header.Set("content-type", "application/json")
 		if key != "" {
@@ -226,25 +227,25 @@ func (c *Client) post(ctx context.Context, operation, path, model string, body a
 			if ctx.Err() != nil {
 				return nil, ctx.Err()
 			}
-			last = err
+			last = errclass.Transport("exa", err) // the URL redacted; Go's text kept only as Detail
 		} else {
 			if resp.StatusCode == http.StatusOK {
 				data, err := bounded.Read(resp.Body, maxResponse)
 				resp.Body.Close()
 				if err != nil {
 					settle(lease, 0, false)
-					return nil, fmt.Errorf("exa: reading response: %w", err)
+					return nil, errclass.Transport("exa", err)
 				}
 				if err := json.Unmarshal(data, out); err != nil {
 					settle(lease, 0, false)
-					return nil, fmt.Errorf("exa: decoding response: %w", err)
+					return nil, errclass.Undecodable("exa", "response", err)
 				}
 				return lease, nil
 			}
 			msg := bounded.Prefix(resp.Body)
 			resp.Body.Close()
 			settle(lease, 0, resp.StatusCode < 500)
-			last = &APIError{Status: resp.StatusCode, Body: msg}
+			last = errclass.HTTP("exa", resp.StatusCode, msg) // the body goes only into errclass
 			if resp.StatusCode != http.StatusTooManyRequests && resp.StatusCode < 500 {
 				return nil, last
 			}
@@ -293,17 +294,4 @@ func sleep(ctx context.Context, d time.Duration) error {
 	case <-t.C:
 		return nil
 	}
-}
-
-type APIError struct {
-	Status int
-	Body   string
-}
-
-func (e *APIError) Error() string {
-	b := e.Body
-	if len(b) > 300 {
-		b = b[:300] + "…"
-	}
-	return fmt.Sprintf("exa: HTTP %d: %s", e.Status, b)
 }

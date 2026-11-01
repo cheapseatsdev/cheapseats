@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/cheapseatsdev/cheapseats/internal/config"
+	"github.com/cheapseatsdev/cheapseats/internal/errclass"
 )
 
 func TestAskSendsStateAndQuestionsAndPricesTheAnswer(t *testing.T) {
@@ -95,7 +96,7 @@ func TestAskGivesUpOnAClientError(t *testing.T) {
 	t.Setenv(KeyVar, "k")
 	c := &Client{URL: srv.URL}
 	_, err := c.Ask(context.Background(), "t", "s", map[string]Question{"q": {Type: "noul", Instructions: "?"}})
-	var ae *APIError
+	var ae *errclass.Error
 	if !errors.As(err, &ae) || ae.Status != 422 || calls != 1 {
 		t.Fatalf("err %v calls %d", err, calls)
 	}

@@ -338,7 +338,7 @@ func logBuilt(ctx context.Context, a Analysis, cost float64, err error) {
 		"reviewed", t.Reviewed, "verified", t.Verified, "rejected", t.Rejected,
 		"findings", t.Findings, "investigations", t.Investigations, "cost_usd", fmt.Sprintf("%.4f", cost)}
 	if err != nil {
-		// The category, never the error: its message can carry a reply's text or a secret.
+		// The category, for counting failures by kind; the error itself is in fixes_error.
 		attrs = append(attrs, "verify_error", FailureCategory(err))
 	}
 	slog.Info("analysis built", attrs...)

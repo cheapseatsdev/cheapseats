@@ -10,6 +10,7 @@ import (
 	"github.com/cheapseatsdev/cheapseats/internal/audit"
 	"github.com/cheapseatsdev/cheapseats/internal/config"
 	"github.com/cheapseatsdev/cheapseats/internal/exa"
+	"github.com/cheapseatsdev/cheapseats/internal/redact"
 	"github.com/cheapseatsdev/cheapseats/internal/store"
 )
 
@@ -51,7 +52,7 @@ func (a *App) ContentsReader() audit.Reader {
 		}
 		resp, err := client.Contents(ctx, "contents", []string{u})
 		if err != nil {
-			slog.Warn("exa contents", "url", u, "err", err)
+			slog.Warn("exa contents", "url", redact.URL(u), "err", err)
 			return "", "", false
 		}
 		var page *exa.Page
@@ -66,9 +67,9 @@ func (a *App) ContentsReader() audit.Reader {
 		}
 		text = audit.ClipText(strings.Join(strings.Fields(page.Text), " "))
 		if _, err := a.DB.ExecContext(ctx, `INSERT OR REPLACE INTO exa_contents (url, title, text, cost_usd, fetched_at) VALUES (?,?,?,?,?)`, u, page.Title, text, resp.CostUSD, store.Now()); err != nil {
-			slog.Warn("exa contents: keeping the text", "url", u, "err", err)
+			slog.Warn("exa contents: keeping the text", "url", redact.URL(u), "err", err)
 		}
-		slog.Info("exa contents", "url", u, "chars", len(text), "cost_usd", fmt.Sprintf("%.4f", resp.CostUSD))
+		slog.Info("exa contents", "url", redact.URL(u), "chars", len(text), "cost_usd", fmt.Sprintf("%.4f", resp.CostUSD))
 		return text, page.Title, true
 	}
 }

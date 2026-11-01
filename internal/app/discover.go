@@ -12,6 +12,7 @@ import (
 	"unicode"
 
 	"github.com/cheapseatsdev/cheapseats/internal/config"
+	"github.com/cheapseatsdev/cheapseats/internal/redact"
 	"github.com/cheapseatsdev/cheapseats/internal/scaffold"
 	"github.com/cheapseatsdev/cheapseats/internal/sets"
 	"github.com/cheapseatsdev/cheapseats/internal/store"
@@ -95,7 +96,7 @@ func (a *App) DiscoverCompetitors(ctx context.Context) (Discovered, error) {
 		}
 		resp, err := client.FindSimilar(ctx, discoverOp, s.url, exclude, a.Cfg.DiscoverResults())
 		if err != nil {
-			return d, fmt.Errorf("find similar to %s: %w", s.url, err)
+			return d, fmt.Errorf("find similar to %s: %w", redact.URL(s.url), err)
 		}
 		d.Seeds++
 		d.CostUSD += resp.CostUSD
@@ -193,7 +194,7 @@ func (a *App) judgeHost(ctx context.Context, pageURL, title, category string) (f
 	}
 	ans, ok := resp.Answers["competes"]
 	if !ok {
-		return 0, resp.CostUSD, fmt.Errorf("typesafe: no answer for %s", pageURL)
+		return 0, resp.CostUSD, fmt.Errorf("typesafe: no answer for %s", redact.URL(pageURL))
 	}
 	return typesafe.Chosen(ans), resp.CostUSD, nil
 }
