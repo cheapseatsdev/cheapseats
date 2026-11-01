@@ -23,7 +23,8 @@ func TestCitesRenderEvidenceAsLinkedQuotes(t *testing.T) {
 		Findings: []analysis.Finding{
 			{Title: "Assistants lack current facts about the product", Detail: "Memory answers decline.", Prompts: []int{1},
 				Evidence: `101: "I don't have reliable information on \"Acme Widgets\"". 102: "I don’t have reliable current details on Acme Widgets’ pricing or features". 103: "I don’t know Acme Widgets’ current self-hosting requirements".`},
-			{Title: "Prose evidence falls back to text", Detail: "d", Prompts: []int{1}, Evidence: `Answers 4 and 5 call the \"free tier\" **limited**.`},
+			// Ambiguous (an unescaped " inside a quote): shown as written, never credited to result 12.
+			{Title: "Ambiguous evidence falls back to text", Detail: "d", Prompts: []int{1}, Evidence: `7: "Use the format "name". 12: "value" as shown"`},
 		},
 	}
 	if _, err := db.Exec(`UPDATE runs SET fixes=?, fixes_at=? WHERE id=?`, analysis.Encode(an), store.Now(), id); err != nil {
@@ -54,7 +55,7 @@ func TestCitesRenderEvidenceAsLinkedQuotes(t *testing.T) {
 		"hub findings": {findings, []string{
 			`<blockquote class="evidence">“I don’t have reliable information on “Acme Widgets””</blockquote><figcaption class="muted small">— ` + link + `</figcaption>`,
 			`<blockquote class="evidence">“I don’t know Acme Widgets’ current self-hosting requirements”</blockquote>`,
-			`<p><b>Evidence:</b> Answers 4 and 5 call the &#34;free tier&#34; limited.</p>`,
+			`<p><b>Evidence:</b> 7: &#34;Use the format &#34;name&#34;. 12: &#34;value&#34; as shown&#34;</p>`,
 		}},
 		"hub investigations": {investigations, []string{
 			`<b>Why:</b> Answers call it &#34;cheap&#34;`,
@@ -68,7 +69,7 @@ func TestCitesRenderEvidenceAsLinkedQuotes(t *testing.T) {
 				t.Errorf("%s: want %s", name, w)
 			}
 		}
-		for _, bad := range []string{`\&#34;`, `\"`, `**`, `101: &#34;`} {
+		for _, bad := range []string{`\&#34;`, `\"`, `**$76`, `101: &#34;`, `#result-12"`} {
 			if strings.Contains(c.body, bad) {
 				t.Errorf("%s: shows %s", name, bad)
 			}

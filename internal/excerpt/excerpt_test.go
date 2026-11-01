@@ -40,10 +40,10 @@ func TestParseShapes(t *testing.T) {
 		in   string
 		want []Cite
 	}{
-		// Unescaped inner quotes: only a mark followed by a separator and the next item closes.
-		{`Result 7: "named "Acme" first"; prompt 3: “cheap, fast”`, []Cite{{"result", 7, "named “Acme” first"}, {"prompt", 3, "cheap, fast"}}},
+		// Escaped and curly quotes inside are content; a curly quote can be the outer mark.
+		{`Result 7: "named \"Acme\" and “Foo” first"; prompt 3: “cheap, fast”`, []Cite{{"result", 7, "named “Acme” and “Foo” first"}, {"prompt", 3, "cheap, fast"}}},
 		// The analyst escaped the outer marks too.
-		{`#9: \"a \"b\" c\" | 10: "d"`, []Cite{{"result", 9, "a “b” c"}, {"result", 10, "d"}}},
+		{`#9: \"a b c\" | 10: "d"`, []Cite{{"result", 9, "a b c"}, {"result", 10, "d"}}},
 		{`"just a quote"`, []Cite{{"", 0, "just a quote"}}},
 	} {
 		if got := Parse(tc.in); !reflect.DeepEqual(got, tc.want) {
@@ -52,10 +52,18 @@ func TestParseShapes(t *testing.T) {
 	}
 }
 
-// Prose is not a list: it falls back, cleaned but otherwise as written.
+// Prose is not a list, and a list whose split is ambiguous is not trusted: both fall back.
 func TestParseFallsBack(t *testing.T) {
 	for _, in := range []string{
-		`Answers 4 and 5 call the \"free tier\" **limited**.`,
+		// An unescaped " inside a quote: splitting here would credit result 12 with words from
+		// result 7's quote.
+		`7: "Use the format "name". 12: "value" as shown"`,
+		`Result 7: "named "Acme" first"; prompt 3: “cheap, fast”`,
+		`#9: \"a \"b\" c\" | 10: "d"`,
+		// A straight " inside curly or escaped outer marks is held to the same rule.
+		`5: “say "hi" now”`,
+		`5: \"say "hi" now\"`,
+		`Answers 4 and 5 call the \"free tier\" limited.`,
 		`101: "quote" and then commentary`,
 		`101: "never closed`,
 		`101 said "x"`,
@@ -67,7 +75,10 @@ func TestParseFallsBack(t *testing.T) {
 			t.Errorf("Parse(%s) = %q, want nil", in, got)
 		}
 	}
-	if got, want := Lines(`Answers 4 and 5 call the \"free tier\" **limited**.`), []string{`Answers 4 and 5 call the "free tier" limited.`}; !reflect.DeepEqual(got, want) {
+	if got, want := Lines(`7: "Use the format "name". 12: "value" as shown"`), []string{`7: "Use the format "name". 12: "value" as shown"`}; !reflect.DeepEqual(got, want) {
+		t.Errorf("Lines ambiguous = %q, want %q", got, want)
+	}
+	if got, want := Lines(`Answers 4 and 5 call the \"free tier\" **limited**.`), []string{`Answers 4 and 5 call the "free tier" **limited**.`}; !reflect.DeepEqual(got, want) {
 		t.Errorf("Lines fallback = %q, want %q", got, want)
 	}
 }
@@ -85,12 +96,18 @@ func TestLines(t *testing.T) {
 
 func TestQuote(t *testing.T) {
 	for in, want := range map[string]string{
-		`"Use *Acme* or ` + "`acme-cli`" + ` — see [the docs](https://acme.example/docs)"`: "Use Acme or acme-cli — see the docs",
-		"line one\\nLine  two\n\nthree\\n- four":                                           "line one Line two three - four",
-		`a "b" and "c"`:                                                                    "a “b” and “c”",
-		`5 * 3 * 2 stays`:                                                                  "5 * 3 * 2 stays",
-		`it's 'fine'`:                                                                      "it’s ‘fine’",
-		`C:\path\to stays`:                                                                 `C:\path\to stays`,
+		`"Use *Acme* or ` + "`acme-cli`" + ` — see [the docs](https://acme.example/docs)"`:          "Use Acme or acme-cli — see the docs (https://acme.example/docs)",
+		`[https://acme.example](https://acme.example) and [here](https://acme.example/self-hosted)`: "https://acme.example and here (https://acme.example/self-hosted)",
+		`about **$76/month**, **cheap** **and** fast`:                                               "about $76/month, cheap and fast",
+		// Globs and mid-word marks are content.
+		`match **/README.md and **/LICENSE`:   "match **/README.md and **/LICENSE",
+		`a**b**c and x **.md** and 5 * 3 * 2`: "a**b**c and x **.md** and 5 * 3 * 2",
+		// Only \", \' and \\ are undone; \n and the rest stay as written.
+		"Use `\\n` to separate lines":         `Use \n to separate lines`,
+		`say \"x\" or \'y\' in C:\\notes\tab`: "say “x” or ‘y’ in C:\\notes\\tab",
+		"line one\nline  two":                 "line one line two",
+		`a "b" and "c"`:                       "a “b” and “c”",
+		`it's 'fine'`:                         "it’s ‘fine’",
 	} {
 		if got := Quote(in); got != want {
 			t.Errorf("Quote(%s) = %q, want %q", in, got, want)
@@ -98,14 +115,17 @@ func TestQuote(t *testing.T) {
 	}
 }
 
-// Prose keeps straight quotes and single asterisks, which can be code a reader copies.
+// Prose drops only the escapes before quote marks: asterisks, backticks and other backslash
+// sequences can be code, globs or markup a reader copies.
 func TestProse(t *testing.T) {
-	in := `Add <meta name="description"> saying \"self-hosted\" and **free**; match *.md files`
-	want := `Add <meta name="description"> saying "self-hosted" and free; match *.md files`
-	if got := Prose(in); got != want {
-		t.Fatalf("Prose = %q, want %q", got, want)
-	}
-	if got := Prose(`split on \n here`); got != `split on \n here` {
-		t.Fatalf("Prose should leave \\n alone: %q", got)
+	for in, want := range map[string]string{
+		`Add <meta name="description"> saying \"self-hosted\" and **free**`: `Add <meta name="description"> saying "self-hosted" and **free**`,
+		`Ignore **/README.md and **/LICENSE`:                                `Ignore **/README.md and **/LICENSE`,
+		"Use `\\n` to separate lines":                                       "Use `\\n` to separate lines",
+		`\"x\"`:                                                             `"x"`,
+	} {
+		if got := Prose(in); got != want {
+			t.Errorf("Prose(%s) = %q, want %q", in, got, want)
+		}
 	}
 }

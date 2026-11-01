@@ -33,9 +33,11 @@ bounded page reads do not establish a complete inventory.
 
 Evidence is stored as the analyst wrote it. When it is a list of quotes, such as
 `3756: "…". 3762: "…"`, the page shows each quote on its own line, linked to its answer on the
-run page. Escapes and inline Markdown copied from the answers are dropped for display. Evidence in
-any other form is shown as text. `cheapseats fixes` prints evidence the same way. The JSON API and
-MCP return the stored text unchanged.
+run page, with escaped quote marks and well-formed Markdown emphasis, code marks and links from
+the answer tidied. A list whose quotes contain an unescaped straight `"` can't be split safely,
+so it is shown as text, like evidence in any other form; text keeps everything but the backslash
+in `\"`. `cheapseats fixes` prints evidence the same way. The JSON API and MCP return the stored
+text unchanged.
 
 ## Brand brief
 

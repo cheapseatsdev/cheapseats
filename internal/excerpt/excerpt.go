@@ -13,25 +13,25 @@ import (
 	"regexp"
 	"strings"
 	"unicode"
-	"unicode/utf8"
 )
 
 // Prose cleans model-written prose that may embed a quote (a claim, a reason, a summary): it
-// drops escapes before quote marks and Markdown bold markers, and leaves everything else as it
-// was. Straight quotes stay straight, since prose can carry code or markup a reader copies.
+// drops the backslash in \" and \' and changes nothing else. Prose can carry code, globs or
+// markup a reader copies (**/README.md, <meta name="x">), so asterisks and quotes stay.
 func Prose(s string) string {
-	return strings.TrimSpace(bold.ReplaceAllString(unescape(s, false), "$1"))
+	return strings.TrimSpace(unescape(s, false))
 }
 
-// Quote cleans one quoted excerpt of an answer for display between “ and ”: escapes and inline
-// Markdown (bold, italic, code, links) are dropped, runs of white space become one space, a
-// matching pair of outer quote marks is removed, and the straight quote marks left inside
-// become typographic ones.
+// Quote cleans one quoted excerpt of an answer for display between “ and ”. It undoes \", \'
+// and \\, drops well-formed inline Markdown emphasis and code marks, writes a link as its text
+// and URL, makes runs of white space one space, removes a matching pair of outer quote marks
+// and turns the straight quote marks left inside into typographic ones. When a mark could be
+// content (a glob, a path), it stays.
 func Quote(s string) string {
 	s = unescape(s, true)
-	s = link.ReplaceAllString(s, "$1")
-	s = bold.ReplaceAllString(s, "$1")
-	s = italic.ReplaceAllString(s, "$1$2$3")
+	s = link.ReplaceAllStringFunc(s, linkText)
+	s = untilStable(s, bold, "$1$2$3")
+	s = untilStable(s, italic, "$1$2$3")
 	s = code.ReplaceAllString(s, "$1")
 	s = strings.Join(strings.Fields(s), " ")
 	s = strings.ReplaceAll(s, "...", "…")
@@ -39,16 +39,40 @@ func Quote(s string) string {
 	return curl(s)
 }
 
+// Emphasis is a span whose marks touch text on the inside and nothing word-like on the outside,
+// so **/README.md, a**b**c and 5 * 3 * 2 are left alone. Its text can't start with / or . (a
+// glob). The outer characters are captured, since Go's regexp has no lookaround.
 var (
-	bold   = regexp.MustCompile(`\*\*([^*\n]+?)\*\*`)
-	italic = regexp.MustCompile(`(^|[\s(\["“'‘])\*([^*\s](?:[^*\n]*?[^*\s])?)\*($|[\s).,;:!?\]"”'’])`)
+	bold   = regexp.MustCompile(`(^|[^\p{L}\p{N}_/.*])\*\*([^\s*/.](?:[^*\n]*?[^\s*])?)\*\*($|[^\p{L}\p{N}_/.*])`)
+	italic = regexp.MustCompile(`(^|[^\p{L}\p{N}_/.*])\*([^\s*/.](?:[^*\n]*?[^\s*])?)\*($|[^\p{L}\p{N}_/.*])`)
 	code   = regexp.MustCompile("`([^`\n]+)`")
-	link   = regexp.MustCompile(`\[([^\]\n]+)\]\((?:https?://)[^)\s]+\)`)
+	link   = regexp.MustCompile(`\[([^\]\n]+)\]\((https?://[^)\s]+)\)`)
 )
 
-// unescape drops the backslash before a quote mark. In an excerpt (all), it also undoes the rest
-// of what %q writes: \n, \r and \t become spaces and \\ one backslash. A \n or \t before a
-// lowercase letter is more likely a path (C:\notes) than a line break, so it stays.
+// untilStable applies re until nothing changes: neighbouring spans share the character between
+// them, which a single non-overlapping pass leaves for the second span.
+func untilStable(s string, re *regexp.Regexp, repl string) string {
+	for i := 0; i < 8; i++ {
+		t := re.ReplaceAllString(s, repl)
+		if t == s {
+			break
+		}
+		s = t
+	}
+	return s
+}
+
+// linkText writes a Markdown link as "text (url)", or the URL alone when that is its text.
+func linkText(m string) string {
+	sm := link.FindStringSubmatch(m)
+	if sm[1] == sm[2] {
+		return sm[2]
+	}
+	return sm[1] + " (" + sm[2] + ")"
+}
+
+// unescape drops the backslash in \" and \'. In an excerpt (all), \\ also becomes one
+// backslash. Every other sequence, \n included, stays as written: it may be content.
 func unescape(s string, all bool) string {
 	if !strings.Contains(s, `\`) {
 		return s
@@ -62,8 +86,6 @@ func unescape(s string, all bool) string {
 		switch c := s[i+1]; {
 		case c == '"' || c == '\'':
 			b.WriteByte(c)
-		case all && (c == 'n' || c == 'r' || c == 't') && !(i+2 < len(s) && 'a' <= s[i+2] && s[i+2] <= 'z'):
-			b.WriteByte(' ')
 		case all && c == '\\':
 			b.WriteByte('\\')
 		default:
@@ -185,32 +207,35 @@ func item(s string) (Cite, string, bool) {
 		fmt.Sscan(s[m[4]:m[5]], &c.N)
 		s = s[m[1]:]
 	}
-	open, closers := "", ""
+	var open, closer string
 	switch {
 	case strings.HasPrefix(s, `\"`):
-		open, closers = `\"`, `\"`
+		open, closer = `\"`, `\"`
 	case strings.HasPrefix(s, `"`):
-		open, closers = `"`, `"”`
+		open, closer = `"`, `"`
 	case strings.HasPrefix(s, "“"):
-		open, closers = "“", `”"`
+		open, closer = "“", "”"
 	default:
 		return c, "", false
 	}
+	// The quote ends at the first closing mark; an unescaped " anywhere inside makes the split
+	// ambiguous (`7: "a "b". 12: "c" d"` could credit result 12 with the wrong words), so the
+	// whole string falls back rather than guess.
 	body := s[len(open):]
-	for i := 0; i < len(body); {
-		r, n := utf8.DecodeRuneInString(body[i:])
-		end := -1
-		switch {
-		case open == `\"` && strings.HasPrefix(body[i:], `\"`):
-			end = i + 2
-		case open != `\"` && strings.ContainsRune(closers, r) && (r != '"' || i == 0 || body[i-1] != '\\'):
-			end = i + n
-		}
-		if end > 0 && ends(body[end:]) {
+	for i := 0; i < len(body); i++ {
+		if strings.HasPrefix(body[i:], closer) {
+			if !ends(body[i+len(closer):]) {
+				return c, "", false
+			}
 			c.Text = Quote(body[:i])
-			return c, body[end:], c.Text != ""
+			return c, body[i+len(closer):], c.Text != ""
 		}
-		i += n
+		switch body[i] {
+		case '\\':
+			i++ // an escaped character, \" included, is content
+		case '"':
+			return c, "", false
+		}
 	}
 	return c, "", false
 }
