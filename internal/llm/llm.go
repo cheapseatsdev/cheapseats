@@ -50,7 +50,7 @@ func post(ctx context.Context, url string, headers map[string]string, body any) 
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
 		if err != nil {
 			lease.Finish(0, true)
-			return nil, err
+			return nil, errclass.Transport("", err)
 		}
 		req.Header.Set("content-type", "application/json")
 		for k, v := range headers {
@@ -64,19 +64,19 @@ func post(ctx context.Context, url string, headers map[string]string, body any) 
 			if ctx.Err() != nil {
 				return nil, ctx.Err()
 			}
-			last = err
+			last = errclass.Transport("", err) // the URL redacted; Go's text kept only as Detail
 		} else {
 			if resp.StatusCode == http.StatusOK {
 				data, err := bounded.Read(resp.Body, maxResponse)
 				resp.Body.Close()
 				if err != nil {
 					lease.Finish(0, false)
-					return nil, fmt.Errorf("reading response: %w", err)
+					return nil, errclass.Transport("", err)
 				}
 				var out map[string]any
 				if err := json.Unmarshal(data, &out); err != nil {
 					lease.Finish(0, false)
-					return nil, fmt.Errorf("decoding response: %w", err)
+					return nil, errclass.Undecodable("", "response", err)
 				}
 				if meter != nil {
 					known := knownUsage(out, url == OpenAIURL)
@@ -173,11 +173,13 @@ func Structured(ctx context.Context, model, system, user string, maxTokens int, 
 	case "", "end_turn", "stop_sequence":
 	default:
 		slog.Warn("structured output stopped", "operation", operation(ctx), "reply", Reply(resp))
-		return resp, fmt.Errorf("structured output stopped: %s (%s)", sr, ReplyShape(resp))
+		return resp, fmt.Errorf("structured output stopped: %s (%s)", errclass.Word(sr), ReplyShape(resp))
 	}
 	if err := json.Unmarshal([]byte(ReplyText(resp)), out); err != nil {
-		slog.Warn("structured output undecodable", "operation", operation(ctx), "err", err, "reply", Reply(resp))
-		return resp, fmt.Errorf("decoding structured output: %w (%s)", err, ReplyShape(resp))
+		// The decoder's own message can quote the reply; the error says where it stopped.
+		derr := errclass.Undecodable("", "structured output", err)
+		slog.Warn("structured output undecodable", "operation", operation(ctx), "err", derr, "offset", derr.Offset, "reply", Reply(resp))
+		return resp, fmt.Errorf("%w (%s)", derr, ReplyShape(resp))
 	}
 	return resp, nil
 }
@@ -192,19 +194,27 @@ func ReplyShape(resp map[string]any) string {
 	if resp == nil {
 		return "no reply"
 	}
-	sr := Str(resp["stop_reason"])
-	if sr == "" {
-		sr = "none"
-	}
-	var blocks []string
-	for _, b := range List(resp["content"]) {
-		blocks = append(blocks, Str(Map(b)["type"]))
-	}
+	sr, blocks := replyWords(resp)
 	text := "text present"
 	if strings.TrimSpace(ReplyText(resp)) == "" {
 		text = "no text"
 	}
 	return fmt.Sprintf("stop_reason %s, blocks [%s], %s", sr, strings.Join(blocks, " "), text)
+}
+
+// replyWords are a reply's stop reason ("none" without one) and its block types, each kept only
+// when it looks like one (errclass.Word), else "other": they go into stored errors and alerts.
+func replyWords(resp map[string]any) (string, []string) {
+	sr := Str(resp["stop_reason"])
+	if sr == "" {
+		sr = "none"
+	}
+	sr = errclass.Word(sr)
+	var blocks []string
+	for _, b := range List(resp["content"]) {
+		blocks = append(blocks, errclass.Word(Str(Map(b)["type"])))
+	}
+	return sr, blocks
 }
 
 // ReplyText is a Messages reply's text blocks joined, which Structured decodes. Thinking and
@@ -228,14 +238,7 @@ func Reply(resp map[string]any) string {
 		return "no reply"
 	}
 	u := Map(resp["usage"])
-	sr := Str(resp["stop_reason"])
-	if sr == "" {
-		sr = "none"
-	}
-	var blocks []string
-	for _, b := range List(resp["content"]) {
-		blocks = append(blocks, Str(Map(b)["type"]))
-	}
+	sr, blocks := replyWords(resp)
 	return fmt.Sprintf("stop_reason %s, %d input tokens, %d output tokens, blocks [%s], %d characters of text",
 		sr, Int(u["input_tokens"])+Int(u["cache_read_input_tokens"])+Int(u["cache_creation_input_tokens"]), Int(u["output_tokens"]),
 		strings.Join(blocks, " "), len([]rune(ReplyText(resp))))

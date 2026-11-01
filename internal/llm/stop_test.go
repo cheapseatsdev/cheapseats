@@ -120,3 +120,17 @@ func TestStructuredErrorsAreStableAndTheCountsAreLogged(t *testing.T) {
 		}
 	}
 }
+
+// A reply's stop reason and block types go into stored errors and the alert key, so only words
+// shaped like them do; anything else reads "other". Real values are untouched (above).
+func TestReplyMetadataIsAllowlisted(t *testing.T) {
+	fakeReply(t, map[string]any{
+		"stop_reason": "sk-ant-api03-SENTINEL leaked",
+		"content":     []any{map[string]any{"type": "PAGETEXT-SENTINEL", "text": "x"}, map[string]any{"type": "text", "text": "x"}},
+	})
+	var out map[string]any
+	_, err := Structured(context.Background(), "m", "s", "u", 10, schemaTestRegistered, &out)
+	if err == nil || err.Error() != "structured output stopped: other (stop_reason other, blocks [other text], text present)" {
+		t.Errorf("got %v", err)
+	}
+}

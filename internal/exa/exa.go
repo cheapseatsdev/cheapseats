@@ -215,7 +215,7 @@ func (c *Client) post(ctx context.Context, operation, path, model string, body a
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
 		if err != nil {
 			settle(lease, 0, true)
-			return nil, err
+			return nil, errclass.Transport("exa", err)
 		}
 		req.Header.Set("content-type", "application/json")
 		if key != "" {
@@ -227,18 +227,18 @@ func (c *Client) post(ctx context.Context, operation, path, model string, body a
 			if ctx.Err() != nil {
 				return nil, ctx.Err()
 			}
-			last = err
+			last = errclass.Transport("exa", err) // the URL redacted; Go's text kept only as Detail
 		} else {
 			if resp.StatusCode == http.StatusOK {
 				data, err := bounded.Read(resp.Body, maxResponse)
 				resp.Body.Close()
 				if err != nil {
 					settle(lease, 0, false)
-					return nil, fmt.Errorf("exa: reading response: %w", err)
+					return nil, errclass.Transport("exa", err)
 				}
 				if err := json.Unmarshal(data, out); err != nil {
 					settle(lease, 0, false)
-					return nil, fmt.Errorf("exa: decoding response: %w", err)
+					return nil, errclass.Undecodable("exa", "response", err)
 				}
 				return lease, nil
 			}

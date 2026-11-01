@@ -134,7 +134,7 @@ func (c *Client) Ask(ctx context.Context, operation string, state any, questions
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
 		if err != nil {
 			settle(lease, 0, true)
-			return nil, err
+			return nil, errclass.Transport("typesafe", err)
 		}
 		req.Header.Set("content-type", "application/json")
 		if key != "" {
@@ -146,19 +146,19 @@ func (c *Client) Ask(ctx context.Context, operation string, state any, questions
 			if ctx.Err() != nil {
 				return nil, ctx.Err()
 			}
-			last = err
+			last = errclass.Transport("typesafe", err) // the URL redacted; Go's text kept only as Detail
 		} else {
 			if resp.StatusCode == http.StatusOK {
 				data, err := bounded.Read(resp.Body, maxResponse)
 				resp.Body.Close()
 				if err != nil {
 					settle(lease, 0, false)
-					return nil, fmt.Errorf("typesafe: reading response: %w", err)
+					return nil, errclass.Transport("typesafe", err)
 				}
 				var out Response
 				if err := json.Unmarshal(data, &out); err != nil {
 					settle(lease, 0, false)
-					return nil, fmt.Errorf("typesafe: decoding response: %w", err)
+					return nil, errclass.Undecodable("typesafe", "response", err)
 				}
 				if c.Cfg != nil {
 					out.CostUSD = c.Cfg.Cost(model, config.Usage{Input: out.Usage.InputTokens, Output: out.Usage.OutputTokens})

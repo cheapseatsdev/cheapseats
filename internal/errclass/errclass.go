@@ -14,11 +14,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net"
+	"net/url"
 	"os/exec"
 	"regexp"
 	"strings"
+	"syscall"
 	"unicode/utf8"
 
+	"github.com/cheapseatsdev/cheapseats/internal/bounded"
 	"github.com/cheapseatsdev/cheapseats/internal/redact"
 )
 
@@ -29,6 +34,7 @@ const (
 	NoKey      = "no_key"      // no credential configured
 	Auth       = "auth"        // a CLI that says its login is missing or expired
 	Decode     = "decode"      // a reply that isn't the JSON expected
+	Network    = "network"     // no HTTP reply: DNS, connection, TLS, a cut-off body
 	CLIExit    = "cli_exit"    // a CLI that exited non-zero
 	CallFailed = "call_failed" // anything else
 )
@@ -45,7 +51,9 @@ type Error struct {
 	Category string // one of the constants above, or http_<status>
 	Status   int    // the HTTP status, or the CLI's exit code; 0 when there is none
 	Excerpt  string // the provider's error message, redacted and at most MaxExcerpt runes; only for HTTP errors
+	Offset   int64  // for a decode error, the byte offset where reading stopped; not in Error(), which stays the same when a failure repeats
 	detail   string // a CLI's subtype or exit status: fixed vocabulary, shown
+	plain    bool   // detail is the whole message (transport and decode errors)
 	raw      string // what came back verbatim: the body, stderr or result text. Never shown.
 	cause    error  // a safe error kept for errors.Is/As: a context error or *exec.ExitError
 }
@@ -61,6 +69,8 @@ func (e *Error) Error() string {
 		if e.Excerpt != "" {
 			b.WriteString(": " + e.Excerpt)
 		}
+	case e.plain:
+		b.WriteString(e.detail)
 	case e.detail != "":
 		b.WriteString(e.detail)
 		if e.Category == Auth {
@@ -141,12 +151,12 @@ func httpExcerpt(body string) string {
 		Error     inner  `json:"error"`
 		RequestID string `json:"request_id,omitempty"`
 	}
-	out.Type = word(in.Type)
+	out.Type = word(redact.Text(in.Type))
 	var obj struct{ Type, Message string }
 	var s string
 	switch {
 	case json.Unmarshal(in.Error, &obj) == nil && (obj.Message != "" || obj.Type != ""):
-		out.Error = inner{Type: word(obj.Type), Message: obj.Message}
+		out.Error = inner{Type: word(redact.Text(obj.Type)), Message: obj.Message}
 	case json.Unmarshal(in.Error, &s) == nil && s != "":
 		out.Error.Message = s
 	case in.Message != "":
@@ -157,7 +167,7 @@ func httpExcerpt(body string) string {
 		return ""
 	}
 	out.Error.Message = Clip(redact.Text(out.Error.Message), MaxExcerpt)
-	out.RequestID = word(in.RequestID + in.ReqID)
+	out.RequestID = word(redact.Text(in.RequestID + in.ReqID))
 	var b strings.Builder
 	enc := json.NewEncoder(&b)
 	enc.SetEscapeHTML(false)
@@ -218,11 +228,82 @@ func CLIExited(op string, runErr, ctxErr error, stderr string) *Error {
 	return e
 }
 
-// Clip cuts s to at most n runes, marking a cut with "…".
+// Clip cuts s to at most n runes, the last of them "…" when it was cut.
 func Clip(s string, n int) string {
 	if utf8.RuneCountInString(s) <= n {
 		return s
 	}
+	if n < 1 {
+		return ""
+	}
 	r := []rune(s)
-	return string(r[:n]) + "…"
+	return string(r[:n-1]) + "…"
+}
+
+var replyWordRE = regexp.MustCompile(`^[a-z_]{1,32}$`)
+
+// Word is s when it looks like a reply's stop reason or block type (lowercase letters and
+// underscores, at most 32), else "other": a reply's metadata goes into stored errors and alerts,
+// so only that vocabulary does.
+func Word(s string) string {
+	if replyWordRE.MatchString(s) {
+		return s
+	}
+	return "other"
+}
+
+// Transport is a request to op ("" for the model APIs) that got no HTTP reply, or whose body
+// could not be read: the kind of failure and the URL without its query, user info or fragment.
+// The underlying error stays as Detail (Go's transport can quote bytes of a malformed reply);
+// errors.Is still finds a context error or bounded.ErrTooLarge.
+func Transport(op string, err error) *Error {
+	e := &Error{Op: op, Category: Network, raw: errString(err), plain: true}
+	kind := "network error"
+	var dns *net.DNSError
+	var ne net.Error
+	switch {
+	case errors.Is(err, context.DeadlineExceeded) || errors.As(err, &ne) && ne.Timeout():
+		e.Category, kind = Timeout, "timed out"
+		if errors.Is(err, context.DeadlineExceeded) {
+			e.cause = context.DeadlineExceeded
+		}
+	case errors.Is(err, context.Canceled):
+		e.Category, kind, e.cause = Canceled, "canceled", context.Canceled
+	case errors.Is(err, bounded.ErrTooLarge):
+		kind, e.cause = "reply over the size limit", bounded.ErrTooLarge
+	case errors.As(err, &dns):
+		kind = "network error: host not found"
+	case errors.Is(err, syscall.ECONNREFUSED):
+		kind = "network error: connection refused"
+	case errors.Is(err, syscall.ECONNRESET), errors.Is(err, io.ErrUnexpectedEOF), errors.Is(err, io.EOF):
+		kind = "network error: connection closed"
+	}
+	var ue *url.Error
+	if errors.As(err, &ue) {
+		kind += " (" + redact.URL(ue.URL) + ")"
+	}
+	e.detail = kind
+	return e
+}
+
+// Undecodable is a reply from op whose JSON could not be read as expected: what was being read, and
+// the byte offset where reading stopped. It never quotes the input.
+func Undecodable(op, what string, err error) *Error {
+	e := &Error{Op: op, Category: Decode, raw: errString(err), detail: "decoding " + what + ": invalid JSON", plain: true}
+	var syntax *json.SyntaxError
+	var typ *json.UnmarshalTypeError
+	switch {
+	case errors.As(err, &syntax):
+		e.Offset = syntax.Offset
+	case errors.As(err, &typ):
+		e.Offset, e.detail = typ.Offset, "decoding "+what+": unexpected JSON shape"
+	}
+	return e
+}
+
+func errString(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
 }

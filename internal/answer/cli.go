@@ -284,7 +284,7 @@ func parseClaudeStructured(stdout []byte, out any) error {
 		StructuredOutput json.RawMessage `json:"structured_output"`
 	}
 	if err := json.Unmarshal(stdout, &res); err != nil {
-		return fmt.Errorf("claude: reading output: %w", err)
+		return errclass.Undecodable("claude", "output", err)
 	}
 	if res.IsError || res.Subtype != "success" {
 		// The result text can quote the prompt (the run's answers): kept only as Detail.
@@ -293,7 +293,10 @@ func parseClaudeStructured(stdout []byte, out any) error {
 	if len(res.StructuredOutput) == 0 || string(res.StructuredOutput) == "null" {
 		return fmt.Errorf("claude: no structured output")
 	}
-	return json.Unmarshal(res.StructuredOutput, out)
+	if err := json.Unmarshal(res.StructuredOutput, out); err != nil {
+		return errclass.Undecodable("claude", "structured output", err)
+	}
+	return nil
 }
 
 // ParseClaudeCode reads `claude -p --output-format stream-json` output.

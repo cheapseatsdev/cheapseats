@@ -15,6 +15,7 @@ import (
 	"github.com/cheapseatsdev/cheapseats/internal/config"
 	"github.com/cheapseatsdev/cheapseats/internal/errclass"
 	"github.com/cheapseatsdev/cheapseats/internal/llm"
+	"github.com/cheapseatsdev/cheapseats/internal/redact"
 	"github.com/cheapseatsdev/cheapseats/internal/sets"
 )
 
@@ -448,7 +449,7 @@ func readArtifacts(ctx context.Context, cfg *config.Config, fs []Fix) []artifact
 		t, cut, err := read(ctx, u)
 		p := artifact{URL: u}
 		if err != nil {
-			p.Error = clip(err.Error(), 300)
+			p.Error = clip(err.Error(), 300) // the reader's errors name a URL only through redact.URL
 		} else if strings.TrimSpace(t) == "" {
 			p.Error = "No readable current content returned."
 		} else {
@@ -522,7 +523,7 @@ func unreadable(pages []artifact) error {
 	if len(pages) == 0 {
 		return ErrNoReadablePage
 	}
-	return fmt.Errorf("%w (%d tried; %s: %s)", ErrNoReadablePage, len(pages), pages[0].URL, pages[0].Error)
+	return fmt.Errorf("%w (%d tried; %s: %s)", ErrNoReadablePage, len(pages), redact.URL(pages[0].URL), pages[0].Error)
 }
 
 // FailureCategory names the kind of a verification failure: no_pages when no current page could

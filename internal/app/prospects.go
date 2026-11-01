@@ -11,6 +11,7 @@ import (
 
 	"github.com/cheapseatsdev/cheapseats/internal/audit"
 	"github.com/cheapseatsdev/cheapseats/internal/config"
+	"github.com/cheapseatsdev/cheapseats/internal/redact"
 	"github.com/cheapseatsdev/cheapseats/internal/report"
 	"github.com/cheapseatsdev/cheapseats/internal/run"
 	"github.com/cheapseatsdev/cheapseats/internal/store"
@@ -271,7 +272,7 @@ func (a *App) FindProspects(ctx context.Context, id string) (int, error) {
 				},
 			})
 			if err != nil {
-				slog.Warn("prospects: jev", "run", id, "url", pages[i].url, "err", err)
+				slog.Warn("prospects: jev", "run", id, "url", redact.URL(pages[i].url), "err", err)
 				break
 			}
 			if ans, ok := resp.Answers["in_category"]; ok {

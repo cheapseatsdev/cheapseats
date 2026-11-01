@@ -51,3 +51,37 @@ func TestCredentialShapes(t *testing.T) {
 		}
 	}
 }
+
+// A configured secret is masked by value from MinValue characters up, as a whole token only, so
+// a short one doesn't eat ordinary words. CHEAPSEATS_TOKENS entries are trimmed as the server
+// trims them.
+func TestShortConfiguredSecrets(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "hunter2")
+	t.Setenv("CHEAPSEATS_TOKENS", " ab12 , xyz,")
+	for in, want := range map[string]string{
+		"pass hunter2 failed":       "pass [REDACTED] failed",
+		"cookie=ab12; then":         "cookie=[REDACTED]; then",
+		"hunter22 and xab12 stay":   "hunter22 and xab12 stay",
+		"xyz is too short to count": "xyz is too short to count",
+	} {
+		if got := Text(in); got != want {
+			t.Errorf("%q\n got %q\nwant %q", in, got, want)
+		}
+	}
+}
+
+func TestAWSKeysAndURLs(t *testing.T) {
+	for in, want := range map[string]string{
+		"id AKIAIOSFODNN7EXAMPLE used":                "id [REDACTED] used",
+		"ASIAIOSFODNN7EXAMPLE":                        "[REDACTED]",
+		"AWS_ACCESS_KEY_ID=AKIDEXAMPLE1":              "AWS_ACCESS_KEY_ID=[REDACTED]",
+		"AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG": "AWS_SECRET_ACCESS_KEY=[REDACTED]",
+	} {
+		if got := Text(in); got != want {
+			t.Errorf("%q\n got %q\nwant %q", in, got, want)
+		}
+	}
+	if got := URL("https://user:pw@example.com/p/a?api_key=abc&x=1#frag"); got != "https://example.com/p/a" {
+		t.Errorf("URL = %q", got)
+	}
+}

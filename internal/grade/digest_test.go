@@ -11,7 +11,7 @@ import (
 
 // evaluatorPinnedDigest is EvaluatorDigest now. When it changes, every stored evaluation check,
 // check batch and experiment reads as stale and can't be resumed, so a change must be meant.
-const evaluatorPinnedDigest = "692adf565564e9eb6e9ea9c7f2ff92337578684974abf9e51f3979a77e186cdc"
+const evaluatorPinnedDigest = "182a4e52bc8455e2b6992ae6a81682cf422b5aff10a5930acb90e21521f7216a"
 
 // The digest follows the grader's prompt, its schema as sent, its user message, the code in this
 // package, the shared code that sends a structured request and reads the reply, and the sets code

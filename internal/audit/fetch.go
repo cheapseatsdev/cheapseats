@@ -89,7 +89,7 @@ func (f *Fetcher) Get(ctx context.Context, url string, ua ...string) (*Response,
 		return nil, err
 	}
 	if req.URL.Scheme != "http" && req.URL.Scheme != "https" {
-		return nil, fmt.Errorf("not an http or https URL: %s", url)
+		return nil, fmt.Errorf("not an http or https URL: %s", redact.URL(url))
 	}
 	agent := f.UA
 	if len(ua) > 0 && ua[0] != "" {
@@ -99,11 +99,11 @@ func (f *Fetcher) Get(ctx context.Context, url string, ua ...string) (*Response,
 	req.Header.Set("accept", "text/html,application/xhtml+xml,text/plain,application/xml;q=0.9,*/*;q=0.8")
 	resp, err := f.Client.Do(req)
 	if err != nil {
-		// A fetch error names the URL (never the body), and a URL's query can carry a token: it
-		// is masked by the shared redactor, so the error is safe wherever it is shown or stored.
+		// A fetch error names the URL (never the body), and a URL's query or user info can carry
+		// a token: redact.URL drops them, so the error is safe wherever it is shown or stored.
 		var ue *neturl.Error
 		if errors.As(err, &ue) {
-			ue.URL = redact.Text(ue.URL)
+			ue.URL = redact.URL(ue.URL)
 		}
 		return nil, err
 	}

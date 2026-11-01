@@ -2,11 +2,16 @@ package errclass
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/url"
 	"os/exec"
 	"strings"
 	"testing"
+
+	"github.com/cheapseatsdev/cheapseats/internal/bounded"
 )
 
 // The sentinels every leak test looks for: an Anthropic-shaped key, a bearer token, the value
@@ -105,4 +110,61 @@ func TestCategoryReadsTypesNotMessages(t *testing.T) {
 			t.Errorf("%v: %q, want %q", err, got, want)
 		}
 	}
+}
+
+// A request that got no reply names the URL without its query, user info or fragment, and
+// never Go's own text, which can quote a malformed reply.
+func TestTransportErrorsRedactTheURL(t *testing.T) {
+	u := "https://user:" + SentinelBearer + "@proxy.example/v1/messages?key=" + SentinelEnv + "#" + SentinelKey
+	_, err := http.Get(u[:8] + "user:" + SentinelBearer + "@127.0.0.1:1/v1/messages?key=" + SentinelEnv)
+	e := Transport("exa", err)
+	errclassNoSentinel(t, "refused", e.Error())
+	if e.Category != Network || !strings.HasPrefix(e.Error(), "exa: network error") || !strings.Contains(e.Error(), "(https://127.0.0.1:1/v1/messages)") {
+		t.Errorf("%q %s", e, e.Category)
+	}
+	quoted := Transport("", &url.Error{Op: "Post", URL: u, Err: errors.New(`malformed HTTP response "` + SentinelPage + `"`)})
+	errclassNoSentinel(t, "malformed", quoted.Error())
+	if quoted.Error() != "network error (https://proxy.example/v1/messages)" {
+		t.Errorf("%q", quoted)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 0)
+	defer cancel()
+	timed := Transport("", &url.Error{Op: "Post", URL: u, Err: ctx.Err()})
+	if !errors.Is(timed, context.DeadlineExceeded) || Category(timed) != Timeout || timed.Error() != "timed out (https://proxy.example/v1/messages)" {
+		t.Errorf("%q %s", timed, Category(timed))
+	}
+	if big := Transport("", fmt.Errorf("x: %w", bounded.ErrTooLarge)); !errors.Is(big, bounded.ErrTooLarge) {
+		t.Errorf("%q lost ErrTooLarge", big)
+	}
+}
+
+// A reply that isn't the JSON expected says where reading stopped, never what it read.
+func TestDecodeErrorsQuoteNoInput(t *testing.T) {
+	var v map[string]any
+	in := `{"a": ` + SentinelPage
+	e := Undecodable("claude", "output", json.Unmarshal([]byte(in), &v))
+	errclassNoSentinel(t, "decode", e.Error())
+	if e.Error() != "claude: decoding output: invalid JSON" || e.Category != Decode || e.Offset == 0 || Category(e) != Decode {
+		t.Errorf("%q %s offset %d", e, e.Category, e.Offset)
+	}
+	var n struct{ A int }
+	if e := Undecodable("", "response", json.Unmarshal([]byte(`{"A":"`+SentinelPage+`"}`), &n)); e.Error() != "decoding response: unexpected JSON shape" {
+		t.Errorf("%q", e)
+	}
+}
+
+func TestWordClipAndReplyIDs(t *testing.T) {
+	for in, want := range map[string]string{"end_turn": "end_turn", "model_context_window_exceeded": "model_context_window_exceeded", "": "other", "Text": "other", SentinelPage: "other", strings.Repeat("a", 33): "other"} {
+		if got := Word(in); got != want {
+			t.Errorf("Word(%q) = %q", in, got)
+		}
+	}
+	if got := Clip(strings.Repeat("é", 400), 300); len([]rune(got)) != 300 || !strings.HasSuffix(got, "…") {
+		t.Errorf("Clip to 300 gave %d runes", len([]rune(got)))
+	}
+	if got := Clip("short", 300); got != "short" {
+		t.Errorf("%q", got)
+	}
+	e := HTTP("", 400, `{"type":"`+SentinelKey+`","error":{"type":"x","message":"m"},"request_id":"`+SentinelKey+`"}`)
+	errclassNoSentinel(t, "ids", e.Error())
 }

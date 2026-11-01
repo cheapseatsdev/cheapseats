@@ -112,9 +112,10 @@ var (
 	errorRequestID = regexp.MustCompile(`"request_id"\s*:\s*"([^"\\]+)"`)
 )
 
-// ReadAnalysisError reads a stored fixes_error. The provider's reply is cut to 400 characters
-// when stored (llm.APIError), so a long one is no longer valid JSON: the message and request id
-// are found by pattern, and an error with neither is returned as it is.
+// ReadAnalysisError reads a stored fixes_error. An API error stores the provider's message and
+// request id in JSON (errclass.HTTP); errors stored before it kept the reply cut to 400
+// characters, which may not be valid JSON. So the message and request id are found by pattern,
+// and an error with neither is returned as it is.
 func ReadAnalysisError(stored string) AnalysisFailure {
 	out := AnalysisFailure{Message: stored}
 	i := strings.Index(stored, "{")
