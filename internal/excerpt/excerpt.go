@@ -117,7 +117,7 @@ func writeText(b *strings.Builder, src []byte, n ast.Node) {
 	case *ast.Text:
 		v := n.Segment.Value(src)
 		if !n.IsRaw() {
-			v = util.ResolveEntityNames(util.ResolveNumericReferences(util.UnescapePunctuations(v)))
+			v = resolve(v)
 		}
 		b.Write(v)
 		if n.SoftLineBreak() || n.HardLineBreak() {
@@ -145,6 +145,8 @@ func writeText(b *strings.Builder, src []byte, n ast.Node) {
 		}
 		return
 	case *ast.AutoLink:
+		// As written: the spec resolves no escapes or entities in an autolink, nor does
+		// goldmark's renderer (URLEscape with resolveReference false).
 		b.Write(n.URL(src))
 		return
 	case *ast.Link:
@@ -152,7 +154,7 @@ func writeText(b *strings.Builder, src []byte, n ast.Node) {
 		for c := n.FirstChild(); c != nil; c = c.NextSibling() {
 			writeText(&label, src, c)
 		}
-		if dest := string(n.Destination); label.String() != dest {
+		if dest := string(resolve(n.Destination)); label.String() != dest {
 			b.WriteString(label.String() + " (" + dest + ")")
 		} else {
 			b.WriteString(dest)
@@ -162,6 +164,12 @@ func writeText(b *strings.Builder, src []byte, n ast.Node) {
 	for c := n.FirstChild(); c != nil; c = c.NextSibling() {
 		writeText(b, src, c)
 	}
+}
+
+// resolve applies backslash escapes and entity references, as goldmark's HTML renderer does to
+// text and, through URLEscape(…, true), to a link destination: /bar\* is /bar*, &amp; is &.
+func resolve(v []byte) []byte {
+	return util.ResolveEntityNames(util.ResolveNumericReferences(util.UnescapePunctuations(v)))
 }
 
 // altTextImages renders an image as nothing but its children, the alt text.

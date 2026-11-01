@@ -110,6 +110,12 @@ func TestCodeAndURLsExact(t *testing.T) {
 		{"[docs](https://x.example/a_(b)...tail)", `<a href="https://x.example/a_(b)...tail">docs</a>`, "docs (https://x.example/a_(b)...tail)"},
 		{"`  a  b  `", "<code> a  b </code>", " a  b "},
 		{"about **$76/month**", "about <strong>$76/month</strong>", "about $76/month"},
+		// Link destinations resolve escapes and entities, as CommonMark example 22 does;
+		// autolinks resolve neither.
+		{`[foo](/bar\*)`, `<a href="/bar*">foo</a>`, "foo (/bar*)"},
+		{`[a](/x&amp;y)`, `<a href="/x&amp;y">a</a>`, "a (/x&y)"},
+		{`[b](/&#42;z)`, `<a href="/*z">b</a>`, "b (/*z)"},
+		{`<https://x.example/a\*b&amp;c>`, `<a href="https://x.example/a%5C*b&amp;amp;c">https://x.example/a\*b&amp;amp;c</a>`, `https://x.example/a\*b&amp;c`},
 		// A line ending inside a code span reads as a space, as the spec says.
 		{"`a\nb`", "<code>a b</code>", "a b"},
 		// Backslash escapes don't apply inside code.
@@ -120,6 +126,16 @@ func TestCodeAndURLsExact(t *testing.T) {
 		}
 		if got := Text(tc.in); got != tc.text {
 			t.Errorf("Text(%s) = %q, want %q", tc.in, got, tc.text)
+		}
+	}
+}
+
+// For inline text, HTML is exactly what goldmark renders inside the paragraph.
+func TestHTMLMatchesGoldmark(t *testing.T) {
+	for _, in := range []string{`[foo](/bar\*)`, `[a](/x&amp;y)`, `[b](/&#42;z)`, `<https://x.example/a\*b&amp;c>`, "[`*config*`](https://x.example)", "about **$76/month**"} {
+		want := strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(string(Block(in))), "<p>"), "</p>")
+		if got := string(HTML(in)); got != want {
+			t.Errorf("HTML(%s) = %q, goldmark renders %q", in, got, want)
 		}
 	}
 }
