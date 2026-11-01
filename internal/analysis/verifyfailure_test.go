@@ -34,7 +34,7 @@ func TestFailedVerificationReturnsItsErrorWithTheInvestigations(t *testing.T) {
 	if !errors.As(err, &verr) || verr.Candidates != 1 || !strings.Contains(err.Error(), "schema refused") {
 		t.Fatalf("want the verifier's error: %v", err)
 	}
-	if calls != 2 || len(a.Fixes) != 0 || len(a.Investigations) != 1 || a.Investigations[0].Check != f.Check {
+	if calls != 2 || !a.VerificationFailed || len(a.Fixes) != 0 || len(a.Investigations) != 1 || a.Investigations[0].Check != f.Check {
 		t.Fatalf("the candidate must remain an investigation: %+v", a)
 	}
 }

@@ -128,21 +128,30 @@ func (a *App) BuildFixes(ctx context.Context, id string) error {
 	return a.recordAnalysis(ctx, id, an, cost, err)
 }
 
-// recordAnalysis stores what Build returned for run id: the analysis, its error, or both.
+// recordAnalysis stores what Build returned for run id. A failed or degraded build never
+// replaces an analysis the run already has: it records the error and its cost, and the earlier
+// analysis and its fixes_at stay as they were. The one exception is a failed verification on a
+// run with no analysis yet; its candidates, kept as investigations, are stored with the error.
 func (a *App) recordAnalysis(ctx context.Context, id string, an analysis.Analysis, cost float64, err error) error {
-	var verr *analysis.VerificationError
-	if err != nil && !errors.As(err, &verr) {
-		a.DB.ExecContext(ctx, `UPDATE runs SET fixes_error=?, analysis_cost_usd=analysis_cost_usd+? WHERE id=?`, err.Error(), cost, id)
+	if err == nil {
+		_, err = a.DB.ExecContext(ctx, `UPDATE runs SET fixes=?, insights=?, fixes_at=?, fixes_error=NULL, analysis_cost_usd=analysis_cost_usd+? WHERE id=?`, analysis.Encode(an), an.Insights, store.Now(), cost, id)
 		return err
 	}
-	// A failed verification still leaves investigations worth keeping. They're stored with the
-	// error, so the run page and the watch script's fixes_error check see that it failed.
-	var failed sql.NullString
-	if verr != nil {
+	var verr *analysis.VerificationError
+	if errors.As(err, &verr) {
 		slog.Error("analysis verification", "run", id, "err", err)
-		failed = sql.NullString{String: err.Error(), Valid: true}
+		// Only a run with no analysis yet takes the degraded one. fixes IS NULL is checked in the
+		// same statement, so this can't overwrite one stored meanwhile.
+		res, uerr := a.DB.ExecContext(ctx, `UPDATE runs SET fixes=?, insights=?, fixes_at=?, fixes_error=?, analysis_cost_usd=analysis_cost_usd+? WHERE id=? AND fixes IS NULL`, analysis.Encode(an), an.Insights, store.Now(), err.Error(), cost, id)
+		if uerr != nil {
+			return uerr
+		}
+		if n, _ := res.RowsAffected(); n > 0 {
+			return nil
+		}
+		err = fmt.Errorf("verification could not complete, so the earlier analysis is kept: %w", verr.Err)
 	}
-	_, err = a.DB.ExecContext(ctx, `UPDATE runs SET fixes=?, insights=?, fixes_at=?, fixes_error=?, analysis_cost_usd=analysis_cost_usd+? WHERE id=?`, analysis.Encode(an), an.Insights, store.Now(), failed, cost, id)
+	a.DB.ExecContext(ctx, `UPDATE runs SET fixes_error=?, analysis_cost_usd=analysis_cost_usd+? WHERE id=?`, err.Error(), cost, id)
 	return err
 }
 

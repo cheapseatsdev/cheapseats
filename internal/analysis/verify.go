@@ -215,8 +215,9 @@ func investigation(set sets.Set, f Fix, why string) Investigation {
 }
 
 // VerificationError is Build's error when the verification call failed. The analysis returned
-// with it is usable but degraded: every candidate is an investigation. The caller keeps it and
-// records the error, so the run doesn't read as a clean analysis with no actions.
+// with it is usable but degraded: every candidate is an investigation, and VerificationFailed is
+// set. The caller stores it with the error only when the run has no earlier analysis; otherwise
+// the earlier one stays and only the error is recorded.
 type VerificationError struct {
 	Candidates int
 	Err        error
@@ -304,6 +305,7 @@ Do not mark verified unless all six gates pass with evidence. Current supplied a
 		for _, f := range fs {
 			a.Investigations = append(a.Investigations, investigation(set, f, "Verification could not complete; the proposed work remains an investigation."))
 		}
+		a.VerificationFailed = true
 		return a, cost, &VerificationError{Candidates: len(fs), Err: err}
 	}
 	byIndex := map[int][]decision{}
