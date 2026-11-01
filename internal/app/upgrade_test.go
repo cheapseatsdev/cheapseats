@@ -614,3 +614,41 @@ func TestUpgradeKeepsAnAnalysisStoredBeforeVerificationFailedOnAFailedRebuild(t 
 		t.Fatalf("a failed rebuild replaced the older analysis: %q %v", after, err)
 	}
 }
+
+// omitted was added to the stored analysis envelope without a version change or a migration:
+// it lives in runs.fixes. An analysis stored by 0.7.4 reads with no omissions, beside its other
+// lists, and a new one keeps version 1, so a 0.7.4 build reading it after a rollback doesn't
+// reject it as an unsupported version (its decoder ignores the unknown field).
+func TestUpgradeReadsAnAnalysisStoredBeforeOmitted(t *testing.T) {
+	a, runs := fixMatchApp(t, "https://cheapseats.dev/plans")
+	ctx := context.Background()
+	id := runs["s"]
+	stored := `{"version":1,"insights":"Earlier.","fixes":[],"investigations":[],"market_findings":[{"title":"Buyers ask about pricing","detail":"d","evidence":"e","prompts":[1]}]}`
+	if _, err := a.DB.Exec(`UPDATE runs SET fixes=? WHERE id=?`, stored, id); err != nil {
+		t.Fatal(err)
+	}
+	steps, err := a.RunNextSteps(ctx, id)
+	if err != nil || len(steps.Findings) != 1 || steps.Omitted == nil || len(steps.Omitted) != 0 {
+		t.Fatalf("an analysis stored before omitted: %+v %v", steps, err)
+	}
+	if _, err := a.NextSteps(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	o := analysis.Omission{Title: "Clarify the plans page", Type: analysis.FixPage, Target: "https://cheapseats.dev/plans", Stage: analysis.StageFilter, Outcome: analysis.OutcomeDropped, Reason: "its check does not name its target URL."}
+	body := analysis.Encode(analysis.Analysis{Insights: "Now.", Omitted: []analysis.Omission{o}})
+	if !strings.HasPrefix(body, `{"version":1,`) {
+		t.Fatalf("the envelope's version changed, which a rolled-back build rejects: %s", body)
+	}
+	if _, err := a.DB.Exec(`UPDATE runs SET fixes=? WHERE id=?`, body, id); err != nil {
+		t.Fatal(err)
+	}
+	steps, err = a.RunNextSteps(ctx, id)
+	if err != nil || len(steps.Omitted) != 1 || steps.Omitted[0].Omission != o || steps.Omitted[0].RunID != id || steps.Omitted[0].SetID == "" {
+		t.Fatalf("omitted did not load with its run and set: %+v %v", steps.Omitted, err)
+	}
+	all, err := a.NextSteps(ctx)
+	if err != nil || len(all.Omitted) != 1 || all.Omitted[0].RunID != id {
+		t.Fatalf("the hub lost the omitted list: %+v %v", all.Omitted, err)
+	}
+}

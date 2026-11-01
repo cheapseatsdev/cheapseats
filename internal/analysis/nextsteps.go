@@ -228,11 +228,46 @@ type Finding struct {
 	PromptIDs []string `json:"prompt_ids,omitempty"`
 }
 
+// Where a candidate stopped (Omission.Stage): the filters before review (a title that names
+// nothing, a plan that fails planProblem, an empty required field or an unknown type), the
+// MaxCandidates cap, or review, which covers verification that could not run as well as the
+// reviewer's decision and verifyDecision's gates.
+const (
+	StageFilter = "filter"
+	StageCap    = "cap"
+	StageReview = "review"
+)
+
+// What became of it (Omission.Outcome). A finding or investigation made from a candidate is in
+// the analysis's own list; its omission only records where it came from.
+const (
+	OutcomeDropped       = "dropped"
+	OutcomeRejected      = "rejected"
+	OutcomeFinding       = "finding"
+	OutcomeInvestigation = "investigation"
+)
+
+// Omission is a fix candidate the analyst proposed that did not become an action, and why: the
+// specific planProblem or filter reason, the cap, the reviewer's status and summary, or the
+// gate verification failed at. Every candidate ends as a fix or an omission, so the two lists
+// together are what the analyst proposed.
+type Omission struct {
+	Title   string `json:"title"`
+	Type    Type   `json:"type"`
+	Target  string `json:"target"`
+	Stage   string `json:"stage"`
+	Outcome string `json:"outcome"`
+	Reason  string `json:"reason"`
+}
+
 type Analysis struct {
 	Insights       string          `json:"insights"`
 	Fixes          []Fix           `json:"fixes"`
 	Investigations []Investigation `json:"investigations"`
 	Findings       []Finding       `json:"market_findings"`
+	// Omitted is every candidate that did not become a fix. Added without a version change: an
+	// analysis stored before it has none, and an older build reading a newer one ignores it.
+	Omitted []Omission `json:"omitted,omitempty"`
 	// VerificationFailed marks an analysis whose verification call failed: its candidates are
 	// investigations, unverified. It is stored only for a run with no earlier analysis, together
 	// with the error, so the error's surfaces can say that is what they show.
@@ -297,4 +332,52 @@ func Decode(s string) []Fix {
 		return nil
 	}
 	return a.Fixes
+}
+
+// Tally is what became of an analysis's candidates: how many the analyst proposed, how many
+// each filter reason dropped, how many the cap cut, how many reached review and what review
+// made of them. Findings and Investigations are the analysis's whole lists, including the
+// analyst's own, as the run page shows them.
+type Tally struct {
+	Candidates, Filtered, Capped, Reviewed, Verified, Rejected, Findings, Investigations int
+	FilteredBy                                                                           map[string]int
+}
+
+func (a Analysis) Tally() Tally {
+	t := Tally{Candidates: len(a.Fixes) + len(a.Omitted), Verified: len(a.Fixes), Findings: len(a.Findings), Investigations: len(a.Investigations), FilteredBy: map[string]int{}}
+	t.Reviewed = t.Verified
+	for _, o := range a.Omitted {
+		switch o.Stage {
+		case StageFilter:
+			t.Filtered++
+			t.FilteredBy[o.Reason]++
+		case StageCap:
+			t.Capped++
+		case StageReview:
+			t.Reviewed++
+		}
+		if o.Outcome == OutcomeRejected {
+			t.Rejected++
+		}
+	}
+	return t
+}
+
+// FilteredByText is FilteredBy on one line, the most frequent reason first: `its check does
+// not name its target URL. (2); it has no claim. (1)`.
+func (t Tally) FilteredByText() string {
+	reasons := make([]string, 0, len(t.FilteredBy))
+	for r := range t.FilteredBy {
+		reasons = append(reasons, r)
+	}
+	sort.Slice(reasons, func(i, j int) bool {
+		if t.FilteredBy[reasons[i]] != t.FilteredBy[reasons[j]] {
+			return t.FilteredBy[reasons[i]] > t.FilteredBy[reasons[j]]
+		}
+		return reasons[i] < reasons[j]
+	})
+	for i, r := range reasons {
+		reasons[i] = fmt.Sprintf("%s (%d)", r, t.FilteredBy[r])
+	}
+	return strings.Join(reasons, "; ")
 }

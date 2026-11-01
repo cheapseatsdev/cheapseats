@@ -20,6 +20,18 @@ type NextSteps struct {
 	// Sets whose latest finished run's analysis failed. The other lists may still hold an
 	// older run's analysis of the set, so a failure can't hide behind it.
 	Errors []AnalysisError `json:"analysis_errors"`
+	// The candidates each analysis proposed that did not become actions, and why. Old analyses
+	// have none. Get_next_steps and /api/next-steps leave it out unless asked for (omitted=true).
+	Omitted []NextOmission `json:"omitted,omitempty"`
+}
+
+// NextOmission is a candidate an analysis proposed that did not become an action
+// (analysis.Omission), with the set and run it came from.
+type NextOmission struct {
+	analysis.Omission
+	SetID   string `json:"set_id"`
+	SetName string `json:"set_name"`
+	RunID   string `json:"run_id"`
 }
 
 // AnalysisError is a set's latest finished run whose analysis failed. ShownRunID is the run whose
@@ -139,7 +151,7 @@ type NextFinding struct {
 }
 
 func emptyNextSteps() NextSteps {
-	return NextSteps{Actions: []QuickWin{}, Investigations: []NextInvestigation{}, Findings: []NextFinding{}, Errors: []AnalysisError{}}
+	return NextSteps{Actions: []QuickWin{}, Investigations: []NextInvestigation{}, Findings: []NextFinding{}, Errors: []AnalysisError{}, Omitted: []NextOmission{}}
 }
 
 // NextSteps reads the latest completed analysis of each active prompt set. It does
@@ -192,6 +204,9 @@ func (a *App) NextSteps(ctx context.Context) (NextSteps, error) {
 			if len(f.Prompts) > 0 {
 				out.Findings = append(out.Findings, NextFinding{Finding: f, SetID: s.ID, SetName: s.Name, RunID: id})
 			}
+		}
+		for _, o := range an.Omitted {
+			out.Omitted = append(out.Omitted, NextOmission{Omission: o, SetID: s.ID, SetName: s.Name, RunID: id})
 		}
 	}
 	out.Actions = a.groupQuickWins(ctx, out.Actions)
@@ -272,6 +287,9 @@ func (a *App) RunNextSteps(ctx context.Context, id string) (NextSteps, error) {
 	}
 	for _, f := range an.Findings {
 		out.Findings = append(out.Findings, NextFinding{Finding: f, SetID: r.SetID, SetName: r.Snapshot.Set.Name, RunID: id})
+	}
+	for _, o := range an.Omitted {
+		out.Omitted = append(out.Omitted, NextOmission{Omission: o, SetID: r.SetID, SetName: r.Snapshot.Set.Name, RunID: id})
 	}
 	return out, nil
 }

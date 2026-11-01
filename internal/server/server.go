@@ -757,7 +757,10 @@ type RunData struct {
 	Actions        []app.QuickWin          `json:"actions"`
 	Investigations []app.NextInvestigation `json:"investigations"`
 	MarketFindings []app.NextFinding       `json:"market_findings"`
-	FixError       *string
+	// The candidates the analysis proposed that did not become actions, and why; [] for an
+	// analysis stored before they were recorded.
+	Omitted  []app.NextOmission `json:"omitted"`
+	FixError *string
 	// FixError made readable, with which analysis the run shows beside it.
 	AnalysisError *app.AnalysisError `json:"analysis_error,omitempty"`
 	Answerers     []string
@@ -855,7 +858,7 @@ func (s *Server) runData(ctx context.Context, id string) (*RunData, error) {
 	for _, action := range steps.Actions {
 		fx = append(fx, action.Fix)
 	}
-	d := &RunData{Actions: steps.Actions, Investigations: steps.Investigations, MarketFindings: steps.Findings, Run: r, Active: s.App.Runs.IsActive(id), Summary: s.App.Summary(r, res), Results: res, Fixes: fx, FixError: fe, Attempts: s.App.FixAttempts(ctx)}
+	d := &RunData{Actions: steps.Actions, Investigations: steps.Investigations, MarketFindings: steps.Findings, Omitted: steps.Omitted, Run: r, Active: s.App.Runs.IsActive(id), Summary: s.App.Summary(r, res), Results: res, Fixes: fx, FixError: fe, Attempts: s.App.FixAttempts(ctx)}
 	if len(steps.Errors) > 0 {
 		d.AnalysisError = &steps.Errors[0]
 	}
@@ -1325,7 +1328,7 @@ func (s *Server) quickWinsPage(w http.ResponseWriter, r *http.Request) {
 	for _, q := range shown {
 		submitted = append(submitted, shownFix{q.RunID, q.Fix, q.Status})
 	}
-	selected := s.selectNextSteps(steps, f, "", 0, true)
+	selected := s.selectNextSteps(steps, f, "", 0, true, false)
 	view := nextStepsView(q.Get("view"), selected)
 	tabs := []filterOption{{"Actions", len(selected.Actions), view == "actions", href("view", "actions")}, {"Investigations", len(selected.Investigations), view == "investigations", href("view", "investigations")}, {"Market findings", len(selected.Findings), view == "market-findings", href("view", "market-findings")}}
 	s.render(w, "quickwins", map[string]any{"AnalysisErrors": selected.Errors, "View": view, "Tabs": tabs, "Investigations": selected.Investigations, "MarketFindings": selected.Findings, "QuickWins": shown, "Landings": s.landings(r.Context(), submitted), "Rows": rows, "Total": len(all), "Back": r.URL.RequestURI()})
@@ -1455,7 +1458,7 @@ func (s *Server) apiFixes(w http.ResponseWriter, r *http.Request) {
 		httpErr(w, err, 404)
 		return
 	}
-	writeJSON(w, map[string]any{"fixes": d.Fixes, "actions": d.Actions, "investigations": d.Investigations, "market_findings": d.MarketFindings, "error": d.FixError, "analysis_error": d.AnalysisError})
+	writeJSON(w, map[string]any{"fixes": d.Fixes, "actions": d.Actions, "investigations": d.Investigations, "market_findings": d.MarketFindings, "omitted": d.Omitted, "error": d.FixError, "analysis_error": d.AnalysisError})
 }
 
 func (s *Server) apiRebuildFixes(w http.ResponseWriter, r *http.Request) {

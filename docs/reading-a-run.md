@@ -26,6 +26,10 @@ is a check of work under the team's control; later model answers and citations r
 `actions`, `investigations` or `market_findings`, and `limit` caps each category. `brief=true`
 omits action implementation prompts. Action status and priority filters do not filter findings
 or investigations. The JSON API also accepts the existing action `gap` and `site` filters.
+`omitted=true` adds `omitted`: the candidates each analysis proposed that did not become
+actions, with the stage that stopped each and why ([candidates not promoted](analysis.md#candidates-not-promoted)).
+It follows `set` and `limit`, whatever `kind` is. A run report lists its own under **Candidates
+not promoted**, collapsed, and `/api/runs/{id}` always returns them.
 
 Both also return `analysis_errors`: for each set whose latest finished run's analysis failed, the
 `run_id`, a readable `error`, the provider's `request_id` when it gave one, `shown_run_id`, the

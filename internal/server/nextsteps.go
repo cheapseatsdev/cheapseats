@@ -25,8 +25,9 @@ func nextStepsView(requested string, steps app.NextSteps) string {
 
 // selectNextSteps keeps the three categories separate. Action filters do not turn an
 // investigation into a task, and set filtering applies to every category and to the analysis
-// errors, which every kind keeps.
-func (s *Server) selectNextSteps(steps app.NextSteps, f app.QuickWinFilter, kind string, limit int, brief bool) app.NextSteps {
+// errors, which every kind keeps. The candidates not promoted are left out unless omitted asks
+// for them; then they follow the set filter and the limit, whatever the kind.
+func (s *Server) selectNextSteps(steps app.NextSteps, f app.QuickWinFilter, kind string, limit int, brief, omitted bool) app.NextSteps {
 	steps.Actions = s.App.FilterQuickWins(steps.Actions, f)
 	investigations := make([]app.NextInvestigation, 0, len(steps.Investigations))
 	for _, x := range steps.Investigations {
@@ -47,10 +48,21 @@ func (s *Server) selectNextSteps(steps app.NextSteps, f app.QuickWinFilter, kind
 		}
 	}
 	steps.Investigations, steps.Findings, steps.Errors = investigations, findings, failed
+	var kept []app.NextOmission
+	if omitted {
+		kept = make([]app.NextOmission, 0, len(steps.Omitted))
+		for _, x := range steps.Omitted {
+			if f.Set == "" || x.SetID == f.Set {
+				kept = append(kept, x)
+			}
+		}
+	}
+	steps.Omitted = kept
 	if limit > 0 {
 		steps.Actions = head(steps.Actions, limit)
 		steps.Investigations = head(steps.Investigations, limit)
 		steps.Findings = head(steps.Findings, limit)
+		steps.Omitted = head(steps.Omitted, limit)
 	}
 	steps.Actions = actionHandoffs(steps.Actions, brief)
 
@@ -74,7 +86,7 @@ func (s *Server) apiNextSteps(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q := r.URL.Query()
-	writeJSON(w, s.selectNextSteps(steps, app.QuickWinFilter{Gap: q.Get("gap"), Set: q.Get("set"), Site: q.Get("site"), Status: q.Get("status"), Priority: q.Get("priority")}, q.Get("kind"), atoi(q.Get("limit")), q.Get("brief") == "true"))
+	writeJSON(w, s.selectNextSteps(steps, app.QuickWinFilter{Gap: q.Get("gap"), Set: q.Get("set"), Site: q.Get("site"), Status: q.Get("status"), Priority: q.Get("priority")}, q.Get("kind"), atoi(q.Get("limit")), q.Get("brief") == "true", q.Get("omitted") == "true"))
 }
 
 // readOnlyInvestigations retains prior work without exposing an old implementation handoff.
