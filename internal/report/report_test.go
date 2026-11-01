@@ -1,6 +1,8 @@
 package report
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/cheapseatsdev/cheapseats/internal/answer"
@@ -143,6 +145,13 @@ func TestOwnPageCredit(t *testing.T) {
 	}
 	if otherPage.CitedUnbranded+otherPage.CitedNamed+otherPage.CitedChoice+otherPage.CitedRecommended != 0 {
 		t.Errorf("third-party page should get no credit counts: %+v", otherPage)
+	}
+	// Cited and never credited is the case this is for: get_run must say 0, not drop the key.
+	js, _ := json.Marshal(Page{FirstParty: true, CitedUnbranded: 3, CitedChoice: 2})
+	for _, w := range []string{`"cited_named":0`, `"cited_recommended":0`} {
+		if !strings.Contains(string(js), w) {
+			t.Errorf("an uncredited own page's JSON lacks %s: %s", w, js)
+		}
 	}
 }
 

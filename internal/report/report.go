@@ -142,9 +142,9 @@ type Page struct {
 	// there were, how many named the brand, how many were asked as a choice, and of those, how
 	// many recommended it. Same definitions as Tally.
 	CitedUnbranded   int `json:"cited_unbranded,omitempty"`
-	CitedNamed       int `json:"cited_named,omitempty"`
+	CitedNamed       int `json:"cited_named"`
 	CitedChoice      int `json:"cited_choice,omitempty"`
-	CitedRecommended int `json:"cited_recommended,omitempty"`
+	CitedRecommended int `json:"cited_recommended"`
 	SourceRates
 	Prompts []int `json:"prompts"`
 }
