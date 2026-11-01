@@ -180,6 +180,35 @@ func TestCodeDigestIgnoresWhatGofmtChanges(t *testing.T) {
 	}
 }
 
+// A rooted digest covers the imports of the files its declarations are in, so the package behind
+// a name it uses counts, and not the imports of files it doesn't use.
+func TestCodeDigestFollowsImports(t *testing.T) {
+	files := func(rootImport, otherImport string) map[string][]byte {
+		return map[string][]byte{
+			"root.go":  []byte("package p\n\nimport " + rootImport + "\n\nfunc Root(v any) ([]byte, error) { return json.Marshal(v) }\n"),
+			"other.go": []byte("package p\n\nimport " + otherImport + "\n\nfunc Other() string { return strings.ToUpper(\"\") }\n"),
+		}
+	}
+	d := func(f map[string][]byte) string {
+		t.Helper()
+		s, err := CodeDigest(f, "Root")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return s
+	}
+	base := d(files(`"encoding/json"`, `"strings"`))
+	if d(files(`json "github.com/goccy/go-json"`, `"strings"`)) == base || d(files(`"github.com/goccy/go-json"`, `"strings"`)) == base {
+		t.Errorf("swapping the package behind json left the digest alone")
+	}
+	if d(files(`"encoding/json"`, `strings "github.com/other/strings"`)) != base {
+		t.Errorf("an import in a file the root doesn't use changed its digest")
+	}
+	if d(files("`encoding/json`", `"strings"`)) != base {
+		t.Errorf("a raw-string import path hashes unlike the same path quoted")
+	}
+}
+
 // What the two switches parse to, so TestCodeDigestFollowsTheTree tests the difference it means to.
 func TestSwitchFormsParseDifferently(t *testing.T) {
 	for src, wantInit := range map[string]bool{

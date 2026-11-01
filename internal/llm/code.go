@@ -13,6 +13,7 @@ import (
 	"io/fs"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -55,7 +56,8 @@ func GoFiles(fsys fs.FS) map[string][]byte {
 // are one package's files, by name. Without names, all of them count. With names, the roots, each
 // of which must be a top-level declaration (a func, a type, a var or const, or a method as
 // Type.Method), count with every declaration in the package they use, directly or not: whatever a
-// root's code names, and a type's methods, since encoding/json and the like call those unnamed.
+// root's code names, and a type's methods, since encoding/json and the like call those unnamed,
+// and the imports of the files those declarations are in.
 func CodeDigest(files map[string][]byte, names ...string) (string, error) {
 	paths := make([]string, 0, len(files))
 	for p := range files {
@@ -65,6 +67,8 @@ func CodeDigest(files map[string][]byte, names ...string) (string, error) {
 	h := sha256.New()
 	fset := token.NewFileSet()
 	decls := map[string]ast.Node{}
+	declFile := map[string]string{} // the file a declaration is in
+	fileImports := map[string][]string{}
 	methods := map[string][]string{} // a type's methods, as Type.Method
 	for _, p := range paths {
 		f, err := parser.ParseFile(fset, p, files[p], parser.SkipObjectResolution)
@@ -76,11 +80,12 @@ func CodeDigest(files map[string][]byte, names ...string) (string, error) {
 			hashFile(h, f)
 			continue
 		}
+		fileImports[p] = imports(f)
 		for _, d := range f.Decls {
 			switch d := d.(type) {
 			case *ast.FuncDecl:
 				name, recv := funcName(d)
-				decls[name] = d
+				decls[name], declFile[name] = d, p
 				if recv != "" {
 					methods[recv] = append(methods[recv], name)
 				}
@@ -88,7 +93,7 @@ func CodeDigest(files map[string][]byte, names ...string) (string, error) {
 				for _, s := range d.Specs {
 					switch s := s.(type) {
 					case *ast.TypeSpec:
-						decls[s.Name.Name] = s
+						decls[s.Name.Name], declFile[s.Name.Name] = s, p
 					case *ast.ValueSpec:
 						// A const in a group can take its type and value from the one above it
 						// (iota), so the group counts as one.
@@ -98,7 +103,7 @@ func CodeDigest(files map[string][]byte, names ...string) (string, error) {
 						}
 						for _, n := range s.Names {
 							if n.Name != "_" {
-								decls[n.Name] = c
+								decls[n.Name], declFile[n.Name] = c, p
 							}
 						}
 					}
@@ -141,6 +146,20 @@ func CodeDigest(files map[string][]byte, names ...string) (string, error) {
 		used = append(used, n)
 	}
 	sort.Strings(used)
+	// The imports of the files the used declarations are in say which package each name they use
+	// from another package is: encoding/json's json or another one's.
+	usedImports := map[string]bool{}
+	for _, n := range used {
+		for _, i := range fileImports[declFile[n]] {
+			usedImports[i] = true
+		}
+	}
+	importList := make([]string, 0, len(usedImports))
+	for i := range usedImports {
+		importList = append(importList, i)
+	}
+	sort.Strings(importList)
+	fmt.Fprintf(h, "imports %q\x00", importList)
 	for _, n := range used {
 		fmt.Fprintf(h, "%s\x00", n)
 		hashNode(h, reflect.ValueOf(decls[n]))
@@ -255,16 +274,7 @@ func isEmptyStmt(v reflect.Value) bool {
 // them), and every other declaration in order.
 func hashFile(h hash.Hash, f *ast.File) {
 	hashNode(h, reflect.ValueOf(f.Name))
-	imports := make([]string, 0, len(f.Imports))
-	for _, s := range f.Imports {
-		name := ""
-		if s.Name != nil {
-			name = s.Name.Name
-		}
-		imports = append(imports, name+" "+s.Path.Value)
-	}
-	sort.Strings(imports)
-	fmt.Fprintf(h, "imports %q\x00", imports)
+	fmt.Fprintf(h, "imports %q\x00", imports(f))
 	decls := []ast.Decl{}
 	for _, d := range f.Decls {
 		if g, ok := d.(*ast.GenDecl); !ok || g.Tok != token.IMPORT {
@@ -272,6 +282,25 @@ func hashFile(h hash.Hash, f *ast.File) {
 		}
 	}
 	hashNode(h, reflect.ValueOf(decls))
+}
+
+// imports are a file's imports as "name path" (the name empty when it's the package's own), sorted:
+// gofmt sorts them, and their order means nothing.
+func imports(f *ast.File) []string {
+	out := make([]string, 0, len(f.Imports))
+	for _, s := range f.Imports {
+		name := ""
+		if s.Name != nil {
+			name = s.Name.Name
+		}
+		path, err := strconv.Unquote(s.Path.Value)
+		if err != nil {
+			path = s.Path.Value
+		}
+		out = append(out, name+" "+path)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // meaningfulPos are the positions whose presence is code: the "=" of an alias and the "..." that
