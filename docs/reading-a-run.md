@@ -69,7 +69,7 @@ and allows a no-action conclusion.
   without them (`unbranded` in JSON) and show the rates with them underneath. The prompt list marks
   each branded prompt. Rankings and trends still use the overall rates.
 - **Errors** counts each answerer's failed answers on a track, and says why when Cheap Seats
-  worded the failure itself: "11 errors (9 answered without searching, 2 other)". The reasons are
+  worded the failure itself: an Errors cell reads `11 (9 answered without searching, 2 other)`. The reasons are
   answered without searching, empty answer, grading failed, and other for anything a provider or
   CLI reported (timeouts, sign-in, rate limits; each answer shows its own message). `cheapseats
   report` prints the same; its JSON and MCP `get_run` give it per slice as `error_kinds`.
