@@ -205,7 +205,8 @@ func planProblem(check, decision, evidence, target string) string {
 // locator is a URL as the locator test compares it: without its scheme, the scheme and host
 // lower-cased, a leading www. dropped from the host, and one trailing slash removed. The path,
 // query and fragment keep their case (/Docs and /docs are different pages), and nothing else is
-// trimmed, so a URL ending in punctuation keeps it.
+// trimmed: a target ending in punctuation keeps it. checkNames strips sentence punctuation from
+// a URL found in a check (trimSentence) before this.
 func locator(u string) string {
 	u = strings.TrimSpace(u)
 	if i := strings.Index(u, "://"); i >= 0 {
@@ -223,12 +224,31 @@ func locator(u string) string {
 // or angle bracket, which a URL can't contain unescaped.
 var urlInCheck = regexp.MustCompile("(?i)https?://[^\\s<>\"'`]+")
 
-// checkNames reports whether a check contains its target: some URL in the check is the target,
-// compared as locators.
+// trimSentence strips what prose puts after a URL in a check: sentence punctuation, closing
+// quotes, and a closing parenthesis the URL didn't open (Guide_(CLI) keeps its own). It is for
+// URLs found in a check only; a target is compared as written.
+func trimSentence(u string) string {
+	for u != "" {
+		switch last := u[len(u)-1]; {
+		case strings.IndexByte(".,;:!?\"'", last) >= 0:
+			u = u[:len(u)-1]
+		case strings.HasSuffix(u, "\u201d") || strings.HasSuffix(u, "\u2019"):
+			u = u[:len(u)-len("\u201d")]
+		case last == ')' && strings.Count(u, ")") > strings.Count(u, "("):
+			u = u[:len(u)-1]
+		default:
+			return u
+		}
+	}
+	return u
+}
+
+// checkNames reports whether a check contains its target: some URL in the check, without the
+// sentence punctuation after it, is the target, compared as locators.
 func checkNames(check, target string) bool {
 	want := locator(target)
 	for _, u := range urlInCheck.FindAllString(check, -1) {
-		if locator(u) == want {
+		if locator(trimSentence(u)) == want {
 			return true
 		}
 	}
@@ -566,9 +586,12 @@ func verifyDecision(d decision, f Fix, cfg *config.Config, pages []artifact) (Ve
 		return Verification{}, "A new page requires checking the relevant existing-content inventory; sampled pages alone do not establish a missing artifact."
 	}
 	if f.Type != Product {
+		// Only a target written as one absolute URL is ever read for its own sake. Another one
+		// (a bare host, say) may equal a brand page read as reference, but was not read as the
+		// target, so it stays unverified.
 		found := false
 		for _, p := range pages {
-			found = found || p.URL == webURL(f.Target) && p.Text != ""
+			found = found || absoluteURL(f.Target) && p.URL == webURL(f.Target) && p.Text != ""
 		}
 		if !found {
 			return Verification{}, "The current target could not be read; its existing work and eligibility remain unknown."

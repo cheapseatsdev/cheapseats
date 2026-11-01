@@ -30,6 +30,12 @@ func TestPlanProblemSaysWhichTestFailed(t *testing.T) {
 		{"Read HTTPS://WWW.ACME.example/Docs and confirm whether the install links work.", "https://acme.example/Docs"},
 		{"Read https://acme.example/Guide_(CLI) and confirm whether the install links work.", "https://acme.example/Guide_(CLI)"},
 		{"Compare https://acme.example/pricing with https://acme.example/docs?tab=Install to confirm the links.", "https://acme.example/docs?tab=Install"},
+		// Sentence punctuation after a URL in the check is not part of it; the target's own is.
+		{"Read https://acme.example/a. Then confirm whether the install links work.", "https://acme.example/a"},
+		{"Read https://acme.example/a, https://acme.example/b; then confirm whether the links work.", "https://acme.example/b"},
+		{"Read \u201chttps://acme.example/a\u201d and confirm whether the install links work.", "https://acme.example/a"},
+		{"Check the CLI guide (https://acme.example/Guide_(CLI)) to confirm whether the install links work.", "https://acme.example/Guide_(CLI)"},
+		{"Check the CLI guide (https://acme.example/Guide_(CLI)). Confirm whether the install links work.", "https://acme.example/Guide_(CLI)"},
 		{"Read the installation section and confirm whether the install links work.", "The installation section of the docs"},
 		{"Read acme.example/docs/devcontainers and confirm whether the install links work.", "acme.example/docs"},
 		{"Read the installation section and confirm whether the install links work.", ""},
@@ -114,6 +120,26 @@ func TestNonURLTargetIsReviewedAsAnInvestigationWithoutARead(t *testing.T) {
 	}
 	if len(a.Fixes) != 0 || len(a.Investigations) != 1 || !strings.Contains(a.Investigations[0].Why, "could not be read") || a.Investigations[0].Target != f.Target {
 		t.Fatalf("a target never read must stay an investigation, never verified: %+v", a)
+	}
+}
+
+func TestBareHostTargetEqualToAReadBrandPageDoesNotVerify(t *testing.T) {
+	_, _, f, pages, d := verificationFixture()
+	// acme.example is a brand site, read as reference at https://acme.example; written bare, the
+	// target was never read as itself, so the reviewer's quotes from that page can't verify it.
+	f.Target = "acme.example"
+	for g, p := range d.Checks {
+		if p.Source == "https://acme.example/docs" {
+			p.Source = "https://acme.example"
+			d.Checks[g] = p
+		}
+	}
+	a, prompts, reads := reviewWith(t, []Fix{f}, []decision{d}, pages[0].Text)
+	if len(prompts) != 1 || len(reads) == 0 || reads[0] != "https://acme.example" {
+		t.Fatalf("brand page not read as reference: %v", reads)
+	}
+	if len(a.Fixes) != 0 || len(a.Investigations) != 1 || !strings.Contains(a.Investigations[0].Why, "could not be read") {
+		t.Fatalf("a bare-host target verified against a reference page: %+v", a)
 	}
 }
 
