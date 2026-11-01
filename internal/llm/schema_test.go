@@ -2,6 +2,7 @@ package llm
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -59,5 +60,48 @@ func TestStructuredChecksTheSchemaBeforeSending(t *testing.T) {
 	}
 	if calls != 0 {
 		t.Fatalf("sent %d requests with a schema the API refuses", calls)
+	}
+}
+
+var schemaTestRegistered = RegisterSchema("test.registered", "grader", map[string]any{
+	"type": "object", "additionalProperties": false, "required": []string{"a"},
+	"properties": map[string]any{"a": map[string]any{"type": "string"}},
+})
+
+// A schema that skipped RegisterSchema would skip cheapseats check -live, so Structured refuses
+// it before sending. A registered schema's content is what counts: a copy passes, and a
+// registered schema changed after registering fails, since the check sent the old content.
+func TestStructuredRefusesAnUnregisteredSchema(t *testing.T) {
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		io.WriteString(w, `{"stop_reason":"end_turn","content":[{"type":"text","text":"{\"a\":\"x\"}"}]}`)
+	}))
+	defer srv.Close()
+	old := AnthropicURL
+	AnthropicURL = srv.URL
+	t.Cleanup(func() { AnthropicURL = old })
+	t.Setenv("ANTHROPIC_API_KEY", "test")
+	t.Setenv(config.AnthropicBaseURLVar, "")
+	var out map[string]any
+
+	unregistered := map[string]any{"type": "object", "additionalProperties": false, "required": []string{"b"},
+		"properties": map[string]any{"b": map[string]any{"type": "string"}}}
+	if _, err := Structured(context.Background(), "m", "s", "u", 10, unregistered, &out); err == nil || !strings.Contains(err.Error(), "RegisterSchema") {
+		t.Fatalf("unregistered schema: %v", err)
+	}
+	if calls != 0 {
+		t.Fatalf("sent %d requests with an unregistered schema", calls)
+	}
+
+	copied := map[string]any{"type": "object", "additionalProperties": false, "required": []string{"a"},
+		"properties": map[string]any{"a": map[string]any{"type": "string"}}}
+	if _, err := Structured(context.Background(), "m", "s", "u", 10, copied, &out); err != nil || calls != 1 {
+		t.Fatalf("a copy of a registered schema: %v, %d requests", err, calls)
+	}
+
+	copied["required"] = []string{}
+	if err := Registered(copied); err == nil {
+		t.Fatal("a schema changed from the registered one passed")
 	}
 }

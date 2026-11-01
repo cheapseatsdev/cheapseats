@@ -2,6 +2,8 @@ package llm
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"sync"
@@ -19,16 +21,21 @@ type NamedSchema struct {
 var (
 	schemasMu sync.Mutex
 	schemas   = map[string]NamedSchema{}
+	digests   = map[[sha256.Size]byte]bool{} // of each registered schema, as sent
 )
 
 // RegisterSchema records a structured output schema under a name, for the live check
-// (cheapseats check -live), and returns it. Declare every schema passed to Structured or the
-// claude CLI through it, so none is left out of the check:
+// (cheapseats check -live), and returns it. Structured and answer.ClaudeStructured refuse a
+// schema that wasn't registered (see Registered), so none can skip the check:
 //
 //	var schema = llm.RegisterSchema("grade", "grader", map[string]any{...})
 func RegisterSchema(name, role string, schema map[string]any) map[string]any {
 	if role != "grader" && role != "analyst" {
 		panic(fmt.Sprintf("llm.RegisterSchema %s: role %q is not grader or analyst", name, role))
+	}
+	d, err := digest(schema)
+	if err != nil {
+		panic(fmt.Sprintf("llm.RegisterSchema %s: %v", name, err))
 	}
 	schemasMu.Lock()
 	defer schemasMu.Unlock()
@@ -36,7 +43,34 @@ func RegisterSchema(name, role string, schema map[string]any) map[string]any {
 		panic("llm.RegisterSchema: " + name + " registered twice")
 	}
 	schemas[name] = NamedSchema{Name: name, Role: role, Schema: schema}
+	digests[d] = true
 	return schema
+}
+
+// Registered returns an error unless schema, as it would be sent now, is one RegisterSchema
+// recorded. It compares the JSON, not the map, so a schema built per call passes if its content
+// is registered, and a registered one changed after registering fails: the live check would have
+// sent something else.
+func Registered(schema map[string]any) error {
+	d, err := digest(schema)
+	if err != nil {
+		return err
+	}
+	schemasMu.Lock()
+	defer schemasMu.Unlock()
+	if !digests[d] {
+		return fmt.Errorf("structured output schema is not registered with llm.RegisterSchema, so cheapseats check -live does not send it to the API")
+	}
+	return nil
+}
+
+// digest is the SHA-256 of schema's JSON, which encoding/json writes with sorted map keys.
+func digest(schema map[string]any) ([sha256.Size]byte, error) {
+	b, err := json.Marshal(schema)
+	if err != nil {
+		return [sha256.Size]byte{}, err
+	}
+	return sha256.Sum256(b), nil
 }
 
 // Schemas are the registered schemas, by name.

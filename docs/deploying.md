@@ -127,26 +127,35 @@ release, or copied in, is tightened at start. Symlinks are left alone; a mode it
 
 ## Releasing (maintainers)
 
-Push a tag `vX.Y.Z` on `main`. The release workflow tests, builds the image for linux/amd64 and
-linux/arm64, pushes it as `X.Y.Z` and `X.Y`, pushes the chart at `X.Y.Z`, and drafts a GitHub
-release with the chart attached; edit the notes (call out anything that changes how answers are
-graded, since that restarts trends) and publish. Run the workflow by hand to build without
-publishing. `deploy/kind-smoke.sh` runs the chart on a local kind cluster; CI runs it on every
-push.
+Push a tag `vX.Y.Z` on `main`. The release workflow first runs the
+[live schema check](#the-live-schema-check) (`.github/workflows/schemas.yml`), then tests, builds
+the image for linux/amd64 and linux/arm64, pushes it as `X.Y.Z` and `X.Y`, pushes the chart at
+`X.Y.Z`, and drafts a GitHub release with the chart attached; edit the notes (call out anything
+that changes how answers are graded, since that restarts trends) and publish. Run the workflow by
+hand on a branch to build without publishing; that skips the schema check. `deploy/kind-smoke.sh`
+runs the chart on a local kind cluster; CI runs it on every push.
 
-CI uses fake providers, so it can't see the API refuse a request. The **golden** workflow
-(`.github/workflows/golden.yml`) does, with the real API, on each release tag and by hand:
+CI uses fake providers, so it can't see the API refuse a request. The schema check does: it runs
+`cheapseats check -live` with the example config, sending every structured output schema once to
+its grader or analyst model with a one-line prompt and 16 output tokens. The API refuses a schema
+it can't take with an HTTP 400 before generating anything, so a run costs a few cents. It is
+capped at $0.25.
 
-- **schemas** runs `cheapseats check -live` with the example config. It sends every structured
-  output schema once to its grader or analyst model, with a one-line prompt and 16 output tokens.
-  The API refuses a schema it can't take with an HTTP 400 before generating anything, so a run
-  costs a few cents. It is capped at $0.25.
-- **golden** grades the [golden set](grading.md#the-golden-set) with the real grader.
+**A release waits for approval.** The check runs in the `golden` environment, so nothing is
+built or published until one of that environment's required reviewers approves the run's
+pending deployment (Actions → the release run → Review deployments). If the check fails, or the
+approval is rejected or times out, the release job fails in its first step and publishes nothing:
+no image, no chart, no draft. Re-run the failed jobs once the check can pass; a schema the API
+refused needs a fix on `main` and a new tag.
 
-Run it on `main` before tagging, and publish the draft release only when the tag's run passes.
-It needs `ANTHROPIC_API_KEY` as a secret of the `golden` environment (or of the repository), and
-fails without it. The environment's required reviewers approve each run. Its deployment rules
-must allow `main` and the tag pattern `v*.*.*`, or GitHub refuses the tag's run.
+The check needs `ANTHROPIC_API_KEY` as a secret of the `golden` environment (or of the
+repository), and fails without it. The environment's deployment rules must allow `main` and the
+tag pattern `v*.*.*`, or GitHub refuses the tag's run.
+
+Before tagging, run **schemas** by hand on `main`, so a refusal shows up before a tag exists.
+When the release changes grading, also run **golden** (`.github/workflows/golden.yml`) by hand on
+`main`: it grades the [golden set](grading.md#the-golden-set) with the real grader. It doesn't
+run on a tag and doesn't gate the release.
 
 ### The live schema check
 
@@ -159,6 +168,9 @@ note; if every role is, the check fails rather than pass having checked nothing.
 
 It is opt-in because it costs money. The budget is checked before each request, `-live-budget`
 dollars (default 0.25), so it can go over by at most one request. A model without a `[pricing]`
-entry can't be budgeted and fails the check. A new schema joins the check by being declared with
-`llm.RegisterSchema`. On exe.dev, `LIVE_CHECK=1 deploy/exe-dev.sh …` runs it on the VM with the
-service's own environment before the new build is swapped in ([exe-dev.md](exe-dev.md#every-deploy)).
+entry can't be budgeted and fails the check. `-live-budget` must be a positive dollar amount;
+NaN and Inf are refused, since neither caps anything. A schema joins the check by being declared
+with `llm.RegisterSchema`, and only that way: `llm.Structured` and the claude CLI path refuse to
+send a schema whose JSON isn't registered. On exe.dev, `LIVE_CHECK=1 deploy/exe-dev.sh …` runs it
+on the VM with the service's own environment before the new build is swapped in
+([exe-dev.md](exe-dev.md#every-deploy)).

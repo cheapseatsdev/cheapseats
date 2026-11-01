@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/cheapseatsdev/cheapseats/internal/config"
+	"github.com/cheapseatsdev/cheapseats/internal/llm"
 )
 
 // Trimmed from real `claude -p --output-format stream-json --verbose` output (Claude Code 2.1).
@@ -182,6 +183,8 @@ func TestCLIRunsAsAnotherUser(t *testing.T) {
 	}
 }
 
+var cliTestSchema = llm.RegisterSchema("test.cli", "grader", map[string]any{"type": "object", "additionalProperties": false})
+
 // The grader and analyst on the subscription: the prompt on stdin, a JSON schema, no tools, no
 // API key, and the structured output decoded.
 func TestClaudeStructuredRunsOnTheSubscription(t *testing.T) {
@@ -196,7 +199,7 @@ func TestClaudeStructuredRunsOnTheSubscription(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "api-key")
 	var out struct{ Verdict string }
 	prompt := strings.Repeat("a long prompt ", 20000) // past Linux's 128 KiB cap on one argument
-	if err := ClaudeStructured(context.Background(), "claude-haiku-5-5", "You grade.", prompt, map[string]any{"type": "object", "additionalProperties": false}, &out); err != nil || out.Verdict != "mentioned" {
+	if err := ClaudeStructured(context.Background(), "claude-haiku-5-5", "You grade.", prompt, cliTestSchema, &out); err != nil || out.Verdict != "mentioned" {
 		t.Fatalf("%+v %v", out, err)
 	}
 	got, _ := os.ReadFile(log)
@@ -276,5 +279,24 @@ func TestClaudeStructuredRefusesSchemaTheAPIRefuses(t *testing.T) {
 	var out []string
 	if err := ClaudeStructured(context.Background(), "m", "s", "p", bad, &out); err == nil || !strings.Contains(err.Error(), "maxItems") {
 		t.Fatalf("schema the API refuses: %v", err)
+	}
+}
+
+// A schema that skipped llm.RegisterSchema was never sent by cheapseats check -live, so the
+// subscription path refuses it before running the CLI.
+func TestClaudeStructuredRefusesAnUnregisteredSchema(t *testing.T) {
+	dir := t.TempDir()
+	ran := filepath.Join(dir, "ran")
+	if err := os.WriteFile(filepath.Join(dir, "claude"), []byte("#!/bin/sh\ntouch "+ran+"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+":"+os.Getenv("PATH"))
+	unregistered := map[string]any{"type": "object", "additionalProperties": false, "properties": map[string]any{"x": map[string]any{"type": "string"}}, "required": []string{"x"}}
+	var out struct{ X string }
+	if err := ClaudeStructured(context.Background(), "m", "s", "p", unregistered, &out); err == nil || !strings.Contains(err.Error(), "RegisterSchema") {
+		t.Fatalf("unregistered schema: %v", err)
+	}
+	if _, err := os.Stat(ran); err == nil {
+		t.Fatal("ran the claude CLI with an unregistered schema")
 	}
 }

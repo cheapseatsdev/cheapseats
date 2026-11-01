@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 
 	"github.com/cheapseatsdev/cheapseats/internal/config"
 	"github.com/cheapseatsdev/cheapseats/internal/llm"
@@ -25,8 +26,10 @@ const (
 // budget, so it can go over by at most one request's cost. Any refusal, error, or schema left
 // unchecked is an error.
 func liveSchemaCheck(ctx context.Context, cfg *config.Config, schemas []llm.NamedSchema, budget float64, w io.Writer) error {
-	if budget <= 0 {
-		return fmt.Errorf("-live-budget must be more than 0")
+	// flag.Float64 takes NaN and Inf. Against NaN, spent >= budget is never true, so either would
+	// leave the check with no cap at all.
+	if math.IsNaN(budget) || math.IsInf(budget, 0) || budget <= 0 {
+		return fmt.Errorf("-live-budget must be a dollar amount more than 0, not %v", budget)
 	}
 	roles := map[string]config.Model{"grader": cfg.Grader, "analyst": cfg.Analyst}
 	var problems []error
