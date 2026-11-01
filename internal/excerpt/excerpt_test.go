@@ -68,6 +68,10 @@ func TestParseFallsBack(t *testing.T) {
 		`101: "never closed`,
 		`101 said "x"`,
 		`101: "" `,
+		// Zero-padded IDs are neither result 8 (octal) nor result 10.
+		`010: "x"`,
+		`result 007: "x"`,
+		`010: "x". 10: "y"`,
 		`https://example.com/pricing: "a fetched quote"`,
 		``,
 	} {
@@ -106,8 +110,16 @@ func TestQuote(t *testing.T) {
 		"Use `\\n` to separate lines":         `Use \n to separate lines`,
 		`say \"x\" or \'y\' in C:\\notes\tab`: "say “x” or ‘y’ in C:\\notes\\tab",
 		"line one\nline  two":                 "line one line two",
-		`a "b" and "c"`:                       "a “b” and “c”",
-		`it's 'fine'`:                         "it’s ‘fine’",
+		// Code spans and URLs pass through byte for byte; only the backticks go.
+		"Use `*config*` as the filename glob":                      "Use *config* as the filename glob",
+		"Run ``a `b` **c** ...`` now...":                           "Run a `b` **c** ... now…",
+		"diff at https://github.com/a/b/compare/main...feature...": "diff at https://github.com/a/b/compare/main...feature…",
+		"https://github.com/a/b/compare/main...feature":            "https://github.com/a/b/compare/main...feature",
+		"see https://x.example/**a**/ and **this**":                "see https://x.example/**a**/ and this",
+		`see [the "diff"](https://x.example/it's...here) **now**`:  "see the “diff” (https://x.example/it's...here) now",
+		"(https://x.example/a_(b)) and `\\\"x\\\"`":                "(https://x.example/a_(b)) and \\\"x\\\"",
+		`a "b" and "c"`: "a “b” and “c”",
+		`it's 'fine'`:   "it’s ‘fine’",
 	} {
 		if got := Quote(in); got != want {
 			t.Errorf("Quote(%s) = %q, want %q", in, got, want)
@@ -123,6 +135,8 @@ func TestProse(t *testing.T) {
 		`Ignore **/README.md and **/LICENSE`:                                `Ignore **/README.md and **/LICENSE`,
 		"Use `\\n` to separate lines":                                       "Use `\\n` to separate lines",
 		`\"x\"`:                                                             `"x"`,
+		// Escapes are undone only outside code spans and URLs.
+		"Write `printf(\\\"%s\\\")` for \\\"x\\\"": "Write `printf(\\\"%s\\\")` for \"x\"",
 	} {
 		if got := Prose(in); got != want {
 			t.Errorf("Prose(%s) = %q, want %q", in, got, want)

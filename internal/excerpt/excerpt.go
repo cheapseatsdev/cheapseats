@@ -11,32 +11,53 @@ package excerpt
 import (
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 // Prose cleans model-written prose that may embed a quote (a claim, a reason, a summary): it
-// drops the backslash in \" and \' and changes nothing else. Prose can carry code, globs or
-// markup a reader copies (**/README.md, <meta name="x">), so asterisks and quotes stay.
+// drops the backslash in \" and \' outside code spans and URLs, and changes nothing else.
+// Prose can carry code, globs or markup a reader copies (**/README.md, <meta name="x">), so
+// asterisks and quotes stay.
 func Prose(s string) string {
-	return strings.TrimSpace(unescape(s, false))
+	var b strings.Builder
+	for _, sg := range segments(strings.TrimSpace(s), false) {
+		if sg.raw {
+			b.WriteString(sg.text)
+		} else {
+			b.WriteString(unescape(sg.text, false))
+		}
+	}
+	return b.String()
 }
 
-// Quote cleans one quoted excerpt of an answer for display between “ and ”. It undoes \", \'
-// and \\, drops well-formed inline Markdown emphasis and code marks, writes a link as its text
-// and URL, makes runs of white space one space, removes a matching pair of outer quote marks
-// and turns the straight quote marks left inside into typographic ones. When a mark could be
-// content (a glob, a path), it stays.
+// Quote cleans one quoted excerpt of an answer for display between “ and ”. Code spans and URLs
+// pass through byte for byte (a code span loses only its backticks); in the plain text around
+// them it undoes \", \' and \\, drops well-formed inline Markdown emphasis, makes runs of white
+// space one space, writes ... as … and turns straight quote marks into typographic ones. A
+// Markdown link reads "text (url)", or the URL alone when that is its text. A matching pair of
+// outer quote marks is removed. When a mark could be content (a glob, a path), it stays.
 func Quote(s string) string {
-	s = unescape(s, true)
-	s = link.ReplaceAllStringFunc(s, linkText)
-	s = untilStable(s, bold, "$1$2$3")
-	s = untilStable(s, italic, "$1$2$3")
-	s = code.ReplaceAllString(s, "$1")
-	s = strings.Join(strings.Fields(s), " ")
-	s = strings.ReplaceAll(s, "...", "…")
-	s = trimOuter(s)
-	return curl(s)
+	var b strings.Builder
+	prev := ' '
+	for _, sg := range segments(trimOuter(strings.TrimSpace(s)), true) {
+		t := sg.text
+		if !sg.raw {
+			t = unescape(t, true)
+			t = untilStable(t, bold, "$1$2$3")
+			t = untilStable(t, italic, "$1$2$3")
+			t = space.ReplaceAllString(t, " ")
+			t = strings.ReplaceAll(t, "...", "…")
+			t = curl(t, prev)
+		}
+		b.WriteString(t)
+		if r, _ := utf8.DecodeLastRuneInString(t); r != utf8.RuneError {
+			prev = r
+		}
+	}
+	return strings.TrimSpace(b.String())
 }
 
 // Emphasis is a span whose marks touch text on the inside and nothing word-like on the outside,
@@ -45,8 +66,11 @@ func Quote(s string) string {
 var (
 	bold   = regexp.MustCompile(`(^|[^\p{L}\p{N}_/.*])\*\*([^\s*/.](?:[^*\n]*?[^\s*])?)\*\*($|[^\p{L}\p{N}_/.*])`)
 	italic = regexp.MustCompile(`(^|[^\p{L}\p{N}_/.*])\*([^\s*/.](?:[^*\n]*?[^\s*])?)\*($|[^\p{L}\p{N}_/.*])`)
-	code   = regexp.MustCompile("`([^`\n]+)`")
-	link   = regexp.MustCompile(`\[([^\]\n]+)\]\((https?://[^)\s]+)\)`)
+	space  = regexp.MustCompile(`\s+`)
+	link   = regexp.MustCompile(`^\[([^\]\n]+)\]\((https?://[^)\s]+)\)`)
+	// A bare URL runs to white space, a quote mark, a backtick, a backslash or an angle bracket;
+	// trailing sentence punctuation is not part of it.
+	bareURL = regexp.MustCompile("^https?://[^\\s<>\"'“”‘’`\\\\]+")
 )
 
 // untilStable applies re until nothing changes: neighbouring spans share the character between
@@ -62,13 +86,106 @@ func untilStable(s string, re *regexp.Regexp, repl string) string {
 	return s
 }
 
-// linkText writes a Markdown link as "text (url)", or the URL alone when that is its text.
-func linkText(m string) string {
-	sm := link.FindStringSubmatch(m)
-	if sm[1] == sm[2] {
-		return sm[2]
+// segment is a run of text; raw text (code, a URL) must reach the reader exactly as written.
+type segment struct {
+	text string
+	raw  bool
+}
+
+// segments splits s into plain text, code spans and URLs. A code span is a run of backticks up
+// to the next run of the same length; one with no closing run is plain text. For display
+// (quote), a code span drops its backticks and a Markdown link becomes its text, as plain text,
+// and its URL.
+func segments(s string, quote bool) []segment {
+	var out []segment
+	plain := 0 // start of the pending plain text
+	flush := func(i int) {
+		if i > plain {
+			out = append(out, segment{text: s[plain:i]})
+		}
 	}
-	return sm[1] + " (" + sm[2] + ")"
+	for i := 0; i < len(s); {
+		switch {
+		case s[i] == '`':
+			n := 1
+			for i+n < len(s) && s[i+n] == '`' {
+				n++
+			}
+			fence := s[i : i+n]
+			end := closingFence(s[i+n:], fence)
+			if end < 0 {
+				i += n
+				continue
+			}
+			flush(i)
+			body := s[i+n : i+n+end]
+			if quote {
+				out = append(out, segment{text: body, raw: true})
+			} else {
+				out = append(out, segment{text: fence + body + fence, raw: true})
+			}
+			i += n + end + n
+			plain = i
+		case quote && s[i] == '[' && link.MatchString(s[i:]):
+			m := link.FindStringSubmatch(s[i:])
+			flush(i)
+			if m[1] != m[2] {
+				out = append(out, segment{text: m[1] + " ("}, segment{text: m[2], raw: true}, segment{text: ")"})
+			} else {
+				out = append(out, segment{text: m[2], raw: true})
+			}
+			i += len(m[0])
+			plain = i
+		case (s[i] == 'h') && bareURL.MatchString(s[i:]) && (i == 0 || !isWord(s[i-1])):
+			u := trimURL(bareURL.FindString(s[i:]))
+			flush(i)
+			out = append(out, segment{text: u, raw: true})
+			i += len(u)
+			plain = i
+		default:
+			i++
+		}
+	}
+	flush(len(s))
+	return out
+}
+
+// closingFence is the offset in s of the next backtick run exactly as long as fence, or -1.
+func closingFence(s, fence string) int {
+	for i := 0; i < len(s); {
+		if s[i] != '`' {
+			i++
+			continue
+		}
+		n := 1
+		for i+n < len(s) && s[i+n] == '`' {
+			n++
+		}
+		if n == len(fence) {
+			return i
+		}
+		i += n
+	}
+	return -1
+}
+
+// trimURL drops sentence punctuation after a URL, and a closing parenthesis it didn't open.
+func trimURL(u string) string {
+	for len(u) > 0 {
+		switch c := u[len(u)-1]; {
+		case strings.IndexByte(".,;:!?", c) >= 0:
+			u = u[:len(u)-1]
+		case c == ')' && strings.Count(u, "(") < strings.Count(u, ")"):
+			u = u[:len(u)-1]
+		default:
+			return u
+		}
+	}
+	return u
+}
+
+func isWord(c byte) bool {
+	return c == '_' || '0' <= c && c <= '9' || 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z'
 }
 
 // unescape drops the backslash in \" and \'. In an excerpt (all), \\ also becomes one
@@ -112,13 +229,13 @@ func trimOuter(s string) string {
 }
 
 // curl turns straight quote marks into typographic ones: a mark after a letter, digit or
-// closing punctuation closes, any other opens; an apostrophe inside a word is ’.
-func curl(s string) string {
+// closing punctuation closes, any other opens; an apostrophe inside a word is ’. prev is the
+// character before s, from the segment before it.
+func curl(s string, prev rune) string {
 	if !strings.ContainsAny(s, `"'`) {
 		return s
 	}
 	var b strings.Builder
-	prev := ' '
 	for _, r := range s {
 		switch r {
 		case '"':
@@ -204,7 +321,13 @@ func item(s string) (Cite, string, bool) {
 		if m[2] >= 0 && strings.EqualFold(s[m[2]:m[3]], "prompt") {
 			c.Kind = "prompt"
 		}
-		fmt.Sscan(s[m[4]:m[5]], &c.N)
+		// Decimal, and written plainly: 010 is not result 8 (or 10), so it falls back.
+		digits := s[m[4]:m[5]]
+		n, err := strconv.Atoi(digits)
+		if err != nil || len(digits) > 1 && digits[0] == '0' {
+			return c, "", false
+		}
+		c.N = n
 		s = s[m[1]:]
 	}
 	var open, closer string
