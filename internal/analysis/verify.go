@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"sort"
 	"strings"
+	"unicode"
 
 	"github.com/cheapseatsdev/cheapseats/internal/config"
 	"github.com/cheapseatsdev/cheapseats/internal/llm"
@@ -61,7 +62,11 @@ func normalizeNotes(set sets.Set, a *Analysis) {
 	var investigations []Investigation
 	for _, n := range a.Investigations {
 		n.Prompts, n.PromptIDs = promptIDs(set, n.Prompts)
-		if strings.TrimSpace(n.Title) != "" && len(n.Prompts) > 0 && strings.TrimSpace(n.Why) != "" && usefulPlan(n.Check, n.Decision, n.Evidence, n.Target) {
+		if why := titleProblem(n.Title); why != "" {
+			omit(a, "investigation", n.Title, why+" It asked: "+clip(n.Why, 300))
+			continue
+		}
+		if len(n.Prompts) > 0 && strings.TrimSpace(n.Why) != "" && usefulPlan(n.Check, n.Decision, n.Evidence, n.Target) {
 			investigations = append(investigations, n)
 		}
 	}
@@ -69,11 +74,89 @@ func normalizeNotes(set sets.Set, a *Analysis) {
 	var findings []Finding
 	for _, n := range a.Findings {
 		n.Prompts, n.PromptIDs = promptIDs(set, n.Prompts)
-		if strings.TrimSpace(n.Title) != "" && len(n.Prompts) > 0 && strings.TrimSpace(n.Evidence) != "" {
+		if why := titleProblem(n.Title); why != "" {
+			omit(a, "market finding", n.Title, why+" It said: "+clip(n.Detail, 300))
+			continue
+		}
+		if len(n.Prompts) > 0 && strings.TrimSpace(n.Evidence) != "" {
 			findings = append(findings, n)
 		}
 	}
 	a.Findings = findings
+}
+
+// Titles a model writes when it has nothing to say there.
+var placeholderTitles = map[string]bool{
+	"title": true, "untitled": true, "tbd": true, "todo": true, "n/a": true, "none": true, "placeholder": true,
+	"finding": true, "market finding": true, "investigation": true, "fix": true, "candidate": true,
+}
+
+// titleProblem says why a title can't name its item on a card, or "" when it can. A title is
+// the only text a collapsed card shows: an analyst once titled a market finding "x". The floor
+// is two words and six letters or digits, which every real title clears ("Pricing objections").
+// A title in a script written without spaces between words (Chinese, Japanese, Thai, ...) has
+// no words to count, so it needs only the letters; and a character of a script whose characters
+// are syllables or words (Han, kana, Hangul) counts as two letters: "价格异议" and "가격 문의"
+// clear the floor, "定价" doesn't, as "Pricing" doesn't. A vowel sign or virama of the
+// letter's own script (Devanagari and the other Indic scripts write vowels as marks on a
+// consonant) counts once with its letter, so "नया पेज" clears the floor as "New page" does,
+// while accents on a Latin letter, which belong to no script, and a pile of marks don't count.
+func titleProblem(title string) string {
+	t := strings.TrimSpace(title)
+	if t == "" {
+		return "It has no title."
+	}
+	if placeholderTitles[strings.ToLower(strings.Trim(t, " .:-_*\"'"))] {
+		return "Its title is a placeholder."
+	}
+	n, unspaced := 0, false
+	var base rune // the letter a following vowel sign or virama may count with, or 0
+	for _, r := range t {
+		switch {
+		case unicode.In(r, syllabicScripts...):
+			n += 2
+			base = 0
+		case unicode.IsLetter(r) || unicode.IsDigit(r):
+			n++
+			base = r
+		case unicode.In(r, unicode.Mn, unicode.Mc) && base != 0 && sameScript(base, r):
+			n++
+			base = 0
+		default:
+			base = 0
+		}
+		unspaced = unspaced || unicode.In(r, unspacedScripts...)
+	}
+	if n < 6 || len(strings.Fields(t)) < 2 && !unspaced {
+		return "Its title is too short to say what it is."
+	}
+	return ""
+}
+
+// Scripts whose characters are each a syllable or a word, so one says what about two Latin
+// letters do, and scripts written without spaces between words.
+var (
+	syllabicScripts = []*unicode.RangeTable{unicode.Han, unicode.Hiragana, unicode.Katakana, unicode.Hangul, unicode.Yi}
+	unspacedScripts = []*unicode.RangeTable{unicode.Han, unicode.Hiragana, unicode.Katakana, unicode.Thai, unicode.Lao, unicode.Khmer, unicode.Myanmar, unicode.Tibetan, unicode.Yi}
+)
+
+// sameScript reports whether mark belongs to the script of letter. Combining marks shared
+// across scripts (accents) are in Inherited, which no letter is, so they never match.
+func sameScript(letter, mark rune) bool {
+	for _, table := range unicode.Scripts {
+		if unicode.Is(table, mark) {
+			return unicode.Is(table, letter)
+		}
+	}
+	return false
+}
+
+func omit(a *Analysis, what, title, why string) {
+	note := fmt.Sprintf("Omitted %s %q: %s", what, clip(title, 160), why)
+	if a.Insights != "" {
+		a.Insights += "\n\n"
+	}
+	a.Insights += note
 }
 
 // usefulPlan is a structural floor, not a substitute for the analyst's judgment:
@@ -109,11 +192,7 @@ func usefulPlan(check, decision, evidence, target string) bool {
 }
 
 func rejectCandidate(a *Analysis, f Fix, why string) {
-	note := fmt.Sprintf("Omitted candidate %q: %s", clip(f.Title, 160), why)
-	if a.Insights != "" {
-		a.Insights += "\n\n"
-	}
-	a.Insights += note
+	omit(a, "candidate", f.Title, why)
 }
 
 type artifact struct {
@@ -243,6 +322,10 @@ func verifyCandidates(ctx context.Context, cfg *config.Config, set sets.Set, a A
 	var fs []Fix
 	for _, f := range a.Fixes {
 		f.Prompts = validPrompts(f.Prompts, len(set.Prompts))
+		if why := titleProblem(f.Title); why != "" {
+			rejectCandidate(&a, f, why+" It claimed: "+clip(f.Claim, 300))
+			continue
+		}
 		if !usefulPlan(f.Check, f.Decision, f.Evidence, f.Target) {
 			rejectCandidate(&a, f, "no bounded read-only check and concrete business decision justify investigating it.")
 			continue

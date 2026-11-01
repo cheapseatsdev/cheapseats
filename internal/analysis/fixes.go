@@ -4,6 +4,7 @@ package analysis
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"sort"
@@ -294,7 +295,7 @@ Return insights (a short evidence-based report with no required headings or them
 
 Each fix candidate needs a specific title, type (new-page, fix-page, positioning, outreach, product), target, claim, evidence, affected 1-based prompt numbers, effort (S/M/L), rank and displaces (URL or null). It must also supply check (a bounded read-only check naming its exact target and the specific unknown) and decision (a concrete business choice this evidence could change, such as choosing an entry route, retaining a limitation, correcting a fact or seeking eligible inclusion). Start check with Read, Inspect, Compare, Check, Confirm, Verify, List, Review, Find, Search or Count. A generic 'read the page and promote if useful' or 'investigate further' earns no candidate. If no meaningful decision depends on a check, omit the candidate rather than creating research work. It must describe a material remaining change; do not change wording just because it is different. Public facts support truthful claims, not expanding the product. Outreach requires checking current inclusion, submission rules and eligibility. Product candidates require an explicit advisory goal permitting the change. done_when must describe work and checks under the team's control; later recommendations, rankings, retrieval, acceptance by another publisher and noisy run changes are observations, not completion requirements. Do not tell anyone to publish, send, or open third-party PRs as part of a candidate.
 
-Investigations need title, why, check (bounded read-only checks), decision, evidence, prompts and optional target. Findings need title, detail, evidence and prompts. No quotas, token-padding or guaranteed wins.
+Investigations need title, why, check (bounded read-only checks), decision, evidence, prompts and optional target. Findings need title, detail, evidence and prompts. Every title, of a fix, investigation or finding, is a specific phrase naming the change, check or observation, the way a card heading would ("Pricing page omits the free tier"); an item whose title is a single word, a letter or a placeholder is dropped. No quotas, token-padding or guaranteed wins.
 %s
 
 Observed run evidence:
@@ -309,7 +310,49 @@ Observed run evidence:
 	if err != nil {
 		return Analysis{}, cost, err
 	}
+	if err := degenerate(a); err != nil {
+		return Analysis{}, cost, err
+	}
 	return verifyCandidates(ctx, cfg, set, a, cost)
+}
+
+// ErrDegenerate is Build's error for analyst output too thin to be an analysis. A rebuild once
+// returned empty insights and one untitled candidate; stored as a success, it replaced a good
+// analysis with an empty one. As an error the earlier analysis stays and fixes_error says why;
+// the same request retried gave a normal result.
+var ErrDegenerate = errors.New("the analyst's output is unusable")
+
+// minInsights is the fewest characters of insights a real report has; one sentence of what the
+// run showed runs past it.
+const minInsights = 10
+
+// degenerate reports the analyst output that is a failed answer rather than an analysis: no
+// insights to speak of, or items none of which has a title that names it. One bad title among
+// good items is dropped with a note instead (titleProblem).
+func degenerate(a Analysis) error {
+	if n := len([]rune(strings.TrimSpace(a.Insights))); n < minInsights {
+		return fmt.Errorf("%w: its insights are %d characters, under %d", ErrDegenerate, n, minInsights)
+	}
+	var titles []string
+	for _, f := range a.Fixes {
+		titles = append(titles, f.Title)
+	}
+	for _, n := range a.Investigations {
+		titles = append(titles, n.Title)
+	}
+	for _, n := range a.Findings {
+		titles = append(titles, n.Title)
+	}
+	bad := 0
+	for _, t := range titles {
+		if titleProblem(t) != "" {
+			bad++
+		}
+	}
+	if bad > 0 && bad == len(titles) {
+		return fmt.Errorf("%w: none of its %d items has a usable title", ErrDegenerate, bad)
+	}
+	return nil
 }
 
 // results2text writes each prompt's graded answers the way the analyst reads them.

@@ -13,6 +13,16 @@ The analyst generates candidates, verifies them against current artifacts and th
 then ranks eligible actions. Zero actions is valid. Missing retrieval does not establish that a
 page is missing or unindexed. Unreadable pages and unconfirmed eligibility remain unknown.
 Informational answers need not name a product. A competitor feature need not become a task.
+Every action, investigation and finding needs a title that names it, since a collapsed card shows
+only the title. A title that is empty, a placeholder, a single word or under six letters drops
+the item; the run's insights record what was omitted and why. In a script written without spaces
+between words (Chinese, Japanese, Thai, Yi and others) only the letters are counted, and a Han,
+kana, Hangul or Yi character counts as two: 价格异议 is a title, 定价 is not. A vowel sign or virama
+counts once with the letter it sits on (Hindi नया पेज is a title, as "New page" is); accents on
+Latin letters do not count. Output with no insights to speak
+of (under 10 characters), or in which no item has a usable title, is a failed analysis rather than
+an empty one: the run records the reason as its analysis error, and a rebuild keeps the analysis it
+already had. Retrying usually gives a normal result.
 
 Current-page reads use the audit fetcher's public-address guard, robots policy and daily cache.
 Optional rendered-content fallback follows the existing Exa configuration and accounting.
