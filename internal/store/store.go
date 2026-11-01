@@ -129,13 +129,21 @@ func migrate(db *sql.DB, backup string, migrations []string) error {
 		return fmt.Errorf("the database is from a newer cheapseats (schema %d, this one knows %d); upgrade cheapseats rather than run an older one on it", v, len(migrations))
 	}
 	// Before changing an existing database, copy it, so a bad upgrade can be undone by putting
-	// the copy back and running the previous version.
+	// the copy back and running the previous version. The copy replaces any earlier one from the
+	// same schema: after that copy was restored and the database used, an upgrade must back up
+	// what is there now, not keep the older data. One copy per schema version, so disk use is
+	// bounded. It is written beside the old one and renamed over it, so a failed copy leaves the
+	// old one in place.
 	if v > 0 && v < len(migrations) && backup != "" {
 		dst := fmt.Sprintf("%s.bak-v%d", backup, v)
-		if _, err := os.Stat(dst); os.IsNotExist(err) {
-			if err := vacuumInto(context.Background(), db, dst); err != nil {
-				return fmt.Errorf("backing up before migrating: %w", err)
-			}
+		tmp := dst + ".partial"
+		os.Remove(tmp) // left by a copy that was interrupted
+		if err := vacuumInto(context.Background(), db, tmp); err != nil {
+			return fmt.Errorf("backing up before migrating: %w", err)
+		}
+		if err := os.Rename(tmp, dst); err != nil {
+			os.Remove(tmp)
+			return fmt.Errorf("backing up before migrating: %w", err)
 		}
 	}
 	for i := v; i < len(migrations); i++ {

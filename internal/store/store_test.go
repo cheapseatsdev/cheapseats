@@ -2,6 +2,10 @@ package store
 
 import (
 	"context"
+	"database/sql"
+	"fmt"
+	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 )
@@ -111,5 +115,71 @@ func TestUpgradeAddsFactCheckTables(t *testing.T) {
 	db.QueryRow(`PRAGMA user_version`).Scan(&v)
 	if v != Schema() {
 		t.Errorf("schema %d", v)
+	}
+}
+
+// After a pre-migration copy is restored and the database used on the older release, the next
+// upgrade must copy the database as it now is. Keeping the first copy would hand anyone who rolls
+// back again data from before the first upgrade, silently dropping everything since.
+func TestUpgradeAfterRestoreBacksUpCurrentData(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "cheapseats.db")
+	bak := fmt.Sprintf("%s.bak-v%d", path, len(migrations)-1)
+	setMarker := func(v string) {
+		t.Helper()
+		db, err := OpenAt(dir, len(migrations)-1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer db.Close()
+		if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS upgrade_marker (v TEXT); DELETE FROM upgrade_marker; INSERT INTO upgrade_marker VALUES (?)`, v); err != nil {
+			t.Fatal(err)
+		}
+	}
+	upgrade := func() {
+		t.Helper()
+		db, err := Open(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		db.Close()
+	}
+	backedUp := func() string {
+		t.Helper()
+		db, err := sql.Open("sqlite", "file:"+bak+"?mode=ro")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer db.Close()
+		var v string
+		if err := db.QueryRow(`SELECT v FROM upgrade_marker`).Scan(&v); err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+
+	setMarker("before the first upgrade")
+	upgrade()
+	if got := backedUp(); got != "before the first upgrade" {
+		t.Fatalf("first backup holds %q", got)
+	}
+	// Roll back: put the copy back, run the older release on it, and change something.
+	for _, f := range []string{path, path + "-wal", path + "-shm"} {
+		os.Remove(f)
+	}
+	b, err := os.ReadFile(bak)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	setMarker("after the restore")
+	upgrade()
+	if got := backedUp(); got != "after the restore" {
+		t.Fatalf("the backup before the second upgrade holds %q: the stale copy from the first upgrade was kept", got)
+	}
+	if _, err := os.Stat(bak + ".partial"); !os.IsNotExist(err) {
+		t.Fatalf("the partial copy was left behind: %v", err)
 	}
 }

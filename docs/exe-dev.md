@@ -107,8 +107,11 @@ deploy/exe-dev.sh <vm> ../your-config
 
 The script builds a Linux binary, ships the committed config, runs `cheapseats check` on the VM
 and restarts. It records the config commit on every run and refuses committed symlinks, which
-could reach outside the config. If startup fails, it restores the previous binary and config.
-Runs in progress resume after restart.
+could reach outside the config. If startup fails, it restores the previous binary and config,
+unless the new build migrated the database: the previous build can't open a migrated database, and
+putting the pre-migration copy back would discard what the new build wrote after it. Then it stops
+Cheap Seats and prints the steps to restore the copy with the previous build, or you fix the build
+and deploy again. Runs in progress resume after restart.
 
 ## Running it
 
@@ -125,4 +128,5 @@ Runs in progress resume after restart.
 
 To roll back by hand: stop Cheap Seats, put `bin/cheapseats.prev` and `config.prev` back as `bin/cheapseats`
 and `config`, and start it. A database from a newer Cheap Seats won't open in an older one; restore the
-`cheapseats.db.bak-v<N>` from before the upgrade too.
+`cheapseats.db.bak-v<N>` from before the upgrade too, moving `cheapseats.db` and its `-wal` and `-shm`
+aside first (the failed deploy prints these commands).
