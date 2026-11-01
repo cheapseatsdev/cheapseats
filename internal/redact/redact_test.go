@@ -94,6 +94,15 @@ func TestUnparseableURLs(t *testing.T) {
 		"https://a@b:p%zz@proxy.example/x?access_token=s#f":        "https://proxy.example/x",
 		"https://login.example/%zz?access_token=opaqueSecret#frag": "https://login.example/%zz",
 		"https://h.example/p@x/%zz":                                "https://h.example/p@x/%zz",
+		"//user:p%ss@host/x":                                       "//host/x",
+		"//user:p%ss@host?token=a":                                 "//host",
+		"user:p%ss@host":                                           "host",
+		"user:pass@host/x":                                         "host/x",
+		"https://u:p%ss@host":                                      "https://host",
+		"https://host.example/a%zz/b?token=s":                      "https://host.example/a%zz/b",
+		"host.example/a%zz?token=s#f":                              "host.example/a%zz",
+		"host.example?next=a@b.example":                            "host.example",
+		"//host.example#me@x":                                      "//host.example",
 	} {
 		if got := URL(in); got != want {
 			t.Errorf("URL(%q) = %q, want %q", in, got, want)

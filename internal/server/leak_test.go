@@ -132,8 +132,8 @@ func TestFailedCallsLeakNothingToAnySink(t *testing.T) {
 	leakCheck(t, "log", logs.String())
 }
 
-// A done run whose analysis failed on that reply: the hub, the run page, Next steps, MCP and the
-// set's API show the provider's redacted message and request id, and none of the secrets.
+// A done run whose analysis failed on that reply: the hub, the run page, Next steps, the REST
+// API and MCP show the provider's redacted message and request id, and none of the secrets.
 func TestAnAnalysisErrorShowsRedactedEverywhere(t *testing.T) {
 	a, db, execute, _ := fixFixture(t)
 	id := execute()
@@ -156,6 +156,17 @@ func TestAnAnalysisErrorShowsRedactedEverywhere(t *testing.T) {
 		body := rec.Body.String()
 		if !strings.Contains(body, shown) || !strings.Contains(body, "req_leak") {
 			t.Errorf("%s doesn't show the analysis error: %s", path, limit(body))
+		}
+		leakCheck(t, path, body)
+	}
+	// The REST API: the run, its fixes (with the stored text too, JSON-escaped) and Next steps
+	// carry the analysis error; the quick-wins list and the run list don't, and leak nothing.
+	for path, carries := range map[string]bool{"/api/runs/" + id: true, "/api/runs/" + id + "/fixes": true, "/api/next-steps": true, "/api/quick-wins": false, "/api/runs": false} {
+		rec := httptest.NewRecorder()
+		s.Handler().ServeHTTP(rec, httptest.NewRequest("GET", path, nil))
+		body := rec.Body.String()
+		if rec.Code != 200 || carries && (!strings.Contains(body, "key [REDACTED] rejected") || !strings.Contains(body, "req_leak")) {
+			t.Errorf("%s doesn't carry the analysis error: %d %s", path, rec.Code, limit(body))
 		}
 		leakCheck(t, path, body)
 	}
