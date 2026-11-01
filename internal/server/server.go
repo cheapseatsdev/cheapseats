@@ -26,6 +26,7 @@ import (
 	"math"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"net/netip"
 	"net/url"
 	"slices"
@@ -1455,10 +1456,31 @@ func (s *Server) apiRebuildFixes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.App.BuildFixes(r.Context(), r.PathValue("id")); err != nil {
+		var kept *app.KeptAnalysisError
+		if errors.As(err, &kept) {
+			s.keptFixes(w, r, kept)
+			return
+		}
 		httpErr(w, err, 500)
 		return
 	}
 	s.apiFixes(w, r)
+}
+
+// keptFixes answers a rebuild that failed and kept the run's earlier analysis. It is still a
+// 500, since this request's build failed, with the error in "error" as for any failure, and
+// beside it "showing", which says what "analysis" is, and "analysis", GET /fixes' body: the
+// kept analysis.
+func (s *Server) keptFixes(w http.ResponseWriter, r *http.Request, kept *app.KeptAnalysisError) {
+	got := httptest.NewRecorder()
+	s.apiFixes(got, r)
+	if got.Code != http.StatusOK {
+		httpErr(w, kept, 500)
+		return
+	}
+	w.Header().Set("content-type", "application/json")
+	w.WriteHeader(500)
+	json.NewEncoder(w).Encode(map[string]any{"error": kept.Error(), "showing": app.KeptAnalysisNote, "analysis": json.RawMessage(got.Body.Bytes())})
 }
 
 func (s *Server) apiAttempts(w http.ResponseWriter, r *http.Request) {

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cheapseatsdev/cheapseats/internal/analysis"
 	"github.com/cheapseatsdev/cheapseats/internal/answer"
 	"github.com/cheapseatsdev/cheapseats/internal/config"
 	"github.com/cheapseatsdev/cheapseats/internal/crawl"
@@ -588,5 +589,28 @@ func TestUpgradeCountsVisitsFromLogsImportedBefore(t *testing.T) {
 	}
 	if rep.Totals.Training != 1 || rep.Totals.Referrals != 1 || rep.Totals.Visits != 2 {
 		t.Errorf("after: totals %+v", rep.Totals)
+	}
+}
+
+// verification_failed was added to the stored analysis envelope without a version change. An
+// analysis stored before it reads as a complete one, and a rebuild whose verification fails
+// keeps it instead of replacing it with unverified investigations.
+func TestUpgradeKeepsAnAnalysisStoredBeforeVerificationFailedOnAFailedRebuild(t *testing.T) {
+	db, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	stored := `{"version":1,"insights":"Earlier.","fixes":[],"investigations":[],"market_findings":[{"title":"Buyers ask about pricing","detail":"d","evidence":"e","prompts":[1]}]}`
+	legacyRun(t, db, "before-mark", "2026-10-20", []string{"Which starter workflow should I use?"}, stored)
+	if an, err := analysis.DecodeAnalysis(stored); err != nil || an.VerificationFailed || len(an.Findings) != 1 {
+		t.Fatalf("an older analysis reads as a failed verification: %+v %v", an, err)
+	}
+	a := &App{DB: db}
+	failed := &analysis.VerificationError{Candidates: 1, Err: fmt.Errorf("HTTP 529: overloaded")}
+	a.recordAnalysis(context.Background(), "before-mark", verifyFailureFrom(t, a, "before-mark"), analysis.Analysis{VerificationFailed: true}, 0, failed)
+	var after string
+	if err := db.QueryRow(`SELECT fixes FROM runs WHERE id='before-mark'`).Scan(&after); err != nil || after != stored {
+		t.Fatalf("a failed rebuild replaced the older analysis: %q %v", after, err)
 	}
 }

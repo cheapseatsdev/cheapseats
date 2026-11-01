@@ -124,12 +124,66 @@ func (a *App) BuildFixes(ctx context.Context, id string) error {
 	ctx = analysis.WithOpportunities(ctx, sum.Opportunities)
 	ctx = analysis.WithObjections(ctx, sum.Objections) // with the pages behind each
 	ctx = analysis.WithMisstatements(ctx, a.misstatementLines(ctx, id, results))
-	an, cost, err := analysis.Build(ctx, &cfg, r.Snapshot.Set, results, a.triedFor(ctx, r.SetID), a.dismissedFor(ctx))
-	if err != nil {
-		a.DB.ExecContext(ctx, `UPDATE runs SET fixes_error=?, analysis_cost_usd=analysis_cost_usd+? WHERE id=?`, err.Error(), cost, id)
+	// The analysis this build starts from, so a failure is recorded against it and not against
+	// one another process stores meanwhile.
+	var from sql.NullString
+	if err := a.DB.QueryRowContext(ctx, `SELECT fixes_at FROM runs WHERE id=?`, id).Scan(&from); err != nil {
 		return err
 	}
-	_, err = a.DB.ExecContext(ctx, `UPDATE runs SET fixes=?, insights=?, fixes_at=?, fixes_error=NULL, analysis_cost_usd=analysis_cost_usd+? WHERE id=?`, analysis.Encode(an), an.Insights, store.Now(), cost, id)
+	an, cost, err := analysis.Build(ctx, &cfg, r.Snapshot.Set, results, a.triedFor(ctx, r.SetID), a.dismissedFor(ctx))
+	return a.recordAnalysis(ctx, id, from, an, cost, err)
+}
+
+// KeptAnalysisNote says which analysis is shown after a failed rebuild kept the earlier one.
+const KeptAnalysisNote = "Showing the run's earlier analysis, which the failed rebuild left in place."
+
+// KeptAnalysisError is BuildFixes' error when the build failed and the run keeps the analysis
+// it already had, which callers show with the error and KeptAnalysisNote.
+type KeptAnalysisError struct{ Err error }
+
+func (e *KeptAnalysisError) Error() string { return e.Err.Error() }
+func (e *KeptAnalysisError) Unwrap() error { return e.Err }
+
+// recordAnalysis stores what Build returned for run id. A failed or degraded build never
+// replaces an analysis the run already has: it records the error and its cost, and the earlier
+// analysis and its fixes_at stay as they were. The one exception is a failed verification on a
+// run with no analysis yet; its candidates, kept as investigations, are stored with the error.
+// from is the run's fixes_at when the build started: the error is recorded only while that is
+// still the stored analysis, so it can't land on a newer one another process stored meanwhile.
+func (a *App) recordAnalysis(ctx context.Context, id string, from sql.NullString, an analysis.Analysis, cost float64, err error) error {
+	if err == nil {
+		_, err = a.DB.ExecContext(ctx, `UPDATE runs SET fixes=?, insights=?, fixes_at=?, fixes_error=NULL, analysis_cost_usd=analysis_cost_usd+? WHERE id=?`, analysis.Encode(an), an.Insights, store.Now(), cost, id)
+		return err
+	}
+	var verr *analysis.VerificationError
+	if errors.As(err, &verr) {
+		slog.Error("analysis verification", "run", id, "err", err)
+		// Only a run with no analysis yet takes the degraded one. fixes IS NULL is checked in the
+		// same statement, so this can't overwrite one stored meanwhile.
+		res, uerr := a.DB.ExecContext(ctx, `UPDATE runs SET fixes=?, insights=?, fixes_at=?, fixes_error=?, analysis_cost_usd=analysis_cost_usd+? WHERE id=? AND fixes IS NULL`, analysis.Encode(an), an.Insights, store.Now(), err.Error(), cost, id)
+		if uerr != nil {
+			return uerr
+		}
+		if n, _ := res.RowsAffected(); n > 0 {
+			return nil
+		}
+		err = fmt.Errorf("verification could not complete, so the earlier analysis is kept: %w", verr.Err)
+	}
+	// fixes_at IS ? matches NULL too: a first build that failed before verification records its
+	// error on a run that still has no analysis.
+	res, uerr := a.DB.ExecContext(ctx, `UPDATE runs SET fixes_error=?, analysis_cost_usd=analysis_cost_usd+? WHERE id=? AND fixes_at IS ?`, err.Error(), cost, id, from)
+	if uerr != nil {
+		return uerr
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		// Another process stored an analysis meanwhile. It stands, without this error; only the
+		// cost is added.
+		a.DB.ExecContext(ctx, `UPDATE runs SET analysis_cost_usd=analysis_cost_usd+? WHERE id=?`, cost, id)
+		return fmt.Errorf("%w (an analysis stored meanwhile is kept)", err)
+	}
+	if from.Valid {
+		return &KeptAnalysisError{Err: err}
+	}
 	return err
 }
 

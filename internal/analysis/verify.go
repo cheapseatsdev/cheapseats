@@ -3,6 +3,7 @@ package analysis
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"sort"
@@ -214,6 +215,29 @@ func investigation(set sets.Set, f Fix, why string) Investigation {
 	return Investigation{Title: "Check: " + f.Title, Why: "This check informs the decision: " + f.Decision + " " + why, Check: f.Check, Decision: f.Decision, Evidence: f.Evidence, Prompts: ps, PromptIDs: ids, Target: f.Target}
 }
 
+// VerificationError is Build's error when the verification call failed. The analysis returned
+// with it is usable but degraded: every candidate is an investigation, and VerificationFailed is
+// set. The caller stores it with the error only when the run has no earlier analysis; otherwise
+// the earlier one stays and only the error is recorded.
+type VerificationError struct {
+	Candidates int
+	Err        error
+}
+
+func (e *VerificationError) Error() string {
+	return fmt.Sprintf("verification could not complete, so its %d candidates are investigations: %v", e.Candidates, e.Err)
+}
+
+func (e *VerificationError) Unwrap() error { return e.Err }
+
+// unreadable says why no page could be read, from the first page's error.
+func unreadable(pages []artifact) error {
+	if len(pages) == 0 {
+		return errors.New("no current page could be read")
+	}
+	return fmt.Errorf("no current page could be read (%d tried; %s: %s)", len(pages), pages[0].URL, pages[0].Error)
+}
+
 func verifyCandidates(ctx context.Context, cfg *config.Config, set sets.Set, a Analysis, cost float64) (Analysis, float64, error) {
 	normalizeNotes(set, &a)
 	var fs []Fix
@@ -247,20 +271,31 @@ func verifyCandidates(ctx context.Context, cfg *config.Config, set sets.Set, a A
 	if len(fs) == 0 {
 		return a, cost, nil
 	}
+	// No advisory is a configured state, not a failure: without the team's positioning, goals
+	// and boundaries no candidate can pass the strategy gate, now or on any retry, so each stays
+	// an investigation and the analysis is complete as it is. It isn't marked VerificationFailed
+	// and carries no error, which would otherwise stand on every run until the config changes.
+	// The pages aren't read, since nothing would be verified against them.
+	if cfg.Brand.Advisory.Text() == "" {
+		for _, f := range fs {
+			a.Investigations = append(a.Investigations, investigation(set, f, "No advisory positioning/goals/boundaries were supplied; product fit must be established before action."))
+		}
+		return a, cost, nil
+	}
 	pages := readArtifacts(ctx, cfg, fs)
 	readable := false
 	for _, p := range pages {
 		readable = readable || p.Text != ""
 	}
-	if !readable || cfg.Brand.Advisory.Text() == "" {
-		why := "Current artifacts could not be read; the proposed gap is unverified."
-		if cfg.Brand.Advisory.Text() == "" {
-			why = "No advisory positioning/goals/boundaries were supplied; product fit must be established before action."
-		}
+	// No page could be read: the site was down, refused the reader, or returned nothing usable.
+	// That is a verification that could not complete, as much as a failed verifier call, and
+	// usually as brief, so it is a VerificationError and can't replace an earlier analysis.
+	if !readable {
 		for _, f := range fs {
-			a.Investigations = append(a.Investigations, investigation(set, f, why))
+			a.Investigations = append(a.Investigations, investigation(set, f, "Current artifacts could not be read; the proposed gap is unverified."))
 		}
-		return a, cost, nil
+		a.VerificationFailed = true
+		return a, cost, &VerificationError{Candidates: len(fs), Err: unreadable(pages)}
 	}
 	input, _ := json.Marshal(struct {
 		Candidates []Fix         `json:"candidates"`
@@ -290,7 +325,8 @@ Do not mark verified unless all six gates pass with evidence. Current supplied a
 		for _, f := range fs {
 			a.Investigations = append(a.Investigations, investigation(set, f, "Verification could not complete; the proposed work remains an investigation."))
 		}
-		return a, cost, nil
+		a.VerificationFailed = true
+		return a, cost, &VerificationError{Candidates: len(fs), Err: err}
 	}
 	byIndex := map[int][]decision{}
 	for _, d := range reviewed.Decisions {

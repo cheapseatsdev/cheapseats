@@ -120,8 +120,9 @@ func TestBuildVerifiesCurrentWorkAndSeparatesUnknowns(t *testing.T) {
 	}
 	prompts = nil
 	a, _, err = Build(WithVerifier(context.Background(), func(context.Context, string) (string, error) { return "", errors.New("temporary network failure") }), cfg, set, results, nil, nil)
-	if err != nil || len(a.Fixes) != 0 || len(a.Investigations) != 1 || len(prompts) != 1 {
-		t.Fatalf("failed reads must stay unknown without a redundant review call: %+v %v", a, err)
+	var verr *VerificationError
+	if !errors.As(err, &verr) || !a.VerificationFailed || len(a.Fixes) != 0 || len(a.Investigations) != 1 || len(prompts) != 1 {
+		t.Fatalf("failed reads must stay unknown, as a failed verification, without a redundant review call: %+v %v", a, err)
 	}
 	if a.Investigations[0].Check != f.Check || a.Investigations[0].Decision != f.Decision {
 		t.Fatalf("useful unknown lost its specific decision: %+v", a.Investigations[0])

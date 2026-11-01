@@ -47,7 +47,9 @@ func TestBuildKeepsOnlyTheBestRankedCandidates(t *testing.T) {
 	results := []run.Result{{ID: 7, PromptIdx: 0, Answerer: "fake", Track: answer.Search, Status: "done", Grade: &grade.Grade{Verdict: grade.Absent}, Answer: &answer.Answer{Text: "An answer."}}}
 	ctx := WithVerifier(context.Background(), func(context.Context, string) (string, error) { return "", errors.New("not read") })
 	a, _, err := Build(ctx, cfg, set, results, nil, nil)
-	if err != nil || calls != 1 || len(a.Investigations) != MaxCandidates {
+	// No page can be read, so verification fails with the candidates kept as investigations.
+	var verr *VerificationError
+	if !errors.As(err, &verr) || verr.Candidates != MaxCandidates || calls != 1 || len(a.Investigations) != MaxCandidates {
 		t.Fatalf("want %d candidates kept: %d investigations, %d calls, %v", MaxCandidates, len(a.Investigations), calls, err)
 	}
 	for _, inv := range a.Investigations {
