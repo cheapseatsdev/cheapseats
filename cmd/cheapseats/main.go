@@ -712,13 +712,17 @@ func printReport(a *app.App, id string, asJSON bool) error {
 	}
 	fmt.Printf("\n%d graded, %d errors, $%.2f\n", s.Done, s.Errors, s.CostUSD)
 	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(w, "\nANSWERER\tTRACK\tTOP PICK\tRECOMMENDED\tNAMED")
+	fmt.Fprintln(w, "\nANSWERER\tTRACK\tTOP PICK\tRECOMMENDED\tNAMED\tERRORS")
 	fmt.Fprintf(w, "all\t\t%s\t%s\t%s\n", pr(s.Overall.TopPick), pr(s.Overall.Recommended), pr(s.Overall.Visible))
 	if s.BrandedPrompts > 0 {
 		fmt.Fprintf(w, "unbranded\t\t%s\t%s\t%s\n", pr(s.Unbranded.TopPick), pr(s.Unbranded.Recommended), pr(s.Unbranded.Visible))
 	}
 	for _, x := range s.Slices {
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", x.Answerer, x.Track, pr(x.TopPick), pr(x.Recommended), pr(x.Visible))
+		errs := strconv.Itoa(x.Errors)
+		if note := x.ErrorNote(); note != "" {
+			errs += " " + note
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", x.Answerer, x.Track, pr(x.TopPick), pr(x.Recommended), pr(x.Visible), errs)
 	}
 	w.Flush()
 	if rank := s.BrandRank(); rank == 0 {

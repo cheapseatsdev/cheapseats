@@ -15,7 +15,7 @@
 {{$r := .Rates}}{{$split := and .Branded .Unbranded.Visible.N}}{{if $split}}{{$r = .Unbranded}}{{end}}<div class="kpis"><div class="kpi"><b>{{pct $r.Recommended.P}}</b><small>recommended</small></div><div class="kpi"><b>{{pct $r.Visible.P}}</b><small>named</small></div><div class="kpi"><b>{{pct $r.TopPick.P}}</b><small>top pick</small></div></div>
 {{if $split}}<p class="muted small">Leaving out prompts that name {{brand}}. With them: named {{pct .Visible.P}}, recommended {{pct .Recommended.P}}, top pick {{pct .TopPick.P}}.</p>{{else if .Branded}}<p class="muted small">Every prompt names {{brand}}.</p>{{end}}</div>{{end}}</div>
 <div class="scroll"><table><thead><tr><th>Answerer</th><th>Track</th><th class="num">Named</th><th class="num">Recommended</th><th class="num">Top pick</th><th class="num">Errors</th></tr></thead>
-<tbody>{{range .Summary.Slices}}<tr><td>{{aname .Answerer}}</td><td>{{.Track}}</td><td class="num">{{rate .Visible}}</td><td class="num">{{rate .Recommended}}</td><td class="num">{{rate .TopPick}}</td><td class="num">{{.Errors}}</td></tr>{{end}}</tbody></table></div>
+<tbody>{{range .Summary.Slices}}<tr><td>{{aname .Answerer}}</td><td>{{.Track}}</td><td class="num">{{rate .Visible}}</td><td class="num">{{rate .Recommended}}</td><td class="num">{{rate .TopPick}}</td><td class="num">{{.Errors}}{{with .ErrorNote}} <span class="muted small">{{.}}</span>{{end}}</td></tr>{{end}}</tbody></table></div>
 <p class="muted small">Named uses all graded answers; recommended and top pick use choice prompts only. Brackets show 95% intervals.</p>
 
 <h2 id="grid">Prompt by prompt</h2>

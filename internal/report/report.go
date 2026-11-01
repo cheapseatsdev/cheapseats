@@ -6,6 +6,7 @@ import (
 	"math"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/cheapseatsdev/cheapseats/internal/answer"
@@ -51,6 +52,60 @@ type Slice struct {
 	Track    answer.Track `json:"track"`
 	Rates
 	Errors int `json:"errors"`
+	// Why its answers failed, most frequent first; absent when none did.
+	ErrorKinds []ErrorKind `json:"error_kinds,omitempty"`
+}
+
+// ErrorKind counts a slice's answers that failed for one reason.
+type ErrorKind struct {
+	Reason string `json:"reason"`
+	N      int    `json:"n"`
+}
+
+// OtherError is the reason for a failure the app did not word itself: a provider's error,
+// a timeout, a CLI that would not start.
+const OtherError = "other"
+
+// ErrorReason names why a result failed, from its stored error. Only errors the app words
+// itself are named; a provider's own message is OtherError, however it reads.
+func ErrorReason(msg string) string {
+	switch {
+	case msg == answer.ErrNoSearch.Error():
+		return "answered without searching"
+	case msg == answer.ErrEmpty.Error():
+		return "empty answer"
+	case strings.HasPrefix(msg, run.GradingErrorPrefix):
+		return "grading failed"
+	}
+	return OtherError
+}
+
+// ErrorNote says why the slice's answers failed, as "(9 answered without searching, 2 other)",
+// or "" when none failed or none failed for a reason the app can name.
+func (s Slice) ErrorNote() string {
+	if len(s.ErrorKinds) == 0 || len(s.ErrorKinds) == 1 && s.ErrorKinds[0].Reason == OtherError {
+		return ""
+	}
+	parts := make([]string, len(s.ErrorKinds))
+	for i, k := range s.ErrorKinds {
+		parts[i] = strconv.Itoa(k.N) + " " + k.Reason
+	}
+	return "(" + strings.Join(parts, ", ") + ")"
+}
+
+// errorKinds lists counts by reason, most frequent first, ties by reason.
+func errorKinds(reasons map[string]int) []ErrorKind {
+	var out []ErrorKind
+	for r, n := range reasons {
+		out = append(out, ErrorKind{r, n})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].N != out[j].N {
+			return out[i].N > out[j].N
+		}
+		return out[i].Reason < out[j].Reason
+	})
+	return out
 }
 
 type Voice struct {
@@ -445,6 +500,7 @@ func BuildWith(brand config.Brand, results []run.Result, opt Options) Summary {
 	var all, unbranded Tally
 	slices := map[[2]string]*Tally{}
 	sliceErr := map[[2]string]int{}
+	sliceWhy := map[[2]string]map[string]int{}
 	var sliceOrder [][2]string
 	prompts := map[int]*Tally{}
 	promptText := map[int]string{}
@@ -524,6 +580,14 @@ func BuildWith(brand config.Brand, results []run.Result, opt Options) Summary {
 		case run.ResultError:
 			s.Errors++
 			sliceErr[key]++
+			msg := ""
+			if r.Error != nil {
+				msg = *r.Error
+			}
+			if sliceWhy[key] == nil {
+				sliceWhy[key] = map[string]int{}
+			}
+			sliceWhy[key][ErrorReason(msg)]++
 			continue
 		default:
 			s.Pending++
@@ -781,7 +845,7 @@ func BuildWith(brand config.Brand, results []run.Result, opt Options) Summary {
 		}
 	}
 	for _, k := range sliceOrder {
-		s.Slices = append(s.Slices, Slice{Answerer: k[0], Track: answer.Track(k[1]), Rates: slices[k].Rates(), Errors: sliceErr[k]})
+		s.Slices = append(s.Slices, Slice{Answerer: k[0], Track: answer.Track(k[1]), Rates: slices[k].Rates(), Errors: sliceErr[k], ErrorKinds: errorKinds(sliceWhy[k])})
 	}
 	mentions := 0
 	for _, v := range voice {
