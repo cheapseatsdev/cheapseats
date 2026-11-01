@@ -58,7 +58,7 @@ const (
 	maxRunes  = 320
 )
 
-var themeSchema = map[string]any{
+var themeSchema = llm.RegisterSchema("opinion.themes", "grader", map[string]any{
 	"type": "object",
 	"properties": map[string]any{
 		"themes": map[string]any{
@@ -79,7 +79,7 @@ var themeSchema = map[string]any{
 	},
 	"required":             []string{"themes"},
 	"additionalProperties": false,
-}
+})
 
 const ThemeSystem = `You group what AI assistants said about a brand into themes. You get numbered strings taken from graded answers: a strength the answer credited the brand with, an objection it raised about the brand, or why it preferred another product (competitive). A string marked ×N came from N answers.
 
