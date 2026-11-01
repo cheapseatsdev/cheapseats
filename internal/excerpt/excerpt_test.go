@@ -140,6 +140,33 @@ func TestHTMLMatchesGoldmark(t *testing.T) {
 	}
 }
 
+// Numeric character references resolve as CommonMark says: decimal (leading zeros included) or
+// hex, code point 0 and invalid code points as U+FFFD, and anything else as written.
+func TestTextNumericReferences(t *testing.T) {
+	for in, want := range map[string]string{
+		"[x](/&#00065;)":    "x (/A)",
+		"[x](/&#x41;)":      "x (/A)",
+		"[x](/&#X41;)":      "x (/A)",
+		"[x](/&#0;)":        "x (/\uFFFD)",
+		"[x](/&#1234567;)":  "x (/\uFFFD)",
+		"[x](/&#xD800;)":    "x (/\uFFFD)",
+		"[x](/&#12345678;)": "x (/&#12345678;)",
+		"[x](/&#x1234567;)": "x (/&#x1234567;)",
+		"[x](/&#;)":         "x (/&#;)",
+		"a &#00065; b":      "a A b",
+	} {
+		if got := Text(in); got != want {
+			t.Errorf("Text(%s) = %q, want %q", in, got, want)
+		}
+	}
+	// goldmark's own HTML renderer reads a leading zero in a destination's numeric reference as
+	// octal (util.ResolveNumericReferences, v1.8.6), and HTML inherits that: an upstream bug,
+	// left alone here. When goldmark fixes it, this fails; drop it and the note in the PR.
+	if got := string(HTML("[x](/&#00065;)")); got != `<a href="/5">x</a>` {
+		t.Errorf("goldmark now renders %q: if the upstream octal bug is fixed, drop this check", got)
+	}
+}
+
 // Quotes and prose read as inline text: no paragraphs, lists, headings or reference definitions.
 func TestInlineOnly(t *testing.T) {
 	for in, want := range map[string]string{

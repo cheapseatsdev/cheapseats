@@ -17,6 +17,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
@@ -166,10 +167,38 @@ func writeText(b *strings.Builder, src []byte, n ast.Node) {
 	}
 }
 
-// resolve applies backslash escapes and entity references, as goldmark's HTML renderer does to
-// text and, through URLEscape(…, true), to a link destination: /bar\* is /bar*, &amp; is &.
+// resolve applies backslash escapes and entity references, the steps goldmark's HTML renderer
+// applies to text and, through URLEscape(…, true), to a link destination: /bar\* is /bar*,
+// &amp; is &. Numeric references use numericRefs, not goldmark's ResolveNumericReferences,
+// which reads &#00065; as octal.
 func resolve(v []byte) []byte {
-	return util.ResolveEntityNames(util.ResolveNumericReferences(util.UnescapePunctuations(v)))
+	return util.ResolveEntityNames(numericRefs(util.UnescapePunctuations(v)))
+}
+
+// numericRef is a CommonMark numeric character reference: &# and 1–7 decimal digits, or &#x
+// (or &#X) and 1–6 hex digits, then ;.
+var numericRef = regexp.MustCompile(`&#(?:([0-9]{1,7})|[xX]([0-9a-fA-F]{1,6}));`)
+
+// numericRefs resolves numeric character references as CommonMark does: decimal or hex, with
+// code point 0 and invalid code points as U+FFFD. Anything else stays as written.
+func numericRefs(v []byte) []byte {
+	if !bytes.Contains(v, []byte("&#")) {
+		return v
+	}
+	return numericRef.ReplaceAllFunc(v, func(m []byte) []byte {
+		sm := numericRef.FindSubmatch(m)
+		var n uint64
+		if sm[1] != nil {
+			n, _ = strconv.ParseUint(string(sm[1]), 10, 32)
+		} else {
+			n, _ = strconv.ParseUint(string(sm[2]), 16, 32)
+		}
+		r := rune(n)
+		if n == 0 || n > utf8.MaxRune || !utf8.ValidRune(r) {
+			r = utf8.RuneError
+		}
+		return utf8.AppendRune(nil, r)
+	})
 }
 
 // altTextImages renders an image as nothing but its children, the alt text.
