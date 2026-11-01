@@ -144,14 +144,126 @@ func TestReadArtifactsHasBoundedRequests(t *testing.T) {
 	n := 0
 	ctx := WithVerifier(context.Background(), func(context.Context, string) (string, error) {
 		n++
-		return strings.Repeat("x", MaxVerificationPageRunes+100), nil
+		return strings.Repeat("x", MaxVerificationTargetRunes+100), nil
 	})
 	ps := readArtifacts(ctx, cfg, fs)
 	if n != MaxVerificationPages || len(ps) != MaxVerificationPages {
 		t.Fatalf("unbounded reads: %d", n)
 	}
-	if !strings.HasSuffix(ps[0].Text, "[excerpt truncated]") {
-		t.Fatal("unbounded page text")
+	for i, p := range ps {
+		limit := MaxVerificationTargetRunes
+		if i >= MaxCandidates {
+			limit = MaxVerificationPageRunes // brand pages
+		}
+		if !p.Truncated || p.Text != strings.Repeat("x", limit)+truncatedMarker {
+			t.Fatalf("page %d (%s) not clipped to %d: %d runes, truncated=%v", i, p.URL, limit, len([]rune(p.Text)), p.Truncated)
+		}
+	}
+}
+
+// Truncated must be set exactly when text was cut, counting characters rather than bytes, so
+// that a page supplied whole can support a remaining change and an excerpt never can.
+func TestReadArtifactsMarksTruncatedOnlyWhenClipped(t *testing.T) {
+	cfg, _, f, _, _ := verificationFixture()
+	whole, cut := f, f
+	whole.Target, cut.Target = "https://acme.example/whole", "https://acme.example/cut"
+	cfg.Brand.Sites = []config.Site{{URL: "https://acme.example/brand-whole"}, {URL: "https://acme.example/brand-cut"}}
+	body := map[string]string{
+		"https://acme.example/whole":       strings.Repeat("é", MaxVerificationTargetRunes),
+		"https://acme.example/cut":         strings.Repeat("é", MaxVerificationTargetRunes+1),
+		"https://acme.example/brand-whole": strings.Repeat("é", MaxVerificationPageRunes),
+		"https://acme.example/brand-cut":   strings.Repeat("é", MaxVerificationPageRunes+1),
+	}
+	ctx := WithVerifier(context.Background(), func(_ context.Context, u string) (string, error) { return body[u], nil })
+	got := map[string]artifact{}
+	for _, p := range readArtifacts(ctx, cfg, []Fix{whole, cut}) {
+		got[p.URL] = p
+	}
+	for u, want := range map[string]bool{"https://acme.example/whole": false, "https://acme.example/cut": true, "https://acme.example/brand-whole": false, "https://acme.example/brand-cut": true} {
+		p := got[u]
+		if p.Truncated != want || strings.HasSuffix(p.Text, truncatedMarker) != want {
+			t.Errorf("%s: truncated=%v, marker=%v, want %v", u, p.Truncated, strings.HasSuffix(p.Text, truncatedMarker), want)
+		}
+	}
+}
+
+// omissionFixture is a candidate whose gap is a plain omission: the complete target gives
+// the setup commands and says nothing about a runtime version, without any sentence admitting
+// the gap. remaining_change quotes the passage the change would sit beside.
+func omissionFixture() (*config.Config, sets.Set, Fix, string, decision) {
+	cfg, set, f, _, _ := verificationFixture()
+	cfg.Brand.Facts = []string{"The CLI requires Go 1.27 or later."}
+	f.Title = "State the supported Go version beside setup"
+	f.Target = "https://acme.example/setup"
+	f.Claim = "Add the supported Go version, Go 1.27 or later, beside the first-run commands."
+	f.DoneWhen = "The setup page states Go 1.27 or later beside the first-run commands."
+	f.Check = "Inspect https://acme.example/setup to confirm whether the first-run commands state a supported Go version."
+	f.Decision = "Decide whether to add the runtime requirement before directing startup users to the setup page."
+	page := "Setup. Install the CLI with go install acme.example/tracker@latest. Run tracker init, then tracker serve, to start locally. The server stores answers in a local SQLite file."
+	d := decision{Index: 0, Status: "verified", Summary: "The complete setup page gives the commands but no runtime version; adding it beside them is a small owned edit.", Checks: map[string]proof{
+		"existing_work":    {Passed: true, Source: f.Target, Quote: "Install the CLI with go install acme.example/tracker@latest.", Reason: "The target already documents installing the CLI with Go, so the version belongs on this page."},
+		"remaining_change": {Passed: true, Source: f.Target, Quote: "Run tracker init, then tracker serve, to start locally.", Reason: "The version sits beside these first-run commands; the complete page states no required Go version in any wording."},
+		"capability":       {Passed: true, Source: "brand.facts", Quote: cfg.Brand.Facts[0], Reason: "The supported runtime is a stated fact, so the edit adds no new capability claim."},
+		"strategy":         {Passed: true, Source: "brand.advisory", Quote: cfg.Brand.Advisory.Positioning, Reason: "A clear runtime requirement helps small teams start measuring without setup failures."},
+		"eligibility":      {Passed: true, Source: f.Target, Quote: "Setup. Install the CLI", Reason: "This is the team's own setup page, so no publisher eligibility rules apply."},
+		"completion":       {Passed: true, Source: "candidate.done_when", Quote: f.DoneWhen, Reason: "The team edits its own page and can check the stated version directly."},
+	}}
+	return cfg, set, f, page, d
+}
+
+func reviewWithFakeAnalyst(t *testing.T, cfg *config.Config, set sets.Set, f Fix, page string, d decision) (Analysis, string) {
+	t.Helper()
+	old := structuredCLI
+	t.Cleanup(func() { structuredCLI = old })
+	var prompt string
+	structuredCLI = func(_ context.Context, _, _, p string, _ map[string]any, out any) error {
+		prompt = p
+		b, _ := json.Marshal(struct {
+			Decisions []decision `json:"decisions"`
+		}{[]decision{d}})
+		return json.Unmarshal(b, out)
+	}
+	ctx := WithVerifier(context.Background(), func(_ context.Context, u string) (string, error) {
+		if u == f.Target {
+			return page, nil
+		}
+		return "", errors.New("not read")
+	})
+	a, _, err := verifyCandidates(ctx, cfg, set, Analysis{Fixes: []Fix{f}}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return a, prompt
+}
+
+func TestCompletePageVerifiesPlainOmission(t *testing.T) {
+	cfg, set, f, page, d := omissionFixture()
+	a, prompt := reviewWithFakeAnalyst(t, cfg, set, f, page, d)
+	if len(a.Fixes) != 1 || len(a.Investigations) != 0 || a.Fixes[0].Verification.Status != "verified" {
+		t.Fatalf("a supported omission on a complete page did not verify: %+v", a)
+	}
+	if !strings.Contains(prompt, `"truncated":false`) || !strings.Contains(prompt, "A quote cannot show absence by itself") {
+		t.Fatal("the reviewer was not told the target is complete or how to support an omission")
+	}
+}
+
+func TestTruncatedTargetCannotVerifyRemainingChange(t *testing.T) {
+	cfg, set, f, page, d := omissionFixture()
+	// The same page with a long footer: every quote is still in the supplied excerpt, and the
+	// fake reviewer still claims remaining_change passed.
+	page += " " + strings.Repeat("Footer link. ", MaxVerificationTargetRunes/10)
+	a, prompt := reviewWithFakeAnalyst(t, cfg, set, f, page, d)
+	if len(a.Fixes) != 0 || len(a.Investigations) != 1 || !strings.Contains(a.Investigations[0].Why, "remaining_change") {
+		t.Fatalf("an excerpt verified a remaining change: %+v", a)
+	}
+	if !strings.Contains(prompt, `"truncated":true`) {
+		t.Fatal("the reviewer was not told the target is truncated")
+	}
+	// What the excerpt does say still counts: the same page can support already-done.
+	d.Status = "already-done"
+	a, _ = reviewWithFakeAnalyst(t, cfg, set, f, page, d)
+	if len(a.Findings) != 1 {
+		t.Fatalf("a quote from an excerpt could not show existing work: %+v", a)
 	}
 }
 

@@ -18,20 +18,20 @@ The analyst also receives the audience, category and prompt-set description. A v
 
 The first analyst call reads graded results with raw answer excerpts and result IDs. It keeps search queries, returned results, fetched URLs and citations distinct. It suggests at most eight candidates and can instead return investigations or findings. The limit is in the prompt rather than the output schema, which the Claude API can't constrain by list length; if the analyst returns more, the eight best ranked are kept. Each candidate must earn its place with evidence, a bounded read-only check naming the artifact and specific unknown, and a concrete business decision that the answer could change. Weak ideas are omitted with a short explanation; they do not become research work by default.
 
-Before a candidate becomes work, the app's reader checks a bounded shortlist of current targets and brand pages. Analysis requests at most 12 pages and supplies at most 12,000 characters of each page to a separate verification call. Page text goes to the configured analyst provider as evidence. A failed, blocked or empty read remains unknown.
+Before a candidate becomes work, the app's reader checks a bounded shortlist of current targets and brand pages. Analysis requests at most 12 pages and supplies them to a separate verification call: at most 30,000 characters of each candidate's target and at most 12,000 characters of each other page. A page cut to that limit is marked truncated. Page text goes to the configured analyst provider as evidence. A failed, blocked or empty read remains unknown.
 
 The verification checks:
 
 | Check | What it must establish |
 | --- | --- |
 | Existing work | What the current relevant artifact already supplies |
-| Remaining change | The specific material difference still needed |
+| Remaining change | The specific material difference still needed, quoting the passage the change would amend or sit beside, or the wrong text |
 | Capability | The claims are supported without blurring collection methods or operating costs |
 | Strategy | The change fits the stated advisory goals and boundaries |
 | Eligibility | Submission rules and qualifications permit the proposed outreach; or why these do not apply to owned work |
 | Completion | The team can complete and check the work without requiring a future recommendation or another publisher's acceptance |
 
-Each passing check needs a source, an exact quote and a reason specific to the candidate. The app checks that the source was actually supplied and that its quote occurs in that source. Existing-page and outreach changes require a readable current target. The strategy check must cite the advisory brief; a product change must quote an explicit goal, rather than general positioning or a boundary. A new-page proposal stays an investigation until the relevant existing-content inventory has been checked; a few sampled pages cannot establish that no equivalent content exists.
+Each passing check needs a source, an exact quote and a reason specific to the candidate. The app checks that the source was actually supplied and that its quote occurs in that source. Existing-page and outreach changes require a readable current target. A quote cannot show that something is missing, so a remaining change passes only on a page supplied whole: the app rejects a remaining-change check whose source is truncated, and that candidate stays an investigation. An excerpt can still show existing work. The strategy check must cite the advisory brief; a product change must quote an explicit goal, rather than general positioning or a boundary. A new-page proposal stays an investigation until the relevant existing-content inventory has been checked; a few sampled pages cannot establish that no equivalent content exists.
 
 These checks support an editorial decision; they do not prove that a proposed change will improve visibility. A verifier can still misinterpret quoted evidence. Inspect its reasons before taking a consequential action.
 
