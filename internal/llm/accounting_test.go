@@ -27,7 +27,7 @@ func TestMalformedStructuredOutputStillCharged(t *testing.T) {
 	defer d.Close()
 	c := &config.Config{Pricing: map[string]config.Pricing{"fake": {Input: 1, Output: 10}}}
 	var out any
-	_, e = Structured(WithAccounting(context.Background(), budget.New(c, d)), "fake", "system", "question", 100, nil, &out)
+	_, e = Structured(WithAccounting(context.Background(), budget.New(c, d)), "fake", "system", "question", 100, map[string]any{"type": "string"}, &out)
 	if e == nil {
 		t.Fatal("expected parse failure")
 	}
