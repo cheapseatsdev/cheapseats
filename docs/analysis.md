@@ -18,7 +18,7 @@ The analyst also receives the audience, category and prompt-set description. A v
 
 The first analyst call reads graded results with raw answer excerpts and result IDs. It keeps search queries, returned results, fetched URLs and citations distinct. It suggests at most eight candidates and can instead return investigations or findings. The limit is in the prompt rather than the output schema, which the Claude API can't constrain by list length; if the analyst returns more, the eight best ranked are kept. Each candidate must earn its place with evidence, a bounded read-only check naming the artifact and specific unknown, and a concrete business decision that the answer could change. Weak ideas are omitted with a short explanation; they do not become research work by default.
 
-Before a candidate becomes work, the app's reader checks a bounded shortlist of current targets and brand pages. Analysis requests at most 12 pages and supplies at most 12,000 characters of each page to a separate verification call. Page text goes to the configured analyst provider as evidence. A failed, blocked or empty read remains unknown.
+Before a candidate becomes work, the app's reader checks a bounded shortlist of current targets and brand pages. Analysis requests at most 12 pages and supplies at most 12,000 characters of each page to a separate verification call. Verification reads each page fresh rather than from the citation check's day cache, and marks a page truncated when its text is incomplete: clipped to 12,000 characters, or cut by the reader because the response passed the 2 MiB read limit or ended before its declared length, its visible text passed 200,000 bytes, the optional Exa reader's text reached that cap, or the page is empty without JavaScript and no reader rendered it. Page text goes to the configured analyst provider as evidence. A failed, blocked or empty read remains unknown.
 
 The verification checks:
 
@@ -44,6 +44,12 @@ Verification fails when its call fails or when none of the current pages could b
 A deployment with no advisory brief is not a failed verification. No candidate can pass the strategy check without one, on this run or any retry, so every candidate is an investigation that says the brief is missing, no pages are read, and the analysis is complete, with no error.
 
 When a rebuild fails and keeps the earlier analysis, `cheapseats fixes -rebuild <run-id>` prints the analysis error with "Showing the run's earlier analysis, which the failed rebuild left in place.", then the kept analysis, then the error, and exits 1. The sentence is printed once: the closing error repeats it only when no analysis error above said it. `POST /api/runs/{id}/fixes` answers 500 with `error`, that sentence in `showing`, and in `analysis` the body `GET /api/runs/{id}/fixes` would return, which holds the kept analysis. Any other failure is a 500 with `error` alone. A first build whose verification failed stored its result, so both answer as for a clean build, with the error in the analysis.
+
+### Why verification reads pages fresh
+
+- The alternative was to record whether each reading was cut in a `cut` column on `page_fetches`, the day cache. That is a schema 20 migration, and an older build refuses an upgraded database, so it breaks rollback.
+- Fresh reads avoid a stored-format change for a feature that is still being measured. They cost at most 12 extra page fetches per analysis.
+- Revisit this if the volume or latency of verification fetches becomes a problem.
 
 ## Separate completion from later results
 

@@ -38,7 +38,7 @@ func CheckLanding(ctx context.Context, u string, brand, terms []string, o CiteOp
 	}
 	day := o.Now().UTC().Format("2006-01-02")
 	robots := &robotsCache{f: o.Fetcher, by: map[string]*robotsEntry{}}
-	_, skipped, text, _ := fetchText(ctx, o, robots, u, day)
+	_, skipped, text, _, _ := fetchText(ctx, o, robots, u, day)
 	return reading(u, day, skipped, text, brand, terms)
 }
 

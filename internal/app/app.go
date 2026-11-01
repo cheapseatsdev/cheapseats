@@ -116,7 +116,7 @@ func (a *App) BuildFixes(ctx context.Context, id string) error {
 	// grades remain evidence; rebuilding advice never changes how they were scored.
 	cfg := *a.Cfg
 	reader := audit.CiteOptions{DB: a.DB.DB, Reader: a.ContentsReader()}
-	ctx = analysis.WithVerifier(ctx, func(ctx context.Context, u string) (string, error) {
+	ctx = analysis.WithVerifier(ctx, func(ctx context.Context, u string) (string, bool, error) {
 		return audit.ReadCurrent(ctx, u, reader)
 	})
 	ctx = analysis.WithSiteFindings(ctx, a.siteFindings(ctx)) // the latest site audit, as evidence
