@@ -33,6 +33,7 @@ import (
 
 	"github.com/cheapseatsdev/cheapseats/internal/config"
 	"github.com/cheapseatsdev/cheapseats/internal/env"
+	"github.com/cheapseatsdev/cheapseats/internal/errclass"
 	"github.com/cheapseatsdev/cheapseats/internal/llm"
 )
 
@@ -184,11 +185,9 @@ func runCLIInput(ctx context.Context, provider, unsetKey string, stdin []byte, n
 		return stdout.buf.Bytes(), fmt.Errorf("%s: %w of %d bytes", name, errCLIOutput, cliMaxOutput)
 	}
 	if err != nil {
-		msg := strings.TrimSpace(string(stderr.buf))
-		if len(msg) > 400 {
-			msg = msg[len(msg)-400:]
-		}
-		return stdout.buf.Bytes(), fmt.Errorf("%s: %w: %s", name, err, msg)
+		// stderr can hold a token, an environment dump or the prompt: it goes only into
+		// errclass, whose message says how the CLI ended, never what it wrote.
+		return stdout.buf.Bytes(), errclass.CLIExited(name, err, ctx.Err(), strings.TrimSpace(string(stderr.buf)))
 	}
 	return stdout.buf.Bytes(), nil
 }
@@ -288,7 +287,8 @@ func parseClaudeStructured(stdout []byte, out any) error {
 		return fmt.Errorf("claude: reading output: %w", err)
 	}
 	if res.IsError || res.Subtype != "success" {
-		return fmt.Errorf("claude: %s: %s", res.Subtype, res.Result)
+		// The result text can quote the prompt (the run's answers): kept only as Detail.
+		return errclass.CLIResult("claude", res.Subtype, res.Result)
 	}
 	if len(res.StructuredOutput) == 0 || string(res.StructuredOutput) == "null" {
 		return fmt.Errorf("claude: no structured output")

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/cheapseatsdev/cheapseats/internal/config"
+	"github.com/cheapseatsdev/cheapseats/internal/errclass"
 	"github.com/cheapseatsdev/cheapseats/internal/llm"
 )
 
@@ -260,12 +261,17 @@ func TestCLIOutputPastTheCapStopsTheCLI(t *testing.T) {
 	}
 }
 
-// Of a long stderr the end is kept, since that is where a CLI says why it failed.
+// Of a long stderr the end is kept, since that is where a CLI says why it failed. It stays
+// inside the error: the message says only how the CLI ended.
 func TestCLIErrorKeepsTheEndOfStderr(t *testing.T) {
 	cliCapFake(t, "i=0; while [ $i -lt 2000 ]; do echo noise >&2; i=$((i+1)); done; echo 'the real reason' >&2; exit 3\n")
 	_, err := runCLI(context.Background(), config.ClaudeCode, "ANTHROPIC_API_KEY", "claude")
-	if err == nil || !strings.HasSuffix(err.Error(), "the real reason") {
+	var ce *errclass.Error
+	if !errors.As(err, &ce) || !strings.HasSuffix(ce.Detail(), "the real reason") || len(ce.Detail()) > cliStderrTail {
 		t.Fatalf("err %v", err)
+	}
+	if err.Error() != "claude: exit status 3" || ce.Category != errclass.CLIExit || ce.Status != 3 {
+		t.Errorf("err %q, category %s, status %d", err, ce.Category, ce.Status)
 	}
 }
 

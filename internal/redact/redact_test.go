@@ -30,3 +30,24 @@ func TestBase64TransportVariants(t *testing.T) {
 		}
 	}
 }
+
+// Credentials nobody configured here (a key in an echoed request, a token in a CLI's stderr)
+// are masked by their shape, keeping the name so the text still says what was there.
+func TestCredentialShapes(t *testing.T) {
+	for in, want := range map[string]string{
+		"key sk-ant-api03-abcDEF_123-xyz rejected":    "key [REDACTED] rejected",
+		"sk-proj-abcdef123456":                        "[REDACTED]",
+		"Authorization: Bearer eyJhbGciOi.J9.abc":     "Authorization: [REDACTED] [REDACTED]",
+		"authorization bearer abcdef123456":           "authorization bearer [REDACTED]",
+		"ANTHROPIC_API_KEY=abc123 next":               "ANTHROPIC_API_KEY=[REDACTED] next",
+		"GITHUB_TOKEN: ghp_abcdef":                    "GITHUB_TOKEN: [REDACTED]",
+		`{"x-api-key":"abc123def","model":"m"}`:       `{"x-api-key":"[REDACTED]","model":"m"}`,
+		"https://h/p?api_key=abc123&q=1":              "https://h/p?api_key=[REDACTED]&q=1",
+		"password=hunter2; token: t0k3n":              "password=[REDACTED]; token: [REDACTED]",
+		"the monkey ate a sketch-ant, at 4 tokens/s.": "the monkey ate a sketch-ant, at 4 tokens/s.",
+	} {
+		if got := Text(in); got != want {
+			t.Errorf("%q\n got %q\nwant %q", in, got, want)
+		}
+	}
+}

@@ -7,11 +7,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"github.com/cheapseatsdev/cheapseats/internal/bounded"
 	"github.com/cheapseatsdev/cheapseats/internal/config"
-	"github.com/cheapseatsdev/cheapseats/internal/redact"
+	"github.com/cheapseatsdev/cheapseats/internal/errclass"
 	"log/slog"
 	"math/rand/v2"
 	"net/http"
@@ -32,16 +31,6 @@ var (
 // maxResponse is the largest successful response read. A Messages or Responses reply with web
 // search results runs to a few hundred KB; past this the reply is an error, not a retry.
 var maxResponse int64 = 32 << 20
-
-// APIError is a non-200 reply. Body is at most bounded.ErrorPrefix bytes of what was sent.
-type APIError struct {
-	Status int
-	Body   string
-}
-
-func (e *APIError) Error() string {
-	return fmt.Sprintf("HTTP %d: %s", e.Status, Truncate(redact.Text(e.Body), 400))
-}
 
 func retryable(status int) bool {
 	return status == 408 || status == 409 || status == 429 || status == 529 || status >= 500
@@ -102,7 +91,9 @@ func post(ctx context.Context, url string, headers map[string]string, body any) 
 			if err := lease.Finish(0, resp.StatusCode < 500); err != nil {
 				return nil, err
 			}
-			last = &APIError{Status: resp.StatusCode, Body: msg}
+			// The body is read only here and goes only into errclass, which shows its error
+			// message redacted and keeps the rest out of Error().
+			last = errclass.HTTP("", resp.StatusCode, msg)
 			if !retryable(resp.StatusCode) {
 				return nil, last
 			}
@@ -132,7 +123,7 @@ func sleep(ctx context.Context, d time.Duration) error {
 	}
 }
 
-var ErrNoKey = errors.New("API key not set")
+var ErrNoKey = errclass.ErrNoKey
 
 // Anthropic posts a Messages API request, to config.AnthropicBaseURLVar when it's set. A proxy there
 // adds the key, so without ANTHROPIC_API_KEY the request goes without one.

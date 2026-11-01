@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	neturl "net/url"
 	"strings"
 	"sync"
 
+	"github.com/cheapseatsdev/cheapseats/internal/redact"
 	"github.com/cheapseatsdev/cheapseats/internal/version"
 )
 
@@ -97,6 +99,12 @@ func (f *Fetcher) Get(ctx context.Context, url string, ua ...string) (*Response,
 	req.Header.Set("accept", "text/html,application/xhtml+xml,text/plain,application/xml;q=0.9,*/*;q=0.8")
 	resp, err := f.Client.Do(req)
 	if err != nil {
+		// A fetch error names the URL (never the body), and a URL's query can carry a token: it
+		// is masked by the shared redactor, so the error is safe wherever it is shown or stored.
+		var ue *neturl.Error
+		if errors.As(err, &ue) {
+			ue.URL = redact.Text(ue.URL)
+		}
 		return nil, err
 	}
 	defer resp.Body.Close()

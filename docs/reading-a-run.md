@@ -77,6 +77,11 @@ and allows a no-action conclusion.
   answered without searching, empty answer, grading failed, and other for anything a provider or
   CLI reported (timeouts, sign-in, rate limits; each answer shows its own message). `cheapseats
   report` prints the same; its JSON and MCP `get_run` give it per slice as `error_kinds`.
+  A failed call's message never carries what came back verbatim, since that can quote the prompt,
+  a page or a credential. An API error shows the provider's own error message and request id, with
+  anything shaped like a key or token masked as `[REDACTED]`, cut to 300 characters. A CLI error
+  says how the CLI ended (`claude: exit status 1`, `codex: exit status 1: not logged in`,
+  `claude: error_max_turns`), not what it printed; to see that, run the CLI by hand as its user.
   **Answered without searching** means a search-track answer came back with no recorded searches
   twice, the second time after being told to search. It usually means the answerer's CLI or
   provider stopped exposing its searches: check its version.

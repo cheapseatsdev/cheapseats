@@ -19,6 +19,7 @@ import (
 	"github.com/cheapseatsdev/cheapseats/internal/bounded"
 	"github.com/cheapseatsdev/cheapseats/internal/budget"
 	"github.com/cheapseatsdev/cheapseats/internal/config"
+	"github.com/cheapseatsdev/cheapseats/internal/errclass"
 )
 
 const (
@@ -244,7 +245,7 @@ func (c *Client) post(ctx context.Context, operation, path, model string, body a
 			msg := bounded.Prefix(resp.Body)
 			resp.Body.Close()
 			settle(lease, 0, resp.StatusCode < 500)
-			last = &APIError{Status: resp.StatusCode, Body: msg}
+			last = errclass.HTTP("exa", resp.StatusCode, msg) // the body goes only into errclass
 			if resp.StatusCode != http.StatusTooManyRequests && resp.StatusCode < 500 {
 				return nil, last
 			}
@@ -293,17 +294,4 @@ func sleep(ctx context.Context, d time.Duration) error {
 	case <-t.C:
 		return nil
 	}
-}
-
-type APIError struct {
-	Status int
-	Body   string
-}
-
-func (e *APIError) Error() string {
-	b := e.Body
-	if len(b) > 300 {
-		b = b[:300] + "…"
-	}
-	return fmt.Sprintf("exa: HTTP %d: %s", e.Status, b)
 }
