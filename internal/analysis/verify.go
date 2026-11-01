@@ -195,15 +195,15 @@ type decision struct {
 	Checks  map[string]proof `json:"checks"`
 }
 
-var reviewSchema = func() map[string]any {
+var reviewSchema = llm.RegisterSchema("analysis.review", "analyst", func() map[string]any {
 	checks := map[string]any{}
 	for _, gate := range gates {
 		checks[gate] = object(map[string]any{"passed": map[string]any{"type": "boolean"}, "source": str(), "quote": str(), "reason": str()}, "passed", "source", "quote", "reason")
 	}
-	return object(map[string]any{"decisions": map[string]any{"type": "array", "maxItems": MaxCandidates, "items": object(map[string]any{
+	return object(map[string]any{"decisions": map[string]any{"type": "array", "items": object(map[string]any{
 		"index": map[string]any{"type": "integer"}, "status": map[string]any{"type": "string", "enum": []string{"verified", "investigate", "already-done", "boundary", "reject"}}, "summary": str(), "checks": object(checks, gates...),
 	}, "index", "status", "summary", "checks")}}, "decisions")
-}()
+}())
 
 func object(props map[string]any, required ...string) map[string]any {
 	return map[string]any{"type": "object", "properties": props, "required": required, "additionalProperties": false}

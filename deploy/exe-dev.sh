@@ -3,6 +3,10 @@
 #
 #   deploy/exe-dev.sh <vm> <config dir>          e.g. deploy/exe-dev.sh cheapseats ../my-config
 #   SEED_DB=path/cheapseats.db deploy/exe-dev.sh …  first deploy only: start from a copy of a database
+#   LIVE_CHECK=1 deploy/exe-dev.sh …             also send each structured output schema to the
+#                                                Anthropic API once, with the VM's own key, before
+#                                                swapping in (cheapseats check -live; a few cents,
+#                                                capped at LIVE_BUDGET dollars, default 0.25)
 #
 # Builds a Linux binary from this checkout, ships the config as committed (a dirty config tree is
 # refused, so a run's recorded commit means what it says), checks it on the VM, swaps it in,
@@ -78,6 +82,22 @@ if ! remote "test -s '$dir/cheapseats.env'"; then
 	exit 1
 fi
 remote "chmod +x '$dir/bin/cheapseats.new' && PATH=/usr/local/bin:\$PATH CHEAPSEATS_CONFIG='$dir/config.new/cheapseats.toml' '$dir/bin/cheapseats.new' check"
+if [ "${LIVE_CHECK:-}" = 1 ]; then
+	say "live schema check (paid, capped)"
+	budget=${LIVE_BUDGET:-0.25}
+	case $budget in
+	'' | *[!0-9.]* | *.*.*)
+		echo "LIVE_BUDGET must be a dollar amount like 0.25" >&2
+		exit 1
+		;;
+	esac
+	# Under systemd with the service's own EnvironmentFile, so the check reads the VM's key or
+	# proxy exactly as Cheap Seats will, and the secrets never pass through this script.
+	remote "sudo systemd-run --quiet --wait --pipe --collect --uid='$user' \
+		-p EnvironmentFile='$dir/cheapseats.env' -p WorkingDirectory='$dir' \
+		-E HOME='$home' -E PATH=/usr/local/bin:/usr/bin:/bin -E CHEAPSEATS_CONFIG='$dir/config.new/cheapseats.toml' \
+		'$dir/bin/cheapseats.new' check -live -live-budget '$budget' -no-jev"
+fi
 
 say "CLI user"
 # The claude and codex CLIs run as a user of their own: each carries a shell the model can use,
