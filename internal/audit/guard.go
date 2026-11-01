@@ -58,6 +58,16 @@ func AllowLoopbackForTests() (restore func()) {
 // errBlocked is a fetch refused for where it would go.
 var errBlocked = errors.New("refused: not a public address")
 
+// The guard's other refusals. Each is fixed text, so the fetcher can say why a fetch was refused
+// without Go's error text around it (refusals).
+var (
+	errTooManyRedirects = fmt.Errorf("more than %d redirects", maxRedirects)
+	errRedirectScheme   = errors.New("redirect to a URL that isn't http or https")
+)
+
+// refusals are the guard's errors, which the fetcher returns as they are.
+var refusals = []error{errBlocked, errTooManyRedirects, errRedirectScheme}
+
 // publicAddr reports whether an address is on the public internet.
 func publicAddr(a netip.Addr) bool {
 	a = a.Unmap() // ::ffff:127.0.0.1 is 127.0.0.1
@@ -109,10 +119,10 @@ func safeClient() *http.Client {
 		Transport: tr,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if len(via) >= maxRedirects {
-				return fmt.Errorf("more than %d redirects", maxRedirects)
+				return errTooManyRedirects
 			}
 			if req.URL.Scheme != "http" && req.URL.Scheme != "https" {
-				return fmt.Errorf("redirect to a %s: URL", req.URL.Scheme)
+				return errRedirectScheme
 			}
 			return nil
 		},

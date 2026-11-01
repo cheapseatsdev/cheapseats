@@ -105,12 +105,32 @@ func wordByte(s string, i int) bool {
 }
 
 // URL is u without what can carry a credential: its user info, query and fragment. A string
-// that doesn't parse as a URL is masked by Text instead.
+// that doesn't parse as a URL (a bad escape such as %zz, which a redirect can send) loses
+// them by text: everything from "://" to the last "@" before the path, and everything from the
+// first "?" or "#"; what is left is masked by Text too.
 func URL(u string) string {
 	p, err := url.Parse(u)
 	if err != nil || p.Host == "" && p.Scheme == "" {
-		return Text(u)
+		return Text(stripURL(u))
 	}
 	p.User, p.RawQuery, p.ForceQuery, p.Fragment, p.RawFragment = nil, "", false, "", ""
 	return p.String()
+}
+
+// stripURL removes a URL's user info, query and fragment by text, for one url.Parse refuses.
+func stripURL(u string) string {
+	if i := strings.IndexAny(u, "?#"); i >= 0 {
+		u = u[:i]
+	}
+	if i := strings.Index(u, "://"); i >= 0 {
+		rest := u[i+3:]
+		auth := rest
+		if j := strings.Index(rest, "/"); j >= 0 {
+			auth = rest[:j]
+		}
+		if at := strings.LastIndex(auth, "@"); at >= 0 {
+			u = u[:i+3] + rest[at+1:]
+		}
+	}
+	return u
 }

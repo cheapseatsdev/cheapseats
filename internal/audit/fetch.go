@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	neturl "net/url"
 	"strings"
 	"sync"
 
+	"github.com/cheapseatsdev/cheapseats/internal/errclass"
 	"github.com/cheapseatsdev/cheapseats/internal/redact"
 	"github.com/cheapseatsdev/cheapseats/internal/version"
 )
@@ -99,18 +99,20 @@ func (f *Fetcher) Get(ctx context.Context, url string, ua ...string) (*Response,
 	req.Header.Set("accept", "text/html,application/xhtml+xml,text/plain,application/xml;q=0.9,*/*;q=0.8")
 	resp, err := f.Client.Do(req)
 	if err != nil {
-		// A fetch error names the URL (never the body), and a URL's query or user info can carry
-		// a token: redact.URL drops them, so the error is safe wherever it is shown or stored.
-		var ue *neturl.Error
-		if errors.As(err, &ue) {
-			ue.URL = redact.URL(ue.URL)
+		// Go's error names the URL, and after a redirect its text can quote the Location whole,
+		// query and all. A refusal is said in the guard's own words; anything else is the kind
+		// of failure and the URL through redact.URL (errclass.Transport), never Go's text.
+		for _, r := range refusals {
+			if errors.Is(err, r) {
+				return nil, r
+			}
 		}
-		return nil, err
+		return nil, errclass.Transport("", err)
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, MaxBody+1))
 	if err != nil && !errors.Is(err, io.ErrUnexpectedEOF) {
-		return nil, err
+		return nil, errclass.Transport("", err)
 	}
 	out := &Response{Status: resp.StatusCode, Header: resp.Header, Body: body, URL: resp.Request.URL.String()}
 	// The connection closed before the body's declared length (or its last chunk): what came

@@ -85,3 +85,18 @@ func TestAWSKeysAndURLs(t *testing.T) {
 		t.Errorf("URL = %q", got)
 	}
 }
+
+// A URL url.Parse refuses still loses its user info, query and fragment, by text.
+func TestUnparseableURLs(t *testing.T) {
+	for in, want := range map[string]string{
+		"https://operator:p%ssword@proxy.example/v1/messages":      "https://proxy.example/v1/messages",
+		"https://operator:p%ssword@proxy.example":                  "https://proxy.example",
+		"https://a@b:p%zz@proxy.example/x?access_token=s#f":        "https://proxy.example/x",
+		"https://login.example/%zz?access_token=opaqueSecret#frag": "https://login.example/%zz",
+		"https://h.example/p@x/%zz":                                "https://h.example/p@x/%zz",
+	} {
+		if got := URL(in); got != want {
+			t.Errorf("URL(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

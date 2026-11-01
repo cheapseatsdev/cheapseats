@@ -109,3 +109,31 @@ func TestRecordedAnalysisErrorsLeakNothing(t *testing.T) {
 		t.Errorf("the provider's message did not survive: %+v", got)
 	}
 }
+
+// A configured base URL url.Parse refuses (a password with a bad escape) still loses its user
+// info: in the error, and in fixes_error once a build that failed on it is recorded.
+func TestAnUnparseableBaseURLsPasswordLeaksNowhere(t *testing.T) {
+	a, id := providersApp(t)
+	old := llm.AnthropicURL
+	llm.AnthropicURL = "https://operator:p%ssword@proxy.example/v1/messages"
+	t.Cleanup(func() { llm.AnthropicURL = old })
+	_, err := llm.Anthropic(context.Background(), map[string]any{"model": "m"})
+	if err == nil || errclass.Category(err) != errclass.Network {
+		t.Fatalf("want a network error, got %v (%s)", err, errclass.Category(err))
+	}
+	if err.Error() != "network error (https://proxy.example/v1/messages)" {
+		t.Errorf("message %q", err)
+	}
+	ctx := context.Background()
+	a.recordAnalysis(ctx, id, verifyFailureFrom(t, a, id), verifyFailureAnalysis(), 0, &analysis.VerificationError{Candidates: 1, Err: err})
+	var fe string
+	a.DB.QueryRow(`SELECT fixes_error FROM runs WHERE id=?`, id).Scan(&fe)
+	for where, s := range map[string]string{"message": err.Error(), "fixes_error": fe} {
+		if strings.Contains(s, "p%ssword") || strings.Contains(s, "operator") {
+			t.Errorf("%s carries the password: %s", where, s)
+		}
+	}
+	if !strings.Contains(fe, "proxy.example") {
+		t.Errorf("fixes_error lost what failed: %q", fe)
+	}
+}
