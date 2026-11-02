@@ -54,6 +54,26 @@ func NewFetcher(client *http.Client, n int) *Fetcher {
 	return &Fetcher{Client: client, UA: UA(), limit: make(chan struct{}, n)}
 }
 
+// within is f with every redirect hop checked by ok: a hop to a URL ok refuses fails the fetch
+// with errRedirectOffSite. It shares f's limit, user agent and transport; f itself is unchanged.
+func (f *Fetcher) within(ok func(url string) bool) *Fetcher {
+	c := *f.Client
+	next := c.CheckRedirect
+	c.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if !ok(req.URL.String()) {
+			return errRedirectOffSite
+		}
+		if next != nil {
+			return next(req, via)
+		}
+		if len(via) >= maxRedirects { // safeClient's limit, for a client given without a policy
+			return errTooManyRedirects
+		}
+		return nil
+	}
+	return &Fetcher{Client: &c, UA: f.UA, limit: f.limit}
+}
+
 // Response is what came back, the body cut at MaxBody.
 type Response struct {
 	Status int

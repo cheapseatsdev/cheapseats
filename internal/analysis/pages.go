@@ -99,6 +99,15 @@ func analystPageURLs(brand config.Brand, results []run.Result, tried []Tried, di
 	return urls
 }
 
+type brandReaderKey struct{}
+
+// WithBrandReader gives Build the reader for the analyst's own-page reads (currentPagesText). The
+// app supplies one that reads only the brand's sites, refusing a redirect anywhere else, so text
+// from another host is never labelled with a brand URL. Without it the analyst reads no pages.
+func WithBrandReader(ctx context.Context, read VerifyPage) context.Context {
+	return context.WithValue(ctx, brandReaderKey{}, read)
+}
+
 // excerpt is the start of a page's text, at most n characters, and whether it is incomplete: the
 // reader stopped short of the page (cut), or the text ran past n. An incomplete excerpt ends
 // with the truncated marker, as a verification page does (readArtifacts).
@@ -112,11 +121,11 @@ func excerpt(text string, cut bool, n int) (string, bool) {
 }
 
 // currentPagesText reads the brand's pages the analyst is likely to target (analystPageURLs)
-// through the app's page reader, and writes their current text for the analyst, so it can leave
+// through the app's brand-only reader (WithBrandReader), and writes their current text for the analyst, so it can leave
 // out a candidate whose change a page already makes. It is "" when the app supplies no reader
 // or there is no page to read. A page that can't be read is listed as unknown, never as missing.
 func currentPagesText(ctx context.Context, brand config.Brand, results []run.Result, tried []Tried, dismissed []Dismissed) string {
-	read, _ := ctx.Value(verifierKey{}).(VerifyPage)
+	read, _ := ctx.Value(brandReaderKey{}).(VerifyPage)
 	if read == nil {
 		return ""
 	}

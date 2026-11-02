@@ -33,7 +33,7 @@ func pageCtxBuild(t *testing.T, cfg *config.Config, results []run.Result, tried 
 		b, _ := json.Marshal(value)
 		return json.Unmarshal(b, out)
 	}
-	ctx := WithVerifier(context.Background(), func(_ context.Context, u string) (string, bool, error) {
+	read := func(_ context.Context, u string) (string, bool, error) {
 		if len(prompts) == 0 {
 			before = append(before, u)
 		} else {
@@ -44,7 +44,8 @@ func pageCtxBuild(t *testing.T, cfg *config.Config, results []run.Result, tried 
 			return "", false, errors.New("connection refused by https://user:secret@acme.example")
 		}
 		return p.text, p.cut, nil
-	})
+	}
+	ctx := WithBrandReader(WithVerifier(context.Background(), read), read)
 	_, set, _, _, _ := verificationFixture()
 	if _, _, err := Build(ctx, cfg, set, results, tried, dismissed); err != nil {
 		t.Fatal(err)
@@ -150,17 +151,20 @@ func TestAnalystPagesSkipOtherTargetsAndStopAtTheCap(t *testing.T) {
 	}
 }
 
-// With no page reader, or nothing on the brand's sites to read, the prompt has no page section.
+// With no brand reader, or nothing on the brand's sites to read, the prompt has no page section.
+// The verifier, which follows redirects to any public host for outreach targets, is never used
+// for the analyst's pages.
 func TestAnalystPagesNeedAReaderAndAPage(t *testing.T) {
 	brand := config.Brand{Name: "Acme", Sites: []config.Site{{URL: "acme.example", Kind: "marketing"}}}
-	if s := currentPagesText(context.Background(), brand, nil, nil, nil); s != "" {
-		t.Fatalf("no reader, yet: %q", s)
-	}
 	reads := 0
-	ctx := WithVerifier(context.Background(), func(context.Context, string) (string, bool, error) {
+	read := func(context.Context, string) (string, bool, error) {
 		reads++
-		return "", false, errors.New("unused")
-	})
+		return "A page with plenty of words on it for the analyst to read today.", false, nil
+	}
+	if s := currentPagesText(WithVerifier(context.Background(), read), brand, nil, nil, nil); s != "" || reads != 0 {
+		t.Fatalf("read %d pages through the verifier: %q", reads, s)
+	}
+	ctx := WithBrandReader(context.Background(), read)
 	if s := currentPagesText(ctx, config.Brand{Name: "Acme"}, nil, nil, nil); s != "" || reads != 0 {
 		t.Fatalf("no brand page, yet %d reads: %q", reads, s)
 	}
