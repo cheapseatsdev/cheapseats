@@ -147,6 +147,6 @@ func currentPagesText(ctx context.Context, brand config.Brand, results []run.Res
 		t, truncated := excerpt(t, cut, MaxAnalystPageRunes)
 		fmt.Fprintf(&b, "- %s (truncated: %t): %q\n", u, truncated, t)
 	}
-	fmt.Fprintf(&b, "Compare each fix-page, positioning and new-page candidate on %s's sites with the text above before proposing it. A candidate whose change a supplied page already makes is not a candidate: leave it out (insights may say the page already covers it). A truncated excerpt is only the start of its page, so it cannot show that something is absent: what it lacks may be further down. A page that could not be read, or is not listed, is unknown, not missing.\n", brand.Name)
+	fmt.Fprintf(&b, "Compare each fix-page, positioning and new-page candidate on %s's sites with the text above before proposing it. A candidate whose change a supplied page already makes is not a candidate: leave it out (insights may say the page already covers it). A truncated excerpt is only the start of its page, so it cannot show that something is absent: what it lacks may be further down. A page that could not be read, or is not listed, is unknown, not missing. When a supplied page covers the topic but lacks the specific thing the answers need, propose a fix-page or positioning change to that page rather than a new page; propose a new page only when no supplied or known page covers the topic.\n", brand.Name)
 	return b.String()
 }

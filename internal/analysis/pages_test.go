@@ -107,6 +107,7 @@ func TestAnalystSeesCurrentBrandPages(t *testing.T) {
 		"- https://acme.example/install: could not be read; what it says now is unknown.",
 		"A candidate whose change a supplied page already makes is not a candidate",
 		"A truncated excerpt is only the start of its page, so it cannot show that something is absent",
+		"propose a fix-page or positioning change to that page rather than a new page; propose a new page only when no supplied or known page covers the topic",
 	} {
 		if !strings.Contains(p, s) {
 			t.Errorf("fixes prompt lacks %q", s)
