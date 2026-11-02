@@ -120,6 +120,7 @@ func (a *App) BuildFixes(ctx context.Context, id string) error {
 	ctx = analysis.WithVerifier(ctx, func(ctx context.Context, u string) (string, bool, error) {
 		return audit.ReadCurrent(ctx, u, reader)
 	})
+	ctx = analysis.WithBrandReader(ctx, brandPageReader(cfg.Brand, reader))
 	ctx = analysis.WithSiteFindings(ctx, a.siteFindings(ctx)) // the latest site audit, as evidence
 	sum := a.Summary(r, results)
 	ctx = analysis.WithOpportunities(ctx, sum.Opportunities)
@@ -133,6 +134,15 @@ func (a *App) BuildFixes(ctx context.Context, id string) error {
 	}
 	an, cost, err := analysis.Build(ctx, &cfg, r.Snapshot.Set, results, a.triedFor(ctx, r.SetID), a.dismissedFor(ctx))
 	return a.recordAnalysis(ctx, id, from, an, cost, err)
+}
+
+// brandPageReader reads a page for the analyst's own-page excerpts: only on the brand's sites,
+// with every redirect hop kept there, so another host's text is never labelled with a brand URL.
+func brandPageReader(brand config.Brand, o audit.CiteOptions) analysis.VerifyPage {
+	o.Within = brand.FirstParty
+	return func(ctx context.Context, u string) (string, bool, error) {
+		return audit.ReadCurrent(ctx, u, o)
+	}
 }
 
 // KeptAnalysisNote says which analysis is shown after a failed rebuild kept the earlier one.

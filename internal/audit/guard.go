@@ -63,10 +63,11 @@ var errBlocked = errors.New("refused: not a public address")
 var (
 	errTooManyRedirects = fmt.Errorf("more than %d redirects", maxRedirects)
 	errRedirectScheme   = errors.New("redirect to a URL that isn't http or https")
+	errRedirectOffSite  = errors.New("redirect to a URL outside the allowed sites")
 )
 
 // refusals are the guard's errors, which the fetcher returns as they are.
-var refusals = []error{errBlocked, errTooManyRedirects, errRedirectScheme}
+var refusals = []error{errBlocked, errTooManyRedirects, errRedirectScheme, errRedirectOffSite}
 
 // publicAddr reports whether an address is on the public internet.
 func publicAddr(a netip.Addr) bool {

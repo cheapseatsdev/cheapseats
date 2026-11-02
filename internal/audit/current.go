@@ -22,6 +22,12 @@ func ReadCurrent(ctx context.Context, u string, o CiteOptions) (text string, cut
 	if o.Fetcher == nil {
 		o.Fetcher = NewFetcher(nil, 4)
 	}
+	if o.Within != nil {
+		if !o.Within(u) {
+			return "", false, fmt.Errorf("current page unavailable: not on an allowed site")
+		}
+		o.Fetcher = o.Fetcher.within(o.Within)
+	}
 	if o.Now == nil {
 		o.Now = time.Now
 	}

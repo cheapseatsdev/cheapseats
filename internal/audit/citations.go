@@ -60,6 +60,11 @@ type CiteOptions struct {
 	// Reads a page's text another way when plain HTTP got an app shell that is empty without
 	// JavaScript, or a bot challenge; nil reads nothing more, and what plain HTTP got is the result.
 	Reader Reader
+	// Within, when set, limits ReadCurrent to the URLs it accepts: the page itself and every
+	// redirect hop, the robots.txt fetch's included. A hop elsewhere is refused and the page
+	// reads as unavailable, so text from another host is never labelled with the page asked
+	// for. The citation check and landing readings don't use it and follow redirects as before.
+	Within func(url string) bool
 }
 
 // maxText is the most of a page's text kept for matching.

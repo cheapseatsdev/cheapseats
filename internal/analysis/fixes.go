@@ -312,6 +312,9 @@ Observed run evidence:
 	prompt += opportunitiesText(ctx, brand)
 	prompt += objectionsText(ctx, brand)
 	prompt += misstatementsText(ctx, brand)
+	// The current text of the pages it is likely to target: without it, the analyst proposed
+	// changes the reviewer then found already made.
+	prompt += currentPagesText(ctx, cfg.Brand, results, tried, dismissed)
 
 	var a Analysis
 	cost, resp, err := generate(ctx, cfg, prompt, schema, &a)
