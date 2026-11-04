@@ -24,20 +24,21 @@ func nextStepsView(requested string, steps app.NextSteps) string {
 }
 
 // selectNextSteps keeps the three categories separate. Action filters do not turn an
-// investigation into a task, and set filtering applies to every category and to the analysis
-// errors, which every kind keeps. The candidates not promoted are left out unless omitted asks
+// investigation into a task. Set filtering applies to every category and to the analysis errors,
+// which every kind keeps; the status filter applies to every category, and without one a
+// dismissed item is left out, as a dismissed action is. The candidates not promoted are left out unless omitted asks
 // for them; then they follow the set filter and the limit, whatever the kind.
 func (s *Server) selectNextSteps(steps app.NextSteps, f app.QuickWinFilter, kind string, limit int, brief, omitted bool) app.NextSteps {
 	steps.Actions = s.App.FilterQuickWins(steps.Actions, f)
 	investigations := make([]app.NextInvestigation, 0, len(steps.Investigations))
 	for _, x := range steps.Investigations {
-		if f.Set == "" || x.SetID == f.Set {
+		if (f.Set == "" || x.SetID == f.Set) && statusShown(x.Status, f.Status) {
 			investigations = append(investigations, x)
 		}
 	}
 	findings := make([]app.NextFinding, 0, len(steps.Findings))
 	for _, x := range steps.Findings {
-		if f.Set == "" || x.SetID == f.Set {
+		if (f.Set == "" || x.SetID == f.Set) && statusShown(x.Status, f.Status) {
 			findings = append(findings, x)
 		}
 	}
@@ -67,6 +68,12 @@ func (s *Server) selectNextSteps(steps app.NextSteps, f app.QuickWinFilter, kind
 	steps.Actions = actionHandoffs(steps.Actions, brief)
 
 	steps.Investigations = readOnlyInvestigations(steps.Investigations)
+	for i := range steps.Investigations {
+		steps.Investigations[i].Attempts = briefAttempts(steps.Investigations[i].Attempts)
+	}
+	for i := range steps.Findings {
+		steps.Findings[i].Attempts = briefAttempts(steps.Findings[i].Attempts)
+	}
 
 	switch kind {
 	case "actions":
@@ -77,6 +84,15 @@ func (s *Server) selectNextSteps(steps app.NextSteps, f app.QuickWinFilter, kind
 		steps.Actions, steps.Investigations = []app.QuickWin{}, []app.NextInvestigation{}
 	}
 	return steps
+}
+
+// statusShown is whether an item in status passes the status filter want, as FilterQuickWins
+// reads it for actions.
+func statusShown(status, want string) bool {
+	if want == "" {
+		return status != string(app.Dismissed)
+	}
+	return status == want
 }
 
 func (s *Server) apiNextSteps(w http.ResponseWriter, r *http.Request) {

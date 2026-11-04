@@ -136,12 +136,24 @@ func ReadAnalysisError(stored string) AnalysisFailure {
 	return out
 }
 
+// StepWork is where an investigation or finding stands and the work recorded on it. RunID, Kind
+// and Number address it, as MarkStep and the mark_fix tool take them: an investigation or finding
+// by its place in the run's list, and an earlier suggestion shown as an investigation (Legacy) by
+// its rank as an action.
+type StepWork struct {
+	Kind     string    `json:"kind"`
+	Number   int       `json:"number"`
+	Status   string    `json:"status"`
+	Attempts []Attempt `json:"attempts,omitempty"`
+}
+
 type NextInvestigation struct {
 	analysis.Investigation
 	SetID   string    `json:"set_id"`
 	SetName string    `json:"set_name"`
 	RunID   string    `json:"run_id"`
 	Legacy  *QuickWin `json:"legacy,omitempty"`
+	StepWork
 }
 
 type NextFinding struct {
@@ -149,6 +161,30 @@ type NextFinding struct {
 	SetID   string `json:"set_id"`
 	SetName string `json:"set_name"`
 	RunID   string `json:"run_id"`
+	StepWork
+}
+
+// Open is the investigations and findings nothing has been recorded on yet, or whose work was
+// withdrawn: what a summary still asks someone to look at.
+func (n NextSteps) Open() ([]NextInvestigation, []NextFinding) {
+	inv, fnd := []NextInvestigation{}, []NextFinding{}
+	for _, x := range n.Investigations {
+		if x.Status == Open {
+			inv = append(inv, x)
+		}
+	}
+	for _, x := range n.Findings {
+		if x.Status == Open {
+			fnd = append(fnd, x)
+		}
+	}
+	return inv, fnd
+}
+
+// stepWork is investigation or finding n of run runID's work, from the attempts recorded on it.
+func stepWork(tried FixAttempts, runID, kind string, n int) StepWork {
+	on := readOnlyWorkHistory(tried.OnStep(runID, kind, n))
+	return StepWork{Kind: kind, Number: n, Status: FixStatus(on), Attempts: on}
 }
 
 func emptyNextSteps() NextSteps {
@@ -163,6 +199,7 @@ func (a *App) NextSteps(ctx context.Context) (NextSteps, error) {
 	if err != nil {
 		return out, err
 	}
+	tried := a.FixAttempts(ctx)
 	for _, q := range all {
 		if q.Verification.Status == "verified" {
 			out.Actions = append(out.Actions, q)
@@ -194,16 +231,16 @@ func (a *App) NextSteps(ctx context.Context) (NextSteps, error) {
 		if err != nil {
 			return out, err
 		}
-		for _, inv := range an.Investigations {
+		for i, inv := range an.Investigations {
 			inv.Prompts, inv.PromptIDs = currentAdvicePrompts(inv.Prompts, inv.PromptIDs, r.Snapshot.Set, s)
 			if len(inv.Prompts) > 0 {
-				out.Investigations = append(out.Investigations, NextInvestigation{Investigation: inv, SetID: s.ID, SetName: s.Name, RunID: id})
+				out.Investigations = append(out.Investigations, NextInvestigation{Investigation: inv, SetID: s.ID, SetName: s.Name, RunID: id, StepWork: stepWork(tried, id, StepInvestigation, i+1)})
 			}
 		}
-		for _, f := range an.Findings {
+		for i, f := range an.Findings {
 			f.Prompts, f.PromptIDs = currentAdvicePrompts(f.Prompts, f.PromptIDs, r.Snapshot.Set, s)
 			if len(f.Prompts) > 0 {
-				out.Findings = append(out.Findings, NextFinding{Finding: f, SetID: s.ID, SetName: s.Name, RunID: id})
+				out.Findings = append(out.Findings, NextFinding{Finding: f, SetID: s.ID, SetName: s.Name, RunID: id, StepWork: stepWork(tried, id, StepFinding, i+1)})
 			}
 		}
 		for _, o := range an.Omitted {
@@ -283,11 +320,11 @@ func (a *App) RunNextSteps(ctx context.Context, id string) (NextSteps, error) {
 			out.Investigations = append(out.Investigations, legacyInvestigation(q))
 		}
 	}
-	for _, inv := range an.Investigations {
-		out.Investigations = append(out.Investigations, NextInvestigation{Investigation: inv, SetID: r.SetID, SetName: r.Snapshot.Set.Name, RunID: id})
+	for i, inv := range an.Investigations {
+		out.Investigations = append(out.Investigations, NextInvestigation{Investigation: inv, SetID: r.SetID, SetName: r.Snapshot.Set.Name, RunID: id, StepWork: stepWork(tried, id, StepInvestigation, i+1)})
 	}
-	for _, f := range an.Findings {
-		out.Findings = append(out.Findings, NextFinding{Finding: f, SetID: r.SetID, SetName: r.Snapshot.Set.Name, RunID: id})
+	for i, f := range an.Findings {
+		out.Findings = append(out.Findings, NextFinding{Finding: f, SetID: r.SetID, SetName: r.Snapshot.Set.Name, RunID: id, StepWork: stepWork(tried, id, StepFinding, i+1)})
 	}
 	for _, o := range an.Omitted {
 		out.Omitted = append(out.Omitted, NextOmission{Omission: o, SetID: r.SetID, SetName: r.Snapshot.Set.Name, RunID: id})
@@ -308,7 +345,8 @@ func legacyInvestigation(q QuickWin) NextInvestigation {
 		Check:    "Read the current artifact and relevant product facts. Check whether the change already exists, whether it fits the brand's positioning, and any eligibility rules. Do not implement it during this check.",
 		Decision: "Keep only a verified, in-scope change as an action; close an already completed or unsuitable suggestion, or record a supported market finding.",
 		Evidence: q.Evidence,
-	}, SetID: q.SetID, SetName: q.SetName, RunID: q.RunID, Legacy: &q}
+	}, SetID: q.SetID, SetName: q.SetName, RunID: q.RunID, Legacy: &q,
+		StepWork: StepWork{Kind: StepAction, Number: q.Rank, Status: q.Status}}
 }
 
 func currentAdvicePrompts(ns []int, ids []string, then, now sets.Set) ([]int, []string) {

@@ -188,7 +188,8 @@ func (s *Server) frontDoor(ctx context.Context) FrontDoor {
 		fd.Audit = &doorAudit{At: a.At, AgeDays: ageDays(a.At, now), Errors: a.Errors(), Warnings: a.Warnings()}
 	}
 	steps, _ := s.App.NextSteps(ctx)
-	fd.Investigations, fd.MarketFindings = len(steps.Investigations), len(steps.Findings)
+	inv, fnd := steps.Open()
+	fd.Investigations, fd.MarketFindings = len(inv), len(fnd)
 	for _, q := range steps.Actions {
 		if q.Status == app.Open {
 			fd.OpenFixes++

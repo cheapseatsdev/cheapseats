@@ -78,6 +78,10 @@ rebuild.
 ## History and compatibility
 
 Work status (open, proposed, accepted, dismissed) is separate from verification readiness.
+Investigations and market findings carry a work status too, and can be addressed like an action
+([addressing a next step](reading-a-run.md#addressing-a-next-step)). Schema 20 adds
+`fix_attempts.kind` for that; it backs up schema 19 first, and every earlier attempt reads as
+work on an action.
 Earlier fix lists remain readable as investigations with their work history. Their verification
 was not recorded; an accepted PR does not establish readiness or a visibility improvement.
 Rebuild analysis to apply the new checks to stored answers.

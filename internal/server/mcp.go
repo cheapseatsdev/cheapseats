@@ -134,11 +134,11 @@ func (s *Server) mcpHandler() http.Handler {
 			}
 			return nil, fmt.Errorf("run %s has no result %d", a.Run, a.Result)
 		})
-	addTool(srv, "get_next_steps", "Next steps from each set's latest analysis, separated into verified actions, read-only investigations and market findings. Only actions include implementation prompts. Legacy suggestions without recorded verification remain investigations. Respect the brand's chosen scope: an intentional limitation may need no change. Use kind to focus on one category, and brief to omit action handoffs. Set omitted to also list the candidates each analysis proposed that did not become actions, with the stage that stopped each (filter, cap or review) and why: use it to explain an analysis with few or no actions. Free; uses stored analysis.",
+	addTool(srv, "get_next_steps", "Next steps from each set's latest analysis, separated into verified actions, read-only investigations and market findings. Only actions include implementation prompts. Legacy suggestions without recorded verification remain investigations. Respect the brand's chosen scope: an intentional limitation may need no change. Every investigation and finding has a status (open, proposed, accepted or dismissed) and the work recorded on it; its run_id, kind and number are what mark_fix takes to address it. Use kind to focus on one category, and brief to omit action handoffs. Set omitted to also list the candidates each analysis proposed that did not become actions, with the stage that stopped each (filter, cap or review) and why: use it to explain an analysis with few or no actions. Free; uses stored analysis.",
 		func(ctx context.Context, a struct {
 			Set      string `json:"set,omitempty" jsonschema:"only this prompt set"`
 			Kind     string `json:"kind,omitempty" jsonschema:"actions, investigations, market_findings, or empty for all"`
-			Status   string `json:"status,omitempty" jsonschema:"action work status: open, proposed, accepted or dismissed"`
+			Status   string `json:"status,omitempty" jsonschema:"work status: open, proposed, accepted or dismissed; dismissed items are left out unless asked for"`
 			Priority string `json:"priority,omitempty" jsonschema:"action priority: urgent, high, medium or low"`
 			Limit    int    `json:"limit,omitempty" jsonschema:"maximum items per category"`
 			Brief    bool   `json:"brief,omitempty" jsonschema:"omit action implementation prompts"`
@@ -178,21 +178,22 @@ func (s *Server) mcpHandler() http.Handler {
 			}
 			return besideList{actionHandoffs(out, a.Brief), map[string]any{"analysis_errors": failed}}, nil
 		})
-	addTool(srv, "mark_fix", "Record work submitted for a fix: the commit or pull request, as proposed (open PR) or accepted (merged). The fix then leaves the open actions; a later fix for the same page stays open and shows this attempt and its outcome. Or dismiss a fix the team won't do: state dismissed, no url, and the reason as the note. The analyst is told every dismissal's reason and stops proposing fixes that rest on it.",
+	addTool(srv, "mark_fix", "Address any next step: an action, an investigation or a market finding. Record work submitted for it, the commit or pull request, as proposed (open PR) or accepted (merged); the analyst is told what shipped and how it did. Or close it without a change: state dismissed, no url, and the note says why, for an investigation what the check found (\"already covered by /docs/engines/\"). The analyst is told every dismissal's reason and stops proposing work that rests on it. A later action for the same page stays open and shows an action's attempts and outcome; work on an investigation or finding settles only that item.",
 		func(ctx context.Context, a struct {
-			Run   string `json:"run" jsonschema:"the run the fix is from (run_id on a quick win)"`
-			Rank  int    `json:"rank" jsonschema:"the fix's rank in that run"`
+			Run   string `json:"run" jsonschema:"the run the item is from (its run_id)"`
+			Kind  string `json:"kind,omitempty" jsonschema:"action (default), investigation or finding: the item's kind in get_next_steps"`
+			Rank  int    `json:"rank" jsonschema:"an action's rank, or an investigation's or finding's number"`
 			URL   string `json:"url,omitempty" jsonschema:"the commit or pull request URL; not needed to dismiss"`
 			State string `json:"state,omitempty" jsonschema:"proposed (default), accepted or dismissed"`
 			Note  string `json:"note,omitempty" jsonschema:"what was done, briefly; for a dismissal, why (required)"`
 		}) (any, error) {
-			at, err := s.App.MarkFix(ctx, a.Run, a.Rank, a.URL, a.State, a.Note, "mcp")
+			at, err := s.App.MarkStep(ctx, a.Run, a.Kind, a.Rank, a.URL, a.State, a.Note, "mcp")
 			if err != nil {
 				return nil, err
 			}
 			return briefAttempts([]app.Attempt{at})[0], nil
 		})
-	addTool(srv, "set_attempt_state", "Move work submitted for a fix on: accepted when its pull request merges, withdrawn when it's closed (which reopens the fix). Withdrawing a dismissal undoes it.",
+	addTool(srv, "set_attempt_state", "Move work recorded with mark_fix on: accepted when its pull request merges, withdrawn when it's closed (which reopens the fix). Withdrawing a dismissal undoes it.",
 		func(ctx context.Context, a struct {
 			ID    int64  `json:"id" jsonschema:"the attempt id, from mark_fix or list_attempts"`
 			State string `json:"state" jsonschema:"proposed, accepted, withdrawn or dismissed"`
