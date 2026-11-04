@@ -652,3 +652,34 @@ func TestUpgradeReadsAnAnalysisStoredBeforeOmitted(t *testing.T) {
 		t.Fatalf("the hub lost the omitted list: %+v %v", all.Omitted, err)
 	}
 }
+
+// Attempts recorded before work could be recorded on investigations and findings were all on
+// actions: upgrading marks them so, so each still settles the action it was recorded on.
+func TestUpgradeKeepsEarlierAttemptsOnTheirActions(t *testing.T) {
+	data := t.TempDir()
+	old, err := store.OpenAt(data, 19)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := old.Exec(`INSERT INTO fix_attempts(run_id,set_id,fix_rank,fix,target_key,url,state,note,marked_by,created_at,updated_at) VALUES ('r','s',2,'{}','x','https://example.org/pull/1','accepted','','test','2026-10-20T12:00:00Z','2026-10-20T12:00:00Z')`); err != nil {
+		t.Fatal(err)
+	}
+	old.Close()
+	db, err := store.Open(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := os.Stat(filepath.Join(data, "cheapseats.db.bak-v19")); err != nil {
+		t.Fatalf("no backup before adding attempt kinds: %v", err)
+	}
+	var kind string
+	var rank int
+	if err := db.QueryRow(`SELECT kind, fix_rank FROM fix_attempts`).Scan(&kind, &rank); err != nil || kind != StepAction || rank != 2 {
+		t.Fatalf("earlier attempt: kind %q rank %d %v", kind, rank, err)
+	}
+	if db2, err := store.OpenAt(data, 19); err == nil {
+		db2.Close()
+		t.Fatal("an older writer opened data with attempt kinds")
+	}
+}

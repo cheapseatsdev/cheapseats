@@ -69,6 +69,8 @@ merged) or **withdrawn** (closed, which reopens the fix). An attempt can be reco
 state and moved to any other, since a pull request can be reopened or a merge reverted. A fix
 the team won't do is **dismissed**, with the reason as its note and no link; a dismissal can
 only be withdrawn, which undoes it, and merged work must be withdrawn before its fix is dismissed.
+The same states apply to work recorded on an investigation or market finding
+(`fix_attempts.kind`); a dismissal there closes the item with what the check found.
 
 ```mermaid
 stateDiagram-v2

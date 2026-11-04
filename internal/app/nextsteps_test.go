@@ -107,3 +107,65 @@ func TestNextStepsEnvelopeSurvivesReopenWithFindingsAndChecks(t *testing.T) {
 		t.Fatalf("stored next steps: %+v %v", next, err)
 	}
 }
+
+// Any next step can be addressed. Closing an investigation settles that investigation only: an
+// action for the same page stays open, as it would if the investigation's dismissal were read as
+// a decision about every change to the page. The analyst hears the reason and the shipped work.
+func TestMarkStepSettlesOnlyTheInvestigationOrFindingItNames(t *testing.T) {
+	a, runs := fixMatchApp(t, "https://cheapseats.dev/plans")
+	ctx := context.Background()
+	fixes, _, _ := a.Fixes(ctx, runs["s"])
+	target := fixes[0].Target
+	an := analysis.Analysis{Fixes: fixes,
+		Investigations: []analysis.Investigation{{Title: "Check the plans page explains the tracks", Why: "w", Check: "c", Decision: "d", Evidence: "e", Target: target, PromptIDs: []string{"s1"}}},
+		Findings:       []analysis.Finding{{Title: "Buyers ask whether API answers match the apps", Detail: "d", Evidence: "e", PromptIDs: []string{"s1"}}}}
+	if _, err := a.DB.Exec(`UPDATE runs SET fixes=? WHERE id=?`, analysis.Encode(an), runs["s"]); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.MarkStep(ctx, runs["s"], StepInvestigation, 1, "", "dismissed", "Already covered by the engines page", "test"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.MarkStep(ctx, runs["s"], StepFinding, 1, "https://example.org/pull/9", "accepted", "", "test"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.MarkStep(ctx, runs["s"], StepInvestigation, 2, "", "dismissed", "x", "test"); err == nil {
+		t.Error("marked an investigation the run doesn't have")
+	}
+	if _, err := a.MarkStep(ctx, runs["s"], "insight", 1, "", "dismissed", "x", "test"); err == nil {
+		t.Error("marked an unknown kind")
+	}
+	next, err := a.NextSteps(ctx)
+	if err != nil || len(next.Investigations) != 1 || len(next.Findings) != 1 {
+		t.Fatalf("next steps: %+v %v", next, err)
+	}
+	inv, fnd := next.Investigations[0], next.Findings[0]
+	if inv.Kind != StepInvestigation || inv.Number != 1 || inv.Status != "dismissed" || len(inv.Attempts) != 1 || inv.Attempts[0].Kind != StepInvestigation {
+		t.Errorf("investigation work: %+v", inv.StepWork)
+	}
+	if fnd.Kind != StepFinding || fnd.Status != "accepted" {
+		t.Errorf("finding work: %+v", fnd.StepWork)
+	}
+	for _, q := range next.Actions {
+		if q.RunID == runs["s"] && q.Target == target && q.Status != Open {
+			t.Errorf("closing an investigation settled the action for the same page: %s", q.Status)
+		}
+	}
+	if oi, of := next.Open(); len(oi) != 0 || len(of) != 0 {
+		t.Errorf("addressed items still open: %d %d", len(oi), len(of))
+	}
+	heard := false
+	for _, d := range a.dismissedFor(ctx) {
+		heard = heard || d.Title == inv.Title && d.Reason == "Already covered by the engines page"
+	}
+	shipped := false
+	for _, tr := range a.triedFor(ctx, "s") {
+		shipped = shipped || tr.Title == fnd.Title && tr.URL == "https://example.org/pull/9"
+	}
+	if !heard || !shipped {
+		t.Errorf("the analyst isn't told: dismissal %v, shipped %v", heard, shipped)
+	}
+	hist, err := a.RunNextSteps(ctx, runs["s"])
+	if err != nil || len(hist.Investigations) != 1 || hist.Investigations[0].Status != "dismissed" {
+		t.Errorf("run page lost the investigation's work: %+v %v", hist.Investigations, err)
+	}
+}

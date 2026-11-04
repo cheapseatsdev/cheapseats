@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -22,9 +23,12 @@ import (
 // is kept as it was; a later fix with the same target stays open, as a retry of the same idea, and
 // shows the attempts before it with their outcomes.
 type Attempt struct {
-	ID        int64        `json:"id"`
-	RunID     string       `json:"run_id"`
-	SetID     string       `json:"set_id"`
+	ID    int64  `json:"id"`
+	RunID string `json:"run_id"`
+	SetID string `json:"set_id"`
+	// Which list of the run's analysis the item is from (StepAction and the rest), and its rank
+	// there: an action's rank, or an investigation's or finding's 1-based place in its list.
+	Kind      string       `json:"kind"`
 	Rank      int          `json:"rank"`
 	Fix       analysis.Fix `json:"fix"`
 	URL       string       `json:"url"`
@@ -269,9 +273,29 @@ const (
 	MaxAttemptNote = 4096
 )
 
-// MarkFix records work submitted for fix rank of run runID: the commit or pull request at link, in
-// state (proposed when empty). A dismissal needs no link but needs its reason as the note.
+// The kinds of next step work can be recorded on, as fix_attempts.kind stores them.
+const (
+	StepAction        = "action"
+	StepInvestigation = "investigation"
+	StepFinding       = "finding"
+)
+
+// MarkFix records work submitted for fix rank of run runID: MarkStep on an action.
 func (a *App) MarkFix(ctx context.Context, runID string, rank int, link, state, note, by string) (Attempt, error) {
+	return a.MarkStep(ctx, runID, StepAction, rank, link, state, note, by)
+}
+
+// MarkStep records work submitted for next step n of kind in run runID (an action's rank, or an
+// investigation's or finding's number): the commit or pull request at link, in state (proposed
+// when empty). A dismissal needs no link but needs its reason as the note; on an investigation or
+// a finding it closes the item with what the check found.
+func (a *App) MarkStep(ctx context.Context, runID, kind string, n int, link, state, note, by string) (Attempt, error) {
+	if kind == "" {
+		kind = StepAction
+	}
+	if kind != StepAction && kind != StepInvestigation && kind != StepFinding {
+		return Attempt{}, fmt.Errorf("kind is action, investigation or finding, not %q", kind)
+	}
 	link, note = strings.TrimSpace(link), strings.TrimSpace(note)
 	if len(link) > MaxAttemptURL {
 		return Attempt{}, fmt.Errorf("the link is %d bytes; at most %d", len(link), MaxAttemptURL)
@@ -300,24 +324,59 @@ func (a *App) MarkFix(ctx context.Context, runID string, rank int, link, state, 
 	if err != nil {
 		return Attempt{}, fmt.Errorf("no run %q", runID)
 	}
-	fixes, _, _ := a.Fixes(ctx, runID)
-	for _, f := range fixes {
-		if f.Rank != rank {
-			continue
-		}
-		now := store.Now()
-		at := Attempt{RunID: runID, SetID: r.SetID, Rank: rank, Fix: f, URL: link, State: st, Note: note, By: by, CreatedAt: now, UpdatedAt: now}
-		AttemptTransitions.Check("fix_attempts", newAttempt, at.State)
-		res, err := a.DB.ExecContext(ctx, `INSERT INTO fix_attempts(run_id,set_id,fix_rank,fix,target_key,url,state,note,marked_by,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-			at.RunID, at.SetID, at.Rank, mustJSON(f), TargetKey(f.Target), at.URL, at.State, at.Note, at.By, at.CreatedAt, at.UpdatedAt)
-		if err != nil {
-			return Attempt{}, err
-		}
-		at.ID, _ = res.LastInsertId()
-		at.Outcome = a.outcome(ctx, at)
-		return at, nil
+	f, ok, err := a.stepAt(ctx, runID, kind, n)
+	if err != nil {
+		return Attempt{}, err
 	}
-	return Attempt{}, fmt.Errorf("run %s has no fix %d", runID, rank)
+	if !ok {
+		if kind == StepAction {
+			return Attempt{}, fmt.Errorf("run %s has no fix %d", runID, n)
+		}
+		return Attempt{}, fmt.Errorf("run %s has no %s %d", runID, kind, n)
+	}
+	now := store.Now()
+	at := Attempt{RunID: runID, SetID: r.SetID, Kind: kind, Rank: n, Fix: f, URL: link, State: st, Note: note, By: by, CreatedAt: now, UpdatedAt: now}
+	AttemptTransitions.Check("fix_attempts", newAttempt, at.State)
+	res, err := a.DB.ExecContext(ctx, `INSERT INTO fix_attempts(run_id,set_id,kind,fix_rank,fix,target_key,url,state,note,marked_by,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+		at.RunID, at.SetID, at.Kind, at.Rank, mustJSON(f), TargetKey(f.Target), at.URL, at.State, at.Note, at.By, at.CreatedAt, at.UpdatedAt)
+	if err != nil {
+		return Attempt{}, err
+	}
+	at.ID, _ = res.LastInsertId()
+	at.Outcome = a.outcome(ctx, at)
+	return at, nil
+}
+
+// stepAt is next step n of kind in run runID, as an analysis.Fix so an attempt keeps it the way it
+// keeps an action: its title, target, prompts and evidence, which the analyst and the outcome read.
+// An investigation or finding is numbered by its place in the run's stored list, from 1.
+func (a *App) stepAt(ctx context.Context, runID, kind string, n int) (analysis.Fix, bool, error) {
+	if kind == StepAction {
+		fixes, _, _ := a.Fixes(ctx, runID)
+		for _, f := range fixes {
+			if f.Rank == n {
+				return f, true, nil
+			}
+		}
+		return analysis.Fix{}, false, nil
+	}
+	var body sql.NullString
+	if err := a.DB.QueryRowContext(ctx, `SELECT fixes FROM runs WHERE id=?`, runID).Scan(&body); err != nil {
+		return analysis.Fix{}, false, err
+	}
+	an, err := analysis.DecodeAnalysis(body.String)
+	if err != nil {
+		return analysis.Fix{}, false, err
+	}
+	switch {
+	case kind == StepInvestigation && n >= 1 && n <= len(an.Investigations):
+		x := an.Investigations[n-1]
+		return analysis.Fix{Rank: n, Title: x.Title, Target: x.Target, Check: x.Check, Decision: x.Decision, Evidence: x.Evidence, Prompts: x.Prompts, PromptIDs: x.PromptIDs}, true, nil
+	case kind == StepFinding && n >= 1 && n <= len(an.Findings):
+		x := an.Findings[n-1]
+		return analysis.Fix{Rank: n, Title: x.Title, Claim: x.Detail, Evidence: x.Evidence, Prompts: x.Prompts, PromptIDs: x.PromptIDs}, true, nil
+	}
+	return analysis.Fix{}, false, nil
 }
 
 // triedFor is the set's ten newest shipped attempts, for the analyst. Withdrawn and dismissed ones
@@ -400,7 +459,7 @@ func (a *App) Attempts(ctx context.Context, setID string) ([]Attempt, error) {
 
 // attempts is Attempts made at or after since (any time, if empty), with their outcomes.
 func (a *App) attempts(ctx context.Context, setID, since string) ([]Attempt, error) {
-	q, args := `SELECT id,run_id,set_id,fix_rank,fix,url,state,note,marked_by,created_at,updated_at FROM fix_attempts WHERE created_at>=?`, []any{since}
+	q, args := `SELECT id,run_id,set_id,kind,fix_rank,fix,url,state,note,marked_by,created_at,updated_at FROM fix_attempts WHERE created_at>=?`, []any{since}
 	if setID != "" {
 		q += ` AND set_id=?`
 		args = append(args, setID)
@@ -414,7 +473,7 @@ func (a *App) attempts(ctx context.Context, setID, since string) ([]Attempt, err
 	for rows.Next() {
 		var at Attempt
 		var fix string
-		if err := rows.Scan(&at.ID, &at.RunID, &at.SetID, &at.Rank, &fix, &at.URL, &at.State, &at.Note, &at.By, &at.CreatedAt, &at.UpdatedAt); err != nil {
+		if err := rows.Scan(&at.ID, &at.RunID, &at.SetID, &at.Kind, &at.Rank, &fix, &at.URL, &at.State, &at.Note, &at.By, &at.CreatedAt, &at.UpdatedAt); err != nil {
 			return nil, err
 		}
 		json.Unmarshal([]byte(fix), &at.Fix)
@@ -429,29 +488,40 @@ func (a *App) attempts(ctx context.Context, setID, since string) ([]Attempt, err
 	return out, nil
 }
 
-// FixAttempts is the attempts that bear on fixes: those recorded on a fix (by run and rank), and
-// those on any fix for the same target (by TargetKey), newest first.
+// FixAttempts is the attempts that bear on next steps: those recorded on an item (by run, kind and
+// rank), and those on any action for the same target (by TargetKey), newest first. Work on an
+// investigation or finding settles only that item: closing a check on a page is not a decision
+// about every later change to it.
 type FixAttempts struct {
 	byFix    map[string][]Attempt
 	byTarget map[string][]Attempt
 }
 
-func fixKey(runID string, rank int) string { return fmt.Sprintf("%s#%d", runID, rank) }
+func fixKey(runID, kind string, rank int) string { return fmt.Sprintf("%s#%s#%d", runID, kind, rank) }
 
 func (a *App) FixAttempts(ctx context.Context) FixAttempts {
 	all, _ := a.Attempts(ctx, "")
 	fa := FixAttempts{byFix: map[string][]Attempt{}, byTarget: map[string][]Attempt{}}
 	for _, at := range all {
-		k := fixKey(at.RunID, at.Rank)
+		k := fixKey(at.RunID, at.Kind, at.Rank)
 		fa.byFix[k] = append(fa.byFix[k], at)
-		t := TargetKey(at.Fix.Target)
-		fa.byTarget[t] = append(fa.byTarget[t], at)
+		if at.Kind == StepAction {
+			t := TargetKey(at.Fix.Target)
+			fa.byTarget[t] = append(fa.byTarget[t], at)
+		}
 	}
 	return fa
 }
 
 // On is the attempts recorded on fix rank of run runID, which settle its status.
-func (fa FixAttempts) On(runID string, rank int) []Attempt { return fa.byFix[fixKey(runID, rank)] }
+func (fa FixAttempts) On(runID string, rank int) []Attempt {
+	return fa.byFix[fixKey(runID, StepAction, rank)]
+}
+
+// OnStep is the attempts recorded on investigation or finding n of run runID, which settle its status.
+func (fa FixAttempts) OnStep(runID, kind string, n int) []Attempt {
+	return fa.byFix[fixKey(runID, kind, n)]
+}
 
 // Status is where fix f of run runID stands. The attempts on it decide first. Failing those, an
 // attempt on the same target made after the fix list was built (fixesAt) covers it too: the list

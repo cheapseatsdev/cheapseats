@@ -224,8 +224,10 @@ func New(a *app.App) (*Server, error) {
 		},
 		"fixmd": func(set sets.Set, f []analysis.Fix) string { return analysis.Markdown(set, f) },
 		"work": func(runID string, rank int, status string, on, earlier []app.Attempt, back string) fixWork {
-			return fixWork{runID, rank, status, on, earlier, back}
+			return fixWork{RunID: runID, Rank: rank, Status: status, On: on, Earlier: earlier, Back: back,
+				Path: fmt.Sprintf("/runs/%s/fixes/%d/attempts", runID, rank), Why: "Why the team won't do it", Close: "Dismiss"}
 		},
+		"stepwork": stepWorkView,
 	}
 	s.pages = map[string]*template.Template{}
 	for _, p := range []string{"home", "set", "run", "rankings", "quickwins", "search", "login", "searches", "audit", "crawlers", "regrade", "review", "evaluation", "evaluation-case", "evaluation-approval", "evaluation-dataset", "evaluation-check", "evaluation-checks", "evaluation-session", "evaluation-batch", "evaluation-experiment-new", "evaluation-experiment", "evaluation-experiment-review", "evaluation-runs", "evaluation-run-import"} {
@@ -346,9 +348,13 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /runs/{id}", s.runPage)
 	mux.HandleFunc("POST /runs/{id}/fixes", s.rebuildFixesForm)
 	mux.HandleFunc("POST /runs/{id}/fixes/{rank}/attempts", s.markFixForm)
+	mux.HandleFunc("POST /runs/{id}/investigations/{rank}/attempts", s.markStepForm(app.StepInvestigation))
+	mux.HandleFunc("POST /runs/{id}/findings/{rank}/attempts", s.markStepForm(app.StepFinding))
 	mux.HandleFunc("POST /attempts/{aid}/state", s.attemptStateForm)
 	mux.HandleFunc("GET /api/attempts", s.apiAttempts)
-	mux.HandleFunc("POST /api/runs/{id}/fixes/{rank}/attempts", s.apiMarkFix)
+	mux.HandleFunc("POST /api/runs/{id}/fixes/{rank}/attempts", s.apiMarkStep(app.StepAction))
+	mux.HandleFunc("POST /api/runs/{id}/investigations/{rank}/attempts", s.apiMarkStep(app.StepInvestigation))
+	mux.HandleFunc("POST /api/runs/{id}/findings/{rank}/attempts", s.apiMarkStep(app.StepFinding))
 	mux.HandleFunc("POST /api/attempts/{aid}", s.apiAttemptState)
 	mux.HandleFunc("POST /runs/{id}/cancel", s.cancelForm)
 	mux.HandleFunc("POST /runs/{id}/retry", s.retryForm)
@@ -998,6 +1004,7 @@ func (s *Server) spend(ctx context.Context) map[string]any {
 func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	steps, _ := s.App.NextSteps(ctx)
+	openInv, openFnd := steps.Open()
 	qw := s.App.FilterQuickWins(steps.Actions, app.QuickWinFilter{})
 	if len(qw) > 5 {
 		qw = qw[:5]
@@ -1016,7 +1023,7 @@ func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 	for _, c := range s.cards(ctx, progress) {
 		rows = append(rows, HomeRow{SetCard: c, Search: latest[c.Set.ID+"/search"], Recall: latest[c.Set.ID+"/recall"]})
 	}
-	s.render(w, "home", map[string]any{"Progress": progress, "Rows": rows, "QuickWins": qw, "Investigations": head(steps.Investigations, 3), "MarketFindings": head(steps.Findings, 3), "AnalysisErrors": steps.Errors, "Spend": s.spend(ctx)})
+	s.render(w, "home", map[string]any{"Progress": progress, "Rows": rows, "QuickWins": qw, "Investigations": head(openInv, 3), "MarketFindings": head(openFnd, 3), "AnalysisErrors": steps.Errors, "Spend": s.spend(ctx)})
 }
 
 // RunRow is one run in a set's runs table, with its search-track scores when it finished.
@@ -1178,6 +1185,17 @@ type fixWork struct {
 	Status      string
 	On, Earlier []app.Attempt
 	Back        string
+	// Path is where its forms post; Why and Close word the form that closes it without a change.
+	Path, Why, Close string
+}
+
+// stepWorkView is an investigation's or finding's work for the "work" template. Closing a check
+// records what it found; an earlier suggestion shown as an investigation is still addressed as
+// the action it was.
+func stepWorkView(w app.StepWork, runID string) fixWork {
+	path := map[string]string{app.StepAction: "fixes", app.StepInvestigation: "investigations", app.StepFinding: "findings"}[w.Kind]
+	return fixWork{RunID: runID, Rank: w.Number, Status: w.Status, On: w.Attempts,
+		Path: fmt.Sprintf("/runs/%s/%s/%d/attempts", runID, path, w.Number), Why: "What the check found, or why it needs no work", Close: "Close"}
 }
 
 // who names the person marking a fix: the email a signing-in proxy passed, else how they came in.
@@ -1214,6 +1232,19 @@ func (s *Server) markFixForm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, back(r, fmt.Sprintf("/runs/%s#fix-%d", id, rank)), http.StatusSeeOther)
+}
+
+// markStepForm records work on an investigation or finding from its card, then goes back to it.
+func (s *Server) markStepForm(kind string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id := r.PathValue("id")
+		n, _ := strconv.Atoi(r.PathValue("rank"))
+		if _, err := s.App.MarkStep(r.Context(), id, kind, n, r.FormValue("url"), r.FormValue("state"), r.FormValue("note"), s.who(r, "web")); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		http.Redirect(w, r, back(r, "/next-steps"), http.StatusSeeOther)
+	}
 }
 
 func (s *Server) attemptStateForm(w http.ResponseWriter, r *http.Request) {
@@ -1514,19 +1545,22 @@ func (s *Server) apiAttempts(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, briefAttempts(at))
 }
 
-func (s *Server) apiMarkFix(w http.ResponseWriter, r *http.Request) {
-	var in struct{ URL, State, Note string }
-	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
-		httpErr(w, err, 400)
-		return
+// apiMarkStep records work on next step {rank} of kind in run {id}.
+func (s *Server) apiMarkStep(kind string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var in struct{ URL, State, Note string }
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			httpErr(w, err, 400)
+			return
+		}
+		rank, _ := strconv.Atoi(r.PathValue("rank"))
+		at, err := s.App.MarkStep(r.Context(), r.PathValue("id"), kind, rank, in.URL, in.State, in.Note, s.who(r, "api"))
+		if err != nil {
+			httpErr(w, err, 400)
+			return
+		}
+		writeJSON(w, briefAttempts([]app.Attempt{at})[0])
 	}
-	rank, _ := strconv.Atoi(r.PathValue("rank"))
-	at, err := s.App.MarkFix(r.Context(), r.PathValue("id"), rank, in.URL, in.State, in.Note, s.who(r, "api"))
-	if err != nil {
-		httpErr(w, err, 400)
-		return
-	}
-	writeJSON(w, briefAttempts([]app.Attempt{at})[0])
 }
 
 func (s *Server) apiAttemptState(w http.ResponseWriter, r *http.Request) {

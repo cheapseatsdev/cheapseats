@@ -17,6 +17,8 @@ The dashboard's **Next steps** page (`/next-steps`) keeps three tabs together:
 - **Market findings:** supported observations about fit, alternatives or tradeoffs. An intentional
   product boundary can call for no change.
 
+Every item can be addressed, not only actions ([addressing a next step](#addressing-a-next-step)).
+
 Run reports show the same three categories for that run, including historical reports. When no
 verified action is available, Next steps opens Investigations if any exist. A completion criterion
 is a check of work under the team's control; later model answers and citations remain observations.
@@ -24,8 +26,9 @@ is a check of work under the team's control; later model answers and citations r
 `GET /api/next-steps` and MCP `get_next_steps` return `actions`, `investigations` and
 `market_findings` from each set's latest completed analysis. Both accept `set`; `kind` selects
 `actions`, `investigations` or `market_findings`, and `limit` caps each category. `brief=true`
-omits action implementation prompts. Action status and priority filters do not filter findings
-or investigations. The JSON API also accepts the existing action `gap` and `site` filters.
+omits action implementation prompts. `status` filters every category, and without it dismissed
+items are left out; `priority` filters actions only. The JSON API also accepts the existing
+action `gap` and `site` filters.
 `omitted=true` adds `omitted`: the candidates each analysis proposed that did not become
 actions, with the stage that stopped each and why ([candidates not promoted](analysis.md#candidates-not-promoted)).
 It follows `set` and `limit`, whatever `kind` is. A run report lists its own under **Candidates
@@ -52,6 +55,25 @@ the same message above the advice. A run report, `GET /api/runs/{id}`,
 `analysis_error`, and the report shows it with the request id instead of the provider's raw
 reply. MCP `get_quick_wins` keeps its list and, when a set it covers has an error, adds a second
 text block holding `analysis_errors`.
+
+### Addressing a next step
+
+Each investigation and finding carries `kind` (`investigation` or `finding`), `number` (its
+place in the run's list, from 1), `status` (`open`, `proposed`, `accepted` or `dismissed`) and
+`attempts`, the work recorded on it. A historical suggestion shown as an investigation has
+`kind` `action` and its old rank as `number`, since that's how its work was recorded.
+
+MCP `mark_fix` takes `run`, `kind` (`action` when omitted) and `rank`, the action's rank or the
+item's `number`. The JSON API has one route per kind: `POST /api/runs/{id}/fixes/{rank}/attempts`,
+`/investigations/{n}/attempts` and `/findings/{n}/attempts`, with the same body. Each card on
+Next steps and the run report has the same forms. Work is a commit or pull request, proposed or
+accepted, as for an action. Closing an item without a change is a dismissal, whose note says
+what the check found or why no work is needed; the item then leaves the default lists.
+
+The analyst hears about work on any kind as it does for actions: the reasons for dismissals, and
+shipped work with its outcome on the item's prompts. Work on an investigation or finding settles
+only that item. Closing a check on a page doesn't settle an action for the same page, and a
+later analysis that proposes the check again lists it as a new, open item.
 
 `/quick-wins` remains a route alias. `/api/quick-wins` and MCP `get_quick_wins` remain
 compatibility views of verified actions only. They do not expose unverified historical suggestions

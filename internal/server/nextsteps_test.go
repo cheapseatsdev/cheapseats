@@ -310,3 +310,62 @@ func TestReadAnalysisErrorKeepsTheRequestIDOfACutReply(t *testing.T) {
 		t.Errorf("plain error changed: %+v", got)
 	}
 }
+
+// An investigation is addressed through mark_fix with its kind and number. Once closed it leaves
+// get_next_steps unless asked for by status, and its card offers the forms that record work.
+func TestStepMarkFixClosesAnInvestigation(t *testing.T) {
+	a, db, execute, _ := fixFixture(t)
+	id := execute()
+	fixes, _, _ := a.Fixes(context.Background(), id)
+	body := analysis.Encode(analysis.Analysis{Fixes: fixes,
+		Investigations: []analysis.Investigation{{Title: "Check current inclusion", Why: "Unknown eligibility", Check: "Read submission rules", Decision: "Whether a draft is appropriate", Evidence: "Result 12", Prompts: []int{1}}},
+		Findings:       []analysis.Finding{{Title: "Keep the engine boundary", Detail: "Broader coverage is outside the chosen scope.", Evidence: "Result 13", Prompts: []int{1}}}})
+	if _, err := db.Exec(`UPDATE runs SET fixes=? WHERE id=?`, body, id); err != nil {
+		t.Fatal(err)
+	}
+	s, err := New(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := s.Handler()
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest("GET", "/next-steps?view=market-findings", nil))
+	if !strings.Contains(w.Body.String(), `action="/runs/`+id+`/findings/1/attempts"`) {
+		t.Error("a finding's card has no form to address it")
+	}
+	ts := httptest.NewServer(h)
+	defer ts.Close()
+	ctx := context.Background()
+	cs, err := mcp.NewClient(&mcp.Implementation{Name: "step-mark-test"}, nil).Connect(ctx, &mcp.StreamableClientTransport{Endpoint: ts.URL + "/api/mcp"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cs.Close()
+	call := func(name string, args map[string]any) string {
+		t.Helper()
+		r, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: name, Arguments: args})
+		if err != nil || r.IsError {
+			t.Fatalf("%s: %v %+v", name, err, r)
+		}
+		text := ""
+		for _, c := range r.Content {
+			if x, ok := c.(*mcp.TextContent); ok {
+				text += x.Text
+			}
+		}
+		return text
+	}
+	if got := call("get_next_steps", map[string]any{"kind": "investigations"}); !strings.Contains(got, `"kind":"investigation","number":1,"status":"open"`) {
+		t.Fatalf("an investigation doesn't say how to address it: %s", got)
+	}
+	call("mark_fix", map[string]any{"run": id, "kind": "investigation", "rank": 1, "state": "dismissed", "note": "Already covered"})
+	if got := call("get_next_steps", map[string]any{"kind": "investigations"}); strings.Contains(got, "Check current inclusion") {
+		t.Error("a closed investigation is still listed by default")
+	}
+	if got := call("get_next_steps", map[string]any{"kind": "investigations", "status": "dismissed"}); !strings.Contains(got, "Already covered") {
+		t.Errorf("a closed investigation isn't listed when asked for: %s", got)
+	}
+	if got := call("get_quick_wins", nil); !strings.Contains(got, `"status":"open"`) {
+		t.Errorf("closing an investigation changed the action's status: %s", got)
+	}
+}
